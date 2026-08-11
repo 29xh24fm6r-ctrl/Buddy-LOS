@@ -28,6 +28,7 @@ npm run check
 
 - [Architecture decision](docs/architecture/ADR-0001-standalone-saas-boundary.md)
 - [Target architecture](docs/architecture/TARGET-SAAS-ARCHITECTURE.md)
+- [Core LOS domain map](docs/architecture/CORE-LOS-DOMAIN-MAP.md)
 - [Product build plan](docs/product/PRODUCT-BUILD-PLAN.md)
 - [Controlled build arc](docs/product/CONTROLLED-BUILD-ARC.md)
 - [Full-system port contract](docs/product/FULL-SYSTEM-PORT-CONTRACT.md)
