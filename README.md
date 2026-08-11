@@ -33,6 +33,7 @@ npm run check
 - [Controlled build arc](docs/product/CONTROLLED-BUILD-ARC.md)
 - [Full-system port contract](docs/product/FULL-SYSTEM-PORT-CONTRACT.md)
 - [Banker command-center parity](docs/product/BANKER-COMMAND-CENTER-PARITY.md)
+- [Governed loan intake](docs/product/GOVERNED-LOAN-INTAKE.md)
 - [Security baseline](docs/security/SECURITY-BASELINE.md)
 - [Identity and tenant gate](docs/security/IDENTITY-AND-TENANT-GATE.md)
 
