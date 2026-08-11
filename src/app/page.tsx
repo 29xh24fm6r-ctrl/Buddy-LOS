@@ -1,4 +1,5 @@
 import { readFoundationStatus } from "@/lib/config/foundation-status";
+import Link from "next/link";
 
 export default function Home() {
   const status = readFoundationStatus();
@@ -10,7 +11,7 @@ export default function Home() {
         <nav aria-label="Main navigation">
           <a href="#platform">Platform</a>
           <a href="#principles">Principles</a>
-          <a className="nav-cta" href="#access">Request access</a>
+          <Link className="nav-cta" href="/login">Sign in</Link>
         </nav>
       </header>
       <main id="top">

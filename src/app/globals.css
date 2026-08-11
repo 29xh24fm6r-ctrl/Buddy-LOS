@@ -9,3 +9,24 @@ main { width:min(76rem,calc(100% - 2rem)); margin:0 auto; } .hero { max-width:65
 dl { margin:0; } dl div { display:flex; justify-content:space-between; gap:1rem; padding:.85rem 0; border-bottom:1px solid var(--line); } dl div:last-child { border-bottom:0; } dt { color:var(--muted); } dd { margin:0; font-family:monospace; } dd[data-enabled="false"] { color:var(--warm); } dd[data-enabled="true"] { color:var(--accent); }
 footer { width:min(76rem,calc(100% - 2rem)); margin:0 auto; padding:2rem 0 3rem; display:flex; justify-content:space-between; border-top:1px solid var(--line); color:var(--muted); font-size:.85rem; }
 @media (max-width:850px) { .feature-grid { grid-template-columns:repeat(2,1fr); } .principles { grid-template-columns:1fr; } } @media (max-width:600px) { nav a:not(.nav-cta) { display:none; } .hero { padding:5rem 0; } .feature-grid { grid-template-columns:1fr; } .access-panel,.status-panel { grid-template-columns:1fr; padding:1.5rem; } .hero-actions,footer { flex-direction:column; align-items:flex-start; } }
+
+button,input { font:inherit; } button { cursor:pointer; border:0; border-radius:.55rem; background:var(--accent); color:#07120c; padding:.8rem 1rem; font-weight:700; }
+.auth-page,.access-pending { min-height:100vh; display:grid; place-items:center; padding:2rem; }
+.auth-card,.access-pending section { width:min(34rem,100%); padding:2.5rem; border:1px solid var(--line); border-radius:1.2rem; background:var(--surface); }
+.auth-card h1,.access-pending h1 { margin:.75rem 0 1.25rem; font:400 3rem/1 Georgia,serif; }
+.auth-form { display:grid; gap:1rem; margin-top:2rem; } .auth-form label { display:grid; gap:.45rem; color:var(--muted); font-size:.88rem; }
+.auth-form input { width:100%; border:1px solid var(--line); border-radius:.55rem; padding:.8rem; background:#08130e; color:var(--ink); }
+.auth-notice,.auth-help,.access-pending p { color:var(--muted); line-height:1.6; } .form-error { margin:0; color:var(--warm); }
+.app-shell { min-height:100vh; display:grid; grid-template-columns:17rem 1fr; background:#eef1ec; color:#162019; }
+.app-sidebar { padding:1.5rem; display:flex; flex-direction:column; background:#0b1811; color:var(--ink); }
+.institution-name { margin:2.5rem 0 .4rem; color:var(--muted); } .workspace-pill { margin:0 0 2rem; font-size:.8rem; color:var(--accent); }
+.app-sidebar nav { display:grid; align-items:stretch; gap:.3rem; } .app-sidebar nav a,.app-sidebar nav span { padding:.75rem; border-radius:.5rem; color:var(--muted); }
+.app-sidebar nav a[aria-current="page"] { background:#183125; color:var(--ink); } .app-sidebar form { margin-top:auto; } .app-sidebar button { width:100%; background:transparent; border:1px solid var(--line); color:var(--ink); }
+.app-main { width:auto; margin:0; padding:2rem 2.5rem; } .app-header { display:flex; justify-content:space-between; gap:2rem; align-items:flex-start; padding-bottom:2rem; border-bottom:1px solid #ccd4cd; }
+.app-header h1 { margin:.35rem 0 0; color:#162019; font-size:clamp(2.4rem,5vw,4.5rem); } .user-block { display:grid; gap:.3rem; text-align:right; } .user-block span { color:#657068; text-transform:capitalize; }
+.command-ribbon { display:grid; grid-template-columns:repeat(4,1fr); margin-top:2rem; border:1px solid #ccd4cd; background:white; }
+.command-ribbon article { min-height:10rem; padding:1.2rem; display:grid; gap:.7rem; border-right:1px solid #ccd4cd; } .command-ribbon article:last-child { border-right:0; }
+.command-ribbon span,.command-ribbon small { color:#657068; } .command-ribbon strong { font:400 2.5rem Georgia,serif; }
+.workspace-placeholder { margin-top:2rem; padding:2.5rem; border:1px solid #ccd4cd; background:white; } .workspace-placeholder h2 { max-width:45rem; margin:.5rem 0; font:400 2.3rem Georgia,serif; } .workspace-placeholder p:last-child { max-width:48rem; color:#657068; line-height:1.6; }
+@media (max-width:900px) { .app-shell { grid-template-columns:1fr; } .app-sidebar { min-height:auto; } .app-sidebar nav { grid-template-columns:repeat(3,1fr); } .app-sidebar form { margin-top:1rem; } .command-ribbon { grid-template-columns:repeat(2,1fr); } }
+@media (max-width:600px) { .app-main { padding:1.25rem; } .app-header { flex-direction:column; } .user-block { text-align:left; } .app-sidebar nav,.command-ribbon { grid-template-columns:1fr; } .command-ribbon article { border-right:0; border-bottom:1px solid #ccd4cd; } }
