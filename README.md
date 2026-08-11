@@ -41,6 +41,7 @@ npm run check
 - [Document quarantine completion](docs/product/DOCUMENT-QUARANTINE-COMPLETION.md)
 - [Clean document access authorization](docs/product/CLEAN-DOCUMENT-ACCESS-AUTHORIZATION.md)
 - [Trusted document download exchange](docs/product/TRUSTED-DOCUMENT-DOWNLOAD-EXCHANGE.md)
+- [Deal document workspace](docs/product/DEAL-DOCUMENT-WORKSPACE.md)
 - [Security baseline](docs/security/SECURITY-BASELINE.md)
 - [Identity and tenant gate](docs/security/IDENTITY-AND-TENANT-GATE.md)
 

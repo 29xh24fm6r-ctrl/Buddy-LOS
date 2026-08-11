@@ -14,8 +14,22 @@ type BorrowerRow = { id: string; legal_name: string };
 type BorrowerDirectoryRecord = BorrowerRow & {
   borrower_kind: string; external_reference: string | null; relationship_start_date: string | null;
 };
+type DealDocumentRow = {
+  id: string; requirement_id: string | null; logical_document_id: string; version_number: number;
+  original_file_name: string; mime_type: string; size_bytes: number | string; sha256: string | null;
+  security_status: string; uploaded_at: string; scanned_at: string | null; retained_until: string | null; legal_hold: boolean;
+};
 
-export type DealDetail = DealSummary & { purpose: string | null; createdAt: string; version: number; readiness: UnderwritingReadiness };
+export type DealDocumentVersion = {
+  id: string; requirementId: string | null; logicalDocumentId: string; versionNumber: number;
+  fileName: string; mimeType: string; sizeBytes: number; sha256: string | null;
+  securityStatus: string; uploadedAt: string; scannedAt: string | null; retainedUntil: string | null; legalHold: boolean;
+};
+
+export type DealDetail = DealSummary & {
+  purpose: string | null; createdAt: string; version: number; readiness: UnderwritingReadiness;
+  documentVersions: DealDocumentVersion[];
+};
 export type BorrowerDetail = {
   id: string; legalName: string; borrowerKind: string; externalReference: string | null;
   relationshipStartDate: string | null; contacts: { id: string; kind: string; label: string | null; value: string; isPrimary: boolean; isVerified: boolean; restrictedUse: boolean }[];
@@ -92,18 +106,28 @@ export async function loadDealDetail(context: ReadyContext, dealId: string): Pro
     if (assignmentError) throw new Error("Unable to verify deal assignment.");
     if (!assignment) return null;
   }
-  const [{ data: borrower, error: borrowerError }, { data: checklist, error: checklistError }, { data: documents, error: documentsError }] = await Promise.all([
+  const [
+    { data: borrower, error: borrowerError },
+    { data: checklist, error: checklistError },
+    { data: documents, error: documentsError },
+    { data: documentVersions, error: documentVersionsError },
+  ] = await Promise.all([
     supabase.from("borrowers").select("legal_name").eq("organization_id", organizationId).eq("id", data.borrower_id).maybeSingle(),
     supabase.from("application_checklist_items").select("id, label, category, status, is_required, due_date").eq("organization_id", organizationId).eq("deal_id", dealId).order("created_at"),
     supabase.from("deal_document_requirements").select("id, document_type, category, status, is_required, due_date").eq("organization_id", organizationId).eq("deal_id", dealId).order("created_at"),
+    supabase.from("deal_documents")
+      .select("id, requirement_id, logical_document_id, version_number, original_file_name, mime_type, size_bytes, sha256, security_status, uploaded_at, scanned_at, retained_until, legal_hold")
+      .eq("organization_id", organizationId).eq("deal_id", dealId)
+      .order("uploaded_at", { ascending: false }).limit(500),
   ]);
-  if (borrowerError || checklistError || documentsError) throw new Error("Unable to load the deal readiness record.");
+  if (borrowerError || checklistError || documentsError || documentVersionsError) throw new Error("Unable to load the deal readiness record.");
   const summary = toSummary(data as DealRow, borrower?.legal_name ?? "Borrower unavailable");
   const mapItem = (item: { id: string; label?: string; document_type?: string; category: string; status: string; is_required: boolean; due_date: string | null }): ReadinessItem => ({
     id: item.id, label: item.label ?? item.document_type ?? "Unnamed requirement", category: item.category, status: item.status, required: item.is_required, dueDate: item.due_date,
   });
   return { ...summary, purpose: data.purpose, createdAt: data.created_at, version: data.version,
-    readiness: deriveUnderwritingReadiness((checklist ?? []).map(mapItem), (documents ?? []).map(mapItem)) };
+    readiness: deriveUnderwritingReadiness((checklist ?? []).map(mapItem), (documents ?? []).map(mapItem)),
+    documentVersions: ((documentVersions ?? []) as DealDocumentRow[]).map(toDocumentVersion) };
 }
 
 export async function loadBorrowerDetail(context: ReadyContext, borrowerId: string): Promise<BorrowerDetail | null> {
@@ -143,3 +167,12 @@ function toSummary(row: DealRow, borrowerName: string): DealSummary {
     stage: row.stage, expectedCloseDate: row.expected_close_date, updatedAt: row.updated_at };
 }
 function numberOrNull(value: number | string | null) { return value === null ? null : Number(value); }
+
+export function toDocumentVersion(row: DealDocumentRow): DealDocumentVersion {
+  return {
+    id: row.id, requirementId: row.requirement_id, logicalDocumentId: row.logical_document_id,
+    versionNumber: row.version_number, fileName: row.original_file_name, mimeType: row.mime_type,
+    sizeBytes: Number(row.size_bytes), sha256: row.sha256, securityStatus: row.security_status,
+    uploadedAt: row.uploaded_at, scannedAt: row.scanned_at, retainedUntil: row.retained_until, legalHold: row.legal_hold,
+  };
+}

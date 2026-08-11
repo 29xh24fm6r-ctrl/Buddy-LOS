@@ -2,8 +2,9 @@ import Link from "next/link";
 import type { DealDetail } from "@/lib/los/queries";
 import { formatMoney } from "@/components/banker/BankerCommandCenter";
 import { stageLabel } from "@/lib/los/read-model";
+import { DealDocumentWorkspace } from "./DealDocumentWorkspace";
 
-export function DealCockpit({ deal }: { deal: DealDetail }) {
+export function DealCockpit({ deal, downloadsEnabled }: { deal: DealDetail; downloadsEnabled: boolean }) {
   return (
     <>
       <nav className="breadcrumb" aria-label="Breadcrumb"><Link href="/app">Command center</Link><span>/</span><span>{deal.name}</span></nav>
@@ -26,6 +27,11 @@ export function DealCockpit({ deal }: { deal: DealDetail }) {
           <div className="readiness-columns"><RequirementList title="Application checklist" items={deal.readiness.checklist} /><RequirementList title="Required documents" items={deal.readiness.documents} /></div>
         </>}
       </section>
+      <DealDocumentWorkspace
+        requirements={deal.readiness.documents}
+        versions={deal.documentVersions}
+        downloadsEnabled={downloadsEnabled}
+      />
       <section className="workspace-placeholder"><p className="eyebrow">Workflow</p><h2>Stage controls remain read-only.</h2><p>Underwriting, approvals, documents, closing, and funding actions will appear here only after their governed command paths are implemented and verified.</p></section>
     </>
   );
