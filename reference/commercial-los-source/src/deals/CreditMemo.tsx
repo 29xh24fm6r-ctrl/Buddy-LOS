@@ -1,0 +1,992 @@
+import { useCallback, useState } from 'react';
+import { useDealData, type AsyncResult } from './DealDataProvider';
+import { useOptionalBanker } from '../banker/BankerContext';
+import { useBootstrap } from '../bootstrap/BootstrapContext';
+import type {
+  CreditMemoData,
+  CreditMemoSummary,
+  CreditMemoSectionItem,
+  CreditMemoStatusKey,
+  CreditMemoReviewStatusKey,
+} from './creditMemoQueries';
+import { CreditMemoDraftModal } from './CreditMemoDraftModal';
+import {
+  saveCreditMemoDraft,
+  type SaveCreditMemoDraftOutcome,
+  type SaveCreditMemoDraftSection,
+} from './creditMemoActions';
+import { finalizeCreditMemoAction, type FinalizeCreditMemoOutcome } from './finalizeCreditMemoAction';
+import { currentCreditMemo } from '../workflow/creditMemoFinalizationReadiness';
+import {
+  deriveCreditMemoFreshness,
+  type CreditMemoFreshnessResult,
+} from './creditMemoFreshness';
+import {
+  checkCreditMemoConsistency,
+  type ConsistencyCheckResult,
+  type ConsistencyFinding,
+} from '../shared/creditMemoConsistency/checkCreditMemoConsistency';
+import { Card } from '../shared/Card';
+import { Badge } from '../shared/Badge';
+import { WidgetHeader } from '../shared/cockpitPrimitives';
+import { MemoIcon } from '../shared/cockpitIcons';
+import { palette, radius, spacing, typography, type SeverityKey } from '../shared/theme';
+
+interface CreditMemoProps {
+  /** Phase 36: read-only manager path — no Generate Draft Preview
+   *  button, no modal mounted, no writeDisabledReason banner. The
+   *  freshness signal stays visible (it is derived-only). Defaults
+   *  to false. */
+  readOnly?: boolean;
+}
+
+export function CreditMemo({ readOnly = false }: CreditMemoProps = {}) {
+  const { deal, tasks, documents, creditMemo, activity, refresh } = useDealData();
+  const banker = useOptionalBanker();
+  const bootstrap = useBootstrap();
+  const [showDraft, setShowDraft] = useState(false);
+
+  // Phase 24 + 25: Generate Draft Preview is available in banker mode.
+  // The governed Save Draft handler is wired only when banker writes
+  // are currently allowed (Dataverse systemuser resolved). When writes
+  // are blocked, the modal stays in Phase-24 local-preview mode.
+  // Phase 36: in manager read-only mode neither surface renders.
+  const tasksData = tasks.kind === 'ready' ? tasks.data : undefined;
+  const documentsData = documents.kind === 'ready' ? documents.data : undefined;
+  const memosData = creditMemo.kind === 'ready' ? creditMemo.data : undefined;
+  const activityData = activity.kind === 'ready' ? activity.data : undefined;
+  const canWrite = !readOnly && !!banker?.systemUserId;
+
+  // Phase 26: derived-only freshness. We only render the badge once
+  // the credit memo query has resolved — while it's still loading we
+  // don't yet know whether there's a memo to freshness-check.
+  const freshness =
+    creditMemo.kind === 'ready'
+      ? deriveCreditMemoFreshness({
+          deal,
+          tasks: tasksData,
+          documents: documentsData,
+          creditMemo: memosData,
+          activity: activityData,
+        })
+      : undefined;
+
+  // Phase 73: deterministic consistency review. Pure derivation over
+  // the already-loaded credit-memo + deal data. Empty findings array
+  // is a valid state ("nothing flagged"); the consumer renders
+  // distinct empty-states for hasDraftToCompare=false vs.
+  // hasDraftToCompare=true && findings.length === 0.
+  const consistency: ConsistencyCheckResult | undefined =
+    creditMemo.kind === 'ready' && memosData
+      ? checkCreditMemoConsistency(deal, memosData)
+      : undefined;
+
+  const handleSave = useCallback(
+    async (args: {
+      memoBody: string;
+      saveNote: string;
+      sections: SaveCreditMemoDraftSection[];
+    }): Promise<SaveCreditMemoDraftOutcome> => {
+      if (!banker?.systemUserId) {
+        return {
+          kind: 'unknown',
+          message: 'Cannot save: no Dataverse systemuser resolved for the current banker.',
+        };
+      }
+      // Next version stamp = max existing version + 1, or 1 if none.
+      const nextVersion =
+        (memosData?.memos.reduce((max, m) => Math.max(max, m.version ?? 0), 0) ?? 0) + 1;
+      const memoName = `${deal.name} — Draft v${nextVersion}`;
+      const outcome = await saveCreditMemoDraft({
+        // dealId is the AUTHORIZED deal id from DealDataProvider —
+        // never trust the route param.
+        dealId: deal.id,
+        dealName: deal.name,
+        workspaceId: bootstrap.workspaceId,
+        systemUserId: banker.systemUserId,
+        actorEmail: banker.email,
+        memoName,
+        memoType: 'Banker draft',
+        memoBody: args.memoBody,
+        saveNote: args.saveNote,
+        sections: args.sections,
+        version: nextVersion,
+      });
+      refresh('after-credit-memo-draft-saved');
+      return outcome;
+    },
+    [banker?.systemUserId, banker?.email, bootstrap.workspaceId, deal.id, deal.name, memosData, refresh],
+  );
+
+  // Final LOS Completion arc (Workstream 146-B) — governed finalize. Only the CURRENT
+  // (highest-version) memo can ever be finalized; finalizeCreditMemoAction re-verifies this
+  // server-side regardless of what this closure believes, so a stale UI snapshot is rejected,
+  // never silently finalized against the wrong row.
+  const handleFinalize = useCallback(
+    async (memoId: string, finalizeNote: string): Promise<FinalizeCreditMemoOutcome> => {
+      if (!banker?.email) {
+        return { kind: 'invalid-input', message: 'Cannot finalize: no signed-in banker identity.' };
+      }
+      const outcome = await finalizeCreditMemoAction({
+        dealId: deal.id,
+        actorEmail: banker.email,
+        memoId,
+        finalizeNote,
+      });
+      if (outcome.kind === 'success' || outcome.kind === 'governance-partial') {
+        refresh('after-credit-memo-finalized');
+      }
+      return outcome;
+    },
+    [banker?.email, deal.id, refresh],
+  );
+
+  const currentMemoId = memosData ? currentCreditMemo(memosData)?.id : undefined;
+
+  // Phase 125E — memo widget count (number of memo versions).
+  const memoCount =
+    creditMemo.kind === 'ready' ? creditMemo.data.memos.length : undefined;
+
+  return (
+    <>
+      <Card anchorSurface="Credit Memo">
+        <WidgetHeader
+          title="Credit Memo"
+          subtitle={subtitleFor(creditMemo)}
+          icon={<MemoIcon />}
+          iconTone="violet"
+          count={memoCount}
+          countTone="neutral"
+          trailing={
+            readOnly ? undefined : (
+              <button
+                type="button"
+                onClick={() => setShowDraft(true)}
+                style={styles.draftButton}
+                aria-label="Generate credit memo draft preview"
+              >
+                Generate Draft Preview
+              </button>
+            )
+          }
+        />
+        {!readOnly && banker?.writeDisabledReason && (
+          <p style={styles.writeDisabledBanner} role="status">
+            <strong>Save disabled:</strong> {banker.writeDisabledReason} Generation and
+            copy remain available; Save Draft requires a resolvable Dataverse user.
+          </p>
+        )}
+        {freshness && <FreshnessBlock freshness={freshness} />}
+        {consistency && <ConsistencyReviewBlock consistency={consistency} />}
+        <Body
+          creditMemo={creditMemo}
+          currentMemoId={currentMemoId}
+          canFinalize={canWrite}
+          onFinalize={handleFinalize}
+        />
+      </Card>
+      {!readOnly && showDraft && (
+        <CreditMemoDraftModal
+          deal={deal}
+          tasks={tasksData}
+          documents={documentsData}
+          existingMemos={memosData}
+          onClose={() => setShowDraft(false)}
+          onSave={canWrite ? handleSave : undefined}
+        />
+      )}
+    </>
+  );
+}
+
+function FreshnessBlock({ freshness }: { freshness: CreditMemoFreshnessResult }) {
+  // Derived-only state: always say "May be stale" / "Review recommended"
+  // — never claim the memo IS stale, never offer a regenerate button.
+  const sev: SeverityKey =
+    freshness.kind === 'blocked'
+      ? 'blocked'
+      : freshness.kind === 'at-risk'
+        ? 'atRisk'
+        : freshness.kind === 'fresh'
+          ? 'clear'
+          : 'neutral';
+  const heading =
+    freshness.kind === 'blocked'
+      ? 'Memo may be stale'
+      : freshness.kind === 'at-risk'
+        ? 'Memo may be stale'
+        : freshness.kind === 'fresh'
+          ? 'Memo appears current'
+          : 'No memo on file';
+  return (
+    <div style={styles.freshnessBox} role="status" aria-label="Credit memo freshness">
+      <div style={styles.freshnessHeader}>
+        <Badge variant={sev}>{heading}</Badge>
+        <span style={styles.freshnessTimestamp}>
+          {freshness.latestSavedAt
+            ? `Last saved ${formatDateTime(freshness.latestSavedAt) ?? '—'}`
+            : 'No save timestamp on file.'}
+        </span>
+      </div>
+      <p style={styles.freshnessCta}>{freshness.ctaText}</p>
+      {freshness.reasons.length > 0 && (
+        <ul style={styles.freshnessReasonList}>
+          {freshness.reasons.map((r) => (
+            <li key={r.id}>{r.label}</li>
+          ))}
+        </ul>
+      )}
+      <p style={styles.freshnessFootnote}>
+        Calculated from the deal's current tasks, documents, and activity.
+        This check does not modify the memo.
+      </p>
+    </div>
+  );
+}
+
+function ConsistencyReviewBlock({
+  consistency,
+}: {
+  consistency: ConsistencyCheckResult;
+}) {
+  // Phase 73: deterministic, read-only review-assist. Three states:
+  //   1. No saved memo draft to compare against → guidance copy.
+  //   2. Memo draft present, no findings from available structured
+  //      fields → "No consistency findings" copy.
+  //   3. Findings present → bulleted list with conservative copy.
+  //
+  // The block never claims validation, never claims approval,
+  // never claims completeness. The footnote spells out exactly
+  // what the check is and what it is not.
+  if (!consistency.hasDraftToCompare) {
+    return (
+      <div
+        style={styles.consistencyBox}
+        role="status"
+        aria-label="Consistency review"
+      >
+        <div style={styles.consistencyHeader}>
+          <Badge variant="neutral" appearance="outline">
+            Consistency review
+          </Badge>
+        </div>
+        <p style={styles.consistencyEmpty}>
+          Consistency review available after a memo draft is saved.
+        </p>
+        <p style={styles.consistencyFootnote}>
+          Deterministic comparison between the saved memo draft and the
+          deal's structured fields. Not AI. Not an approval or credit
+          decision. Not a substitute for banker review.
+        </p>
+      </div>
+    );
+  }
+  if (consistency.findings.length === 0) {
+    return (
+      <div
+        style={styles.consistencyBox}
+        role="status"
+        aria-label="Consistency review"
+      >
+        <div style={styles.consistencyHeader}>
+          <Badge variant="clear">Consistency review</Badge>
+          <span style={styles.consistencyTimestamp}>
+            No findings from available structured fields
+          </span>
+        </div>
+        <p style={styles.consistencyEmpty}>
+          No consistency findings from available structured fields.
+        </p>
+        <p style={styles.consistencyFootnote}>
+          Deterministic check, limited to available structured fields.
+          Not AI. Not an approval or credit decision. Not a substitute
+          for banker review.
+        </p>
+      </div>
+    );
+  }
+  const needsReviewCount = consistency.findings.filter(
+    (f) => f.severity === 'needs-review',
+  ).length;
+  const informationalCount =
+    consistency.findings.length - needsReviewCount;
+  return (
+    <div
+      style={styles.consistencyBox}
+      role="status"
+      aria-label="Consistency review"
+    >
+      <div style={styles.consistencyHeader}>
+        <Badge variant={needsReviewCount > 0 ? 'atRisk' : 'info'}>
+          Consistency review
+        </Badge>
+        <span style={styles.consistencyTimestamp}>
+          {needsReviewCount > 0
+            ? `${needsReviewCount} may need review`
+            : `${informationalCount} informational`}
+          {needsReviewCount > 0 && informationalCount > 0
+            ? ` · ${informationalCount} informational`
+            : ''}
+        </span>
+      </div>
+      <ul style={styles.consistencyFindingList}>
+        {consistency.findings.map((f) => (
+          <FindingRow key={f.id} finding={f} />
+        ))}
+      </ul>
+      <p style={styles.consistencyFootnote}>
+        Deterministic check, limited to available structured fields. Not AI.
+        Not an approval or credit decision. Not a substitute for banker
+        review.
+      </p>
+    </div>
+  );
+}
+
+function FindingRow({ finding }: { finding: ConsistencyFinding }) {
+  const sev: SeverityKey =
+    finding.severity === 'needs-review' ? 'atRisk' : 'info';
+  return (
+    <li style={styles.consistencyFinding}>
+      <div style={styles.consistencyFindingHead}>
+        <Badge variant={sev} appearance="outline">
+          {finding.severity === 'needs-review'
+            ? 'May need review'
+            : 'Informational'}
+        </Badge>
+        <span style={styles.consistencyFindingField}>{finding.fieldLabel}</span>
+      </div>
+      <p style={styles.consistencyFindingMessage}>{finding.message}</p>
+    </li>
+  );
+}
+
+function formatDateTime(iso: string | undefined): string | undefined {
+  if (!iso) return undefined;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return undefined;
+  return d.toLocaleString(undefined, {
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
+}
+
+function subtitleFor(creditMemo: AsyncResult<CreditMemoData>): string | undefined {
+  if (creditMemo.kind !== 'ready') return undefined;
+  const { memos, sections } = creditMemo.data;
+  if (memos.length === 0 && sections.length === 0) return undefined;
+  const parts: string[] = [];
+  if (memos.length) parts.push(`${memos.length} memo${memos.length === 1 ? '' : 's'}`);
+  if (sections.length)
+    parts.push(`${sections.length} section draft${sections.length === 1 ? '' : 's'}`);
+  return parts.join(' · ');
+}
+
+function Body({
+  creditMemo,
+  currentMemoId,
+  canFinalize,
+  onFinalize,
+}: {
+  creditMemo: AsyncResult<CreditMemoData>;
+  currentMemoId: string | undefined;
+  canFinalize: boolean;
+  onFinalize: (memoId: string, finalizeNote: string) => Promise<FinalizeCreditMemoOutcome>;
+}) {
+  if (creditMemo.kind === 'loading')
+    return <p style={styles.muted}>Loading credit memo…</p>;
+  if (creditMemo.kind === 'failed')
+    return <ErrorBlock title="Could not load credit memo" detail={creditMemo.message} />;
+
+  const { memos, sections } = creditMemo.data;
+  if (memos.length === 0 && sections.length === 0) {
+    return <p style={styles.muted}>No credit memo exists yet.</p>;
+  }
+
+  return (
+    <div style={styles.body}>
+      {memos.length > 0 && (
+        <div style={styles.group}>
+          <div style={styles.groupHeaderRow}>
+            <h4 style={styles.groupHeading}>Memos</h4>
+            <Badge
+              variant="neutral"
+              title={`${memos.length} memo${memos.length === 1 ? '' : 's'} on file for this deal`}
+            >
+              {memos.length}
+            </Badge>
+          </div>
+          <ul style={styles.list}>
+            {memos.map((m) => (
+              <MemoRow
+                key={m.id}
+                memo={m}
+                isCurrent={m.id === currentMemoId}
+                canFinalize={canFinalize}
+                onFinalize={onFinalize}
+              />
+            ))}
+          </ul>
+        </div>
+      )}
+      {sections.length > 0 && (
+        <div style={styles.group}>
+          <div style={styles.groupHeaderRow}>
+            <h4 style={styles.groupHeading}>Section drafts</h4>
+            <Badge
+              variant="neutral"
+              title={`${sections.length} section draft${sections.length === 1 ? '' : 's'} on file for this deal`}
+            >
+              {sections.length}
+            </Badge>
+          </div>
+          <ul style={styles.list}>
+            {sections.map((s) => (
+              <SectionRow key={s.id} section={s} />
+            ))}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function MemoRow({
+  memo,
+  isCurrent,
+  canFinalize,
+  onFinalize,
+}: {
+  memo: CreditMemoSummary;
+  isCurrent: boolean;
+  canFinalize: boolean;
+  onFinalize: (memoId: string, finalizeNote: string) => Promise<FinalizeCreditMemoOutcome>;
+}) {
+  // N-08 remediation (Production Remediation Factory Arc Phase 5) — before this, a banker could
+  // only ever see the 240-char textPreview, with no way to read the rest of a saved memo. The
+  // full text (already durably persisted) is now one click away.
+  const [expanded, setExpanded] = useState(false);
+  const hasMore = Boolean(memo.fullText && memo.textPreview && memo.fullText.trim() !== memo.textPreview.trim());
+  // Final LOS Completion arc (Workstream 146-B) — only the current (highest-version) Draft memo
+  // is ever offered a Finalize control. finalizeCreditMemoAction re-verifies this fail-closed
+  // server-side regardless of what this render believes.
+  const offerFinalize = isCurrent && canFinalize && memo.statusKey === 'draft';
+  const [showFinalize, setShowFinalize] = useState(false);
+  const [finalizeNote, setFinalizeNote] = useState('');
+  const [finalizing, setFinalizing] = useState(false);
+  const [finalizeResult, setFinalizeResult] = useState<FinalizeCreditMemoOutcome | undefined>(undefined);
+
+  const submitFinalize = useCallback(async () => {
+    setFinalizing(true);
+    setFinalizeResult(undefined);
+    const outcome = await onFinalize(memo.id, finalizeNote);
+    setFinalizing(false);
+    setFinalizeResult(outcome);
+    if (outcome.kind === 'success') {
+      setShowFinalize(false);
+      setFinalizeNote('');
+    }
+  }, [onFinalize, memo.id, finalizeNote]);
+
+  return (
+    <li style={styles.row}>
+      <div style={styles.rowHeader}>
+        <div style={styles.rowTitleBlock}>
+          <div style={styles.rowTitle}>{memo.name}</div>
+          <div style={styles.rowSubtitle}>
+            <span>{memo.memoType}</span>
+            <span style={styles.dotSep}>·</span>
+            <span>v{memo.version}</span>
+            <span style={styles.dotSep}>·</span>
+            <span>Generated {formatDate(memo.generatedAt) ?? '—'}</span>
+          </div>
+        </div>
+        <div style={styles.badgeRow}>
+          {memo.status && (
+            <Badge
+              variant={memoStatusToSeverity(memo.statusKey)}
+              title="Memo workflow status"
+            >
+              {memo.status}
+            </Badge>
+          )}
+          {memo.borrowerSafe && (
+            <Badge
+              variant="info"
+              appearance="outline"
+              title="Generated without language that would require borrower-side review"
+            >
+              Borrower-safe
+            </Badge>
+          )}
+        </div>
+      </div>
+      {expanded && memo.fullText ? (
+        <p style={styles.preview} data-credit-memo-full-text>{memo.fullText}</p>
+      ) : (
+        memo.textPreview && <p style={styles.preview}>{memo.textPreview}</p>
+      )}
+      {hasMore && (
+        <button
+          type="button"
+          style={styles.viewFullTextButton}
+          onClick={() => setExpanded((v) => !v)}
+          data-credit-memo-view-full-text
+        >
+          {expanded ? 'Show less' : 'View full memo text'}
+        </button>
+      )}
+      {offerFinalize && !showFinalize && (
+        <button
+          type="button"
+          style={styles.viewFullTextButton}
+          onClick={() => setShowFinalize(true)}
+          data-credit-memo-finalize-open
+        >
+          Finalize memo
+        </button>
+      )}
+      {offerFinalize && showFinalize && (
+        <div style={styles.finalizeBox} data-credit-memo-finalize-panel>
+          <label htmlFor={`finalize-note-${memo.id}`} style={styles.finalizeLabel}>
+            Finalization note (required)
+          </label>
+          <textarea
+            id={`finalize-note-${memo.id}`}
+            style={styles.finalizeTextarea}
+            value={finalizeNote}
+            onChange={(e) => setFinalizeNote(e.target.value)}
+            placeholder="Why is this memo being finalized now?"
+            disabled={finalizing}
+          />
+          <div style={styles.finalizeActions}>
+            <button
+              type="button"
+              style={styles.finalizeConfirmButton}
+              onClick={() => void submitFinalize()}
+              disabled={finalizing || finalizeNote.trim().length === 0}
+              data-credit-memo-finalize-confirm
+            >
+              {finalizing ? 'Finalizing…' : 'Confirm finalize'}
+            </button>
+            <button
+              type="button"
+              style={styles.finalizeCancelButton}
+              onClick={() => {
+                setShowFinalize(false);
+                setFinalizeResult(undefined);
+              }}
+              disabled={finalizing}
+            >
+              Cancel
+            </button>
+          </div>
+          {finalizeResult && finalizeResult.kind !== 'success' && (
+            <p role="alert" style={styles.finalizeError} data-credit-memo-finalize-error>
+              {finalizeOutcomeMessage(finalizeResult)}
+            </p>
+          )}
+        </div>
+      )}
+      {memo.statusKey === 'final' && isCurrent && (
+        <p style={styles.finalizeSuccessNote} data-credit-memo-finalized-note>
+          This memo is finalized.
+        </p>
+      )}
+    </li>
+  );
+}
+
+function SectionRow({ section }: { section: CreditMemoSectionItem }) {
+  // Phase 58: removed the visible "Key: <sectionKey>" subtitle line.
+  // It exposed a raw schema identifier to bankers without value
+  // (sectionLabel above already names the section). Kept the key on
+  // the title's `title` attribute for engineering-debug hover.
+  // N-08 remediation — same full-text toggle as MemoRow, per-section.
+  const [expanded, setExpanded] = useState(false);
+  const hasMore = Boolean(
+    section.fullText && section.textPreview && section.fullText.trim() !== section.textPreview.trim(),
+  );
+  return (
+    <li style={styles.row}>
+      <div style={styles.rowHeader}>
+        <div style={styles.rowTitleBlock}>
+          <div
+            style={styles.rowTitle}
+            title={`Section key: ${section.sectionKey}`}
+          >
+            {section.sectionLabel}
+          </div>
+          <div style={styles.rowSubtitle}>
+            <span>
+              Last generated {formatDate(section.lastGeneratedAt) ?? '—'}
+            </span>
+          </div>
+        </div>
+        {section.reviewStatus && (
+          <div style={styles.badgeRow}>
+            <Badge
+              variant={reviewStatusToSeverity(section.reviewStatusKey)}
+              title="Section review status"
+            >
+              {section.reviewStatus}
+            </Badge>
+          </div>
+        )}
+      </div>
+      {expanded && section.fullText ? (
+        <p style={styles.preview} data-credit-memo-section-full-text>{section.fullText}</p>
+      ) : (
+        section.textPreview && <p style={styles.preview}>{section.textPreview}</p>
+      )}
+      {hasMore && (
+        <button
+          type="button"
+          style={styles.viewFullTextButton}
+          onClick={() => setExpanded((v) => !v)}
+          data-credit-memo-section-view-full-text
+        >
+          {expanded ? 'Show less' : 'View full section text'}
+        </button>
+      )}
+    </li>
+  );
+}
+
+function memoStatusToSeverity(key: CreditMemoStatusKey | undefined): SeverityKey {
+  if (key === 'final') return 'clear';
+  if (key === 'stale') return 'atRisk';
+  return 'neutral';
+}
+
+/** finalizeCreditMemoAction's outcome kinds already carry banker-safe text
+ *  (invalid-input messages are authored copy; write-failed/governance-partial
+ *  errors are already passed through mapBusinessSafeError). This only picks
+ *  which field to render. */
+function finalizeOutcomeMessage(outcome: FinalizeCreditMemoOutcome): string {
+  if (outcome.kind === 'invalid-input') return outcome.message;
+  if (outcome.kind === 'write-failed') return outcome.error;
+  if (outcome.kind === 'verification-failed') return outcome.error;
+  if (outcome.kind === 'governance-partial') {
+    return outcome.auditError ?? outcome.timelineError ?? 'Finalized, but a governance record failed to write.';
+  }
+  return '';
+}
+
+function reviewStatusToSeverity(key: CreditMemoReviewStatusKey | undefined): SeverityKey {
+  if (key === 'Reviewed') return 'clear';
+  if (key === 'NeedsChanges') return 'atRisk';
+  return 'neutral';
+}
+
+function ErrorBlock({ title, detail }: { title: string; detail: string }) {
+  return (
+    <div style={styles.errorBox} role="alert">
+      <div style={styles.errorTitle}>{title}</div>
+      <div style={styles.errorDetail}>{detail}</div>
+      <div style={styles.errorHint}>Refresh to retry.</div>
+    </div>
+  );
+}
+
+function formatDate(iso: string | undefined): string | undefined {
+  if (!iso) return undefined;
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return undefined;
+  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+const styles: Record<string, React.CSSProperties> = {
+  muted: {
+    margin: 0,
+    color: palette.textMuted,
+    fontSize: typography.size.sm,
+    lineHeight: 1.4,
+    padding: `${spacing.md} ${spacing.lg}`,
+    background: palette.surfaceAlt,
+    border: `1px dashed ${palette.borderStrong}`,
+    borderRadius: radius.md,
+    textAlign: 'center' as const,
+  },
+  body: { display: 'flex', flexDirection: 'column', gap: spacing.md },
+  group: { display: 'flex', flexDirection: 'column', gap: spacing.xs },
+  groupHeaderRow: { display: 'flex', alignItems: 'center', gap: spacing.xs },
+  groupHeading: {
+    margin: 0,
+    fontSize: typography.size.xs,
+    textTransform: 'uppercase',
+    letterSpacing: typography.letterSpacing.label,
+    color: palette.textSubtle,
+    fontWeight: typography.weight.semibold,
+  },
+  list: {
+    listStyle: 'none',
+    margin: 0,
+    padding: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: spacing.xs,
+  },
+  row: {
+    padding: `${spacing.sm} ${spacing.md}`,
+    background: palette.surfaceAlt,
+    border: `1px solid ${palette.divider}`,
+    borderRadius: radius.sm,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: spacing.xs,
+  },
+  rowHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    gap: spacing.sm,
+  },
+  rowTitleBlock: { display: 'flex', flexDirection: 'column', gap: 2, flex: 1, minWidth: 0 },
+  rowTitle: {
+    fontSize: typography.size.base,
+    fontWeight: typography.weight.semibold,
+    color: palette.text,
+  },
+  rowSubtitle: {
+    fontSize: typography.size.sm,
+    color: palette.textMuted,
+    display: 'flex',
+    flexWrap: 'wrap',
+    gap: 4,
+    alignItems: 'center',
+  },
+  dotSep: { color: palette.textSubtle },
+  metaLabel: { color: palette.textSubtle },
+  badgeRow: { display: 'flex', gap: spacing.xxs, flexShrink: 0, flexWrap: 'wrap' },
+  preview: {
+    margin: 0,
+    fontSize: typography.size.md,
+    color: palette.textMuted,
+    lineHeight: typography.lineHeight.normal,
+    whiteSpace: 'pre-wrap',
+  },
+  viewFullTextButton: {
+    alignSelf: 'flex-start',
+    marginTop: spacing.xxs,
+    background: 'transparent',
+    border: 'none',
+    padding: 0,
+    color: palette.cobalt,
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+    cursor: 'pointer',
+    fontFamily: typography.family,
+  },
+  finalizeBox: {
+    marginTop: spacing.xs,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: spacing.xxs,
+    padding: spacing.sm,
+    background: palette.pageBg,
+    border: `1px solid ${palette.border}`,
+    borderRadius: radius.sm,
+  },
+  finalizeLabel: {
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.semibold,
+    color: palette.textMuted,
+  },
+  finalizeTextarea: {
+    fontFamily: typography.family,
+    fontSize: typography.size.sm,
+    padding: spacing.xs,
+    borderRadius: radius.sm,
+    border: `1px solid ${palette.border}`,
+    minHeight: 60,
+    resize: 'vertical',
+  },
+  finalizeActions: { display: 'flex', gap: spacing.xs },
+  finalizeConfirmButton: {
+    background: palette.cobalt,
+    color: '#fff',
+    border: 'none',
+    borderRadius: radius.sm,
+    padding: `${spacing.xxs} ${spacing.sm}`,
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+    cursor: 'pointer',
+    fontFamily: typography.family,
+  },
+  finalizeCancelButton: {
+    background: 'transparent',
+    color: palette.textMuted,
+    border: `1px solid ${palette.border}`,
+    borderRadius: radius.sm,
+    padding: `${spacing.xxs} ${spacing.sm}`,
+    fontSize: typography.size.sm,
+    cursor: 'pointer',
+    fontFamily: typography.family,
+  },
+  finalizeError: {
+    margin: 0,
+    color: palette.blocked,
+    fontSize: typography.size.sm,
+  },
+  finalizeSuccessNote: {
+    margin: 0,
+    marginTop: spacing.xxs,
+    color: palette.textMuted,
+    fontSize: typography.size.sm,
+    fontStyle: 'italic',
+  },
+  errorBox: {
+    background: palette.blockedBg,
+    border: `1px solid ${palette.blockedBg}`,
+    borderRadius: radius.sm,
+    padding: `${spacing.xs} ${spacing.md}`,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 2,
+  },
+  errorTitle: {
+    color: palette.blockedFg,
+    fontWeight: typography.weight.semibold,
+    fontSize: typography.size.md,
+  },
+  errorDetail: { color: palette.text, fontSize: typography.size.sm },
+  errorHint: { color: palette.textMuted, fontSize: typography.size.xs, fontStyle: 'italic' },
+  draftButton: {
+    background: palette.primary,
+    color: palette.textInverse,
+    border: 'none',
+    borderRadius: radius.sm,
+    padding: `${spacing.xxs} ${spacing.sm}`,
+    fontSize: typography.size.xs,
+    fontWeight: typography.weight.semibold,
+    cursor: 'pointer',
+    fontFamily: typography.family,
+    letterSpacing: typography.letterSpacing.label,
+    textTransform: 'uppercase',
+  },
+  writeDisabledBanner: {
+    margin: 0,
+    padding: `${spacing.xs} ${spacing.md}`,
+    background: palette.atRiskBg,
+    color: palette.atRiskFg,
+    fontSize: typography.size.sm,
+    border: `1px solid ${palette.atRiskBg}`,
+    borderRadius: radius.sm,
+    lineHeight: typography.lineHeight.snug,
+  },
+  freshnessBox: {
+    margin: 0,
+    padding: `${spacing.xs} ${spacing.md}`,
+    background: palette.surfaceAlt,
+    border: `1px solid ${palette.divider}`,
+    borderRadius: radius.sm,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 6,
+  },
+  freshnessHeader: {
+    display: 'flex',
+    gap: spacing.sm,
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
+  freshnessTimestamp: {
+    fontSize: typography.size.sm,
+    color: palette.textMuted,
+  },
+  freshnessCta: {
+    margin: 0,
+    fontSize: typography.size.md,
+    color: palette.text,
+    lineHeight: typography.lineHeight.snug,
+  },
+  freshnessReasonList: {
+    margin: 0,
+    paddingLeft: spacing.md,
+    fontSize: typography.size.sm,
+    color: palette.text,
+    lineHeight: typography.lineHeight.snug,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 2,
+  },
+  freshnessFootnote: {
+    margin: 0,
+    fontSize: typography.size.xs,
+    color: palette.textSubtle,
+    fontStyle: 'italic',
+  },
+  // Phase 73 — consistency review styles. Same family as freshness
+  // (same surfaceAlt fill, same divider border) so the two review
+  // blocks read as a connected pair under the card header.
+  consistencyBox: {
+    margin: 0,
+    padding: `${spacing.xs} ${spacing.md}`,
+    background: palette.surfaceAlt,
+    border: `1px solid ${palette.divider}`,
+    borderRadius: radius.sm,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 6,
+  },
+  consistencyHeader: {
+    display: 'flex',
+    gap: spacing.sm,
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
+  consistencyTimestamp: {
+    fontSize: typography.size.sm,
+    color: palette.textMuted,
+  },
+  consistencyEmpty: {
+    margin: 0,
+    fontSize: typography.size.sm,
+    color: palette.text,
+    lineHeight: typography.lineHeight.snug,
+  },
+  consistencyFindingList: {
+    margin: 0,
+    paddingLeft: 0,
+    listStyle: 'none',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: spacing.xs,
+  },
+  consistencyFinding: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 2,
+    padding: `${spacing.xs} ${spacing.sm}`,
+    background: palette.surface,
+    border: `1px solid ${palette.divider}`,
+    borderRadius: radius.sm,
+  },
+  consistencyFindingHead: {
+    display: 'flex',
+    gap: spacing.xs,
+    alignItems: 'center',
+    flexWrap: 'wrap',
+  },
+  consistencyFindingField: {
+    fontSize: typography.size.sm,
+    fontWeight: typography.weight.semibold,
+    color: palette.text,
+  },
+  consistencyFindingMessage: {
+    margin: 0,
+    fontSize: typography.size.sm,
+    color: palette.text,
+    lineHeight: typography.lineHeight.snug,
+  },
+  consistencyFootnote: {
+    margin: 0,
+    fontSize: typography.size.xs,
+    color: palette.textSubtle,
+    fontStyle: 'italic',
+  },
+};

@@ -1,0 +1,487 @@
+import type { CSSProperties, ReactNode } from 'react';
+import { deriveBankerPersonalActivity } from '../shared/analytics/bankerPersonalActivity';
+import { type BankerWorkQueueData } from './workQueueQueries';
+import {
+  ActivityIcon,
+  AlertIcon,
+  CalendarIcon,
+  DollarIcon,
+  PipelineIcon,
+  SparkleIcon,
+  StageIcon,
+  CompletenessIcon,
+  MemoIcon,
+  ChecklistIcon,
+} from '../shared/cockpitIcons';
+import { palette, radius, shadow, spacing, typography } from '../shared/theme';
+
+/**
+ * Phase 125F — flat Lending OS KPI grid.
+ *
+ * Replaces the Phase 117 three-section grouped KPI grid with a
+ * flat 10-tile grid that matches the original Lending OS
+ * reference: small colored icon + small uppercase label + LARGE
+ * value (color-coded by tone).
+ *
+ *   ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐
+ *   │ $ PIPELINE│ │% WEIGHTED│ │📈ACTIVE │ │⚠ URGENT │ │📅CLOSING │
+ *   │  $60.2M  │ │  $41.9M  │ │   4     │ │   2     │ │   0     │
+ *   └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘
+ *   ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐ ┌──────────┐
+ *   │ $ YTD     │ │% WIN RATE│ │↗ HIGH PB│ │🕒STALE   │ │▤ IN UW   │
+ *   │   $0     │ │   0%     │ │   3     │ │   4     │ │   1     │
+ *   └──────────┘ └──────────┘ └──────────┘ └──────────┘ └──────────┘
+ *
+ * Honest discipline:
+ *   - PIPELINE, ACTIVE DEALS, URGENT, CLOSING SOON, STALE 14D+,
+ *     IN UW are derived from `deriveBankerPersonalActivity`.
+ *   - WEIGHTED, YTD CLOSED, WIN RATE, HIGH PROB render as italic
+ *     "Not yet wired" with explicit tooltips. They need a
+ *     `cr664_loandeal.probability` / win-status field that does
+ *     not exist in the current schema. Phase 118 inventory §3.3
+ *     marks them as bucket C (scope phase needed).
+ *   - Zero values render honestly. No fabricated numbers.
+ */
+
+type KpiTone = 'info' | 'clear' | 'atRisk' | 'blocked' | 'neutral' | 'violet' | 'teal';
+
+/**
+ * Phase 166 — the only honest in-page drill targets a KPI tile may
+ * open. Both are existing shell tabs (no new route). A tile without a
+ * `target` is intentionally non-clickable (either "Not yet wired" or it
+ * has no honest filtered destination today).
+ */
+export type BankerKpiTab = 'active-deals' | 'my-alerts';
+
+const TAB_LABELS: Record<BankerKpiTab, string> = {
+  'active-deals': 'Active Deals',
+  'my-alerts': 'My Alerts',
+};
+
+interface KpiSpec {
+  readonly id: string;
+  readonly label: string;
+  readonly icon: ReactNode;
+  readonly tone: KpiTone;
+  readonly value: string | undefined;
+  readonly hint?: string;
+  readonly tooltip?: string;
+  /**
+   * Phase 166 — when set, the tile is a real button that selects this
+   * existing shell tab. When omitted, the tile is a plain, honestly
+   * non-clickable card.
+   */
+  readonly target?: BankerKpiTab;
+}
+
+export interface BankerKpiGridProps {
+  /** Current load state of the parent shell's banker work-queue snapshot. */
+  state:
+    | { kind: 'loading' }
+    | { kind: 'failed'; message: string }
+    | { kind: 'ready'; data: BankerWorkQueueData };
+  /** Override `now` (primarily for tests). */
+  now?: Date;
+  /**
+   * Phase 166 — select an existing shell tab when a drillable KPI tile
+   * is clicked. When omitted, every tile renders non-clickable.
+   */
+  onSelectTab?: (tab: BankerKpiTab) => void;
+}
+
+const NOT_YET_WIRED_TOOLTIP_WEIGHTED =
+  'Weighted pipeline requires a cr664_loandeal.probability field that is not in the live schema today. Marked as bucket C in PHASE_118_ORIGINAL_UI_UX_INVENTORY.md §3.3.';
+const NOT_YET_WIRED_TOOLTIP_YTD_CLOSED =
+  'YTD closed dollars require a closed-won flag + close date that the live schema does not surface today. Bucket C.';
+const NOT_YET_WIRED_TOOLTIP_WIN_RATE =
+  'Win rate requires a closed-won vs closed-lost discriminator that the live schema does not surface today. Bucket C.';
+const NOT_YET_WIRED_TOOLTIP_HIGH_PROB =
+  'High-probability count requires a cr664_loandeal.probability field that is not in the live schema today. Bucket C.';
+
+export function BankerKpiGrid({ state, now, onSelectTab }: BankerKpiGridProps) {
+  if (state.kind === 'loading') {
+    return (
+      <section
+        className="cc-kpi-grid"
+        style={styles.grid}
+        aria-label="Workload KPIs (loading)"
+        data-banker-kpi-grid="phase-125g"
+      >
+        {Array.from({ length: 10 }).map((_, i) => (
+          <KpiTile key={i} spec={loadingSpec(i)} />
+        ))}
+      </section>
+    );
+  }
+  if (state.kind === 'failed') {
+    return (
+      <section
+        className="cc-kpi-grid"
+        style={styles.grid}
+        aria-label="Workload KPIs (failed)"
+        data-banker-kpi-grid="phase-125g"
+      >
+        <div style={styles.failed} role="alert">
+          <div style={styles.failedTitle}>Could not load workload snapshot</div>
+          <div style={styles.failedDetail}>{state.message}</div>
+          <div style={styles.failedHint}>
+            Refresh to retry. The cards below load independently and may
+            still render.
+          </div>
+        </div>
+      </section>
+    );
+  }
+  const kpis = deriveBankerPersonalActivity(state.data, now ?? new Date());
+  const specs: ReadonlyArray<KpiSpec> = [
+    {
+      id: 'pipeline',
+      label: 'Pipeline',
+      icon: <DollarIcon />,
+      tone: 'info',
+      value: formatCurrencyCompact(kpis.totalAmount),
+      hint:
+        kpis.dealsMissingAmount > 0
+          ? `${kpis.dealsMissingAmount} deal${kpis.dealsMissingAmount === 1 ? '' : 's'} missing amount`
+          : 'Sum across active deals',
+      // Phase 166 — pipeline dollars sum across active deals; the
+      // Active Deals board is the only honest drill destination.
+      target: 'active-deals',
+    },
+    {
+      id: 'weighted',
+      label: 'Weighted',
+      icon: <SparkleIcon />,
+      tone: 'neutral',
+      value: undefined,
+      hint: 'Not available',
+      tooltip: NOT_YET_WIRED_TOOLTIP_WEIGHTED,
+    },
+    {
+      id: 'active-deals',
+      label: 'Active Deals',
+      icon: <PipelineIcon />,
+      tone: 'info',
+      value: kpis.activeDeals.toString(),
+      hint: 'Authorized to you',
+      // Phase 166 — opens the Active Deals board directly.
+      target: 'active-deals',
+    },
+    {
+      id: 'urgent',
+      label: 'Urgent',
+      icon: <AlertIcon />,
+      tone: kpis.urgentItemCount > 0 ? 'blocked' : 'clear',
+      value: kpis.urgentItemCount.toString(),
+      hint: 'Overdue tasks · docs · closes',
+      // Phase 166 — the My Alerts tab badge is this same urgent-item
+      // count; My Alerts owns overdue tasks/docs/closes.
+      target: 'my-alerts',
+    },
+    {
+      id: 'closing-soon',
+      label: 'Closing Soon',
+      icon: <CalendarIcon />,
+      tone: kpis.closingSoonCount > 0 ? 'atRisk' : 'neutral',
+      value: kpis.closingSoonCount.toString(),
+      hint: 'Target close ≤ 14d',
+    },
+    {
+      id: 'ytd-closed',
+      label: 'YTD Closed',
+      icon: <CompletenessIcon />,
+      tone: 'neutral',
+      value: undefined,
+      hint: 'Not available',
+      tooltip: NOT_YET_WIRED_TOOLTIP_YTD_CLOSED,
+    },
+    {
+      id: 'win-rate',
+      label: 'Win Rate',
+      icon: <ActivityIcon />,
+      tone: 'neutral',
+      value: undefined,
+      hint: 'Not available',
+      tooltip: NOT_YET_WIRED_TOOLTIP_WIN_RATE,
+    },
+    {
+      id: 'high-prob',
+      label: 'High Prob',
+      icon: <MemoIcon />,
+      tone: 'neutral',
+      value: undefined,
+      hint: 'Not available',
+      tooltip: NOT_YET_WIRED_TOOLTIP_HIGH_PROB,
+    },
+    {
+      id: 'stale',
+      label: 'Stale 14d+',
+      icon: <ChecklistIcon />,
+      tone: kpis.staleActivityCount > 0 ? 'atRisk' : 'clear',
+      value: kpis.staleActivityCount.toString(),
+      hint: 'No activity in 14+ days',
+    },
+    {
+      id: 'in-uw',
+      label: 'In UW',
+      icon: <StageIcon />,
+      tone: kpis.inUnderwritingCount > 0 ? 'info' : 'neutral',
+      value: kpis.inUnderwritingCount.toString(),
+      hint: 'Active deals in Underwriting',
+      // Phase 166 — the Active Deals board is stage-grouped with an
+      // Underwriting lane + stage filter, an existing honest view of
+      // these deals. Closing Soon / Stale 14d+ have no equivalent
+      // dedicated tab view, so they remain non-clickable below.
+      target: 'active-deals',
+    },
+  ];
+  return (
+    <section
+      className="cc-kpi-grid"
+      style={styles.grid}
+      aria-label="Workload KPIs"
+      data-banker-kpi-grid="phase-125g"
+    >
+      {specs.map((s) => (
+        <KpiTile key={s.id} spec={s} onSelectTab={onSelectTab} />
+      ))}
+    </section>
+  );
+}
+
+function loadingSpec(i: number): KpiSpec {
+  return {
+    id: `loading-${i}`,
+    label: 'Loading…',
+    icon: <SparkleIcon />,
+    tone: 'neutral',
+    value: '—',
+    hint: 'Reading authorized records',
+  };
+}
+
+function KpiTile({
+  spec,
+  onSelectTab,
+}: {
+  spec: KpiSpec;
+  onSelectTab?: (tab: BankerKpiTab) => void;
+}) {
+  const isMissing = spec.value === undefined;
+  const tonePalette = TONE_TOKENS[spec.tone];
+  // Phase 166 — a tile is interactive only when it has an honest
+  // existing-tab destination AND the parent provided a selector.
+  const clickable = spec.target !== undefined && onSelectTab !== undefined;
+
+  const inner = (
+    <>
+      <div style={styles.head}>
+        <span
+          style={{
+            ...styles.iconChip,
+            // De-emphasize the icon chip on metrics that have no live value, so
+            // the empties never carry the same visual weight as a real number.
+            background: isMissing ? palette.surfaceSubtle : tonePalette.bg,
+            color: isMissing ? palette.textSubtle : tonePalette.accent,
+          }}
+          aria-hidden="true"
+        >
+          {spec.icon}
+        </span>
+        <span style={{ ...styles.label, ...(isMissing ? styles.labelMuted : null) }}>{spec.label}</span>
+      </div>
+      <div
+        style={{
+          ...(isMissing ? styles.valueMissing : styles.value),
+          color: isMissing ? palette.textSubtle : tonePalette.fg,
+        }}
+      >
+        {spec.value ?? 'Not available'}
+      </div>
+      {spec.hint && <div style={styles.hint}>{spec.hint}</div>}
+    </>
+  );
+
+  if (clickable && spec.target) {
+    const target = spec.target;
+    return (
+      <button
+        type="button"
+        style={{
+          ...styles.tile,
+          ...styles.tileButton,
+          // Longhand border/background (not the shorthands) so a cloned
+          // <button> carrying CSS custom properties (var(--cc-*)) does
+          // not trip jsdom's shorthand expander during accessible-name
+          // computation. Visually identical to the div tile.
+          background: undefined,
+          backgroundColor: palette.surface,
+          border: undefined,
+          borderStyle: 'solid',
+          borderWidth: 1,
+          borderColor: palette.border,
+          borderTopWidth: 3,
+          borderTopColor: tonePalette.accent,
+        }}
+        data-kpi-tile={spec.id}
+        data-kpi-tone={spec.tone}
+        data-kpi-target={target}
+        title={spec.tooltip}
+        aria-label={`${spec.label}${spec.value ? `: ${spec.value}` : ''}. Open the ${TAB_LABELS[target]} tab.`}
+        onClick={() => onSelectTab(target)}
+      >
+        {inner}
+      </button>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        ...styles.tile,
+        // Live metrics float with a real 3px accent edge; empties recede — flat,
+        // quieter surface, hairline top, dimmed — so the strip has an obvious
+        // focal order instead of a uniform grid of equal boxes.
+        ...(isMissing
+          ? styles.tileMuted
+          : { borderTop: `3px solid ${tonePalette.accent}` }),
+      }}
+      data-kpi-tile={spec.id}
+      data-kpi-tone={spec.tone}
+      data-kpi-missing={isMissing ? 'true' : undefined}
+      title={spec.tooltip}
+    >
+      {inner}
+    </div>
+  );
+}
+
+function formatCurrencyCompact(n: number): string {
+  if (n === 0) return '$0';
+  const abs = Math.abs(n);
+  if (abs >= 1_000_000_000) return `$${(n / 1_000_000_000).toFixed(1)}B`;
+  if (abs >= 1_000_000) return `$${(n / 1_000_000).toFixed(1)}M`;
+  if (abs >= 1_000) return `$${(n / 1_000).toFixed(1)}K`;
+  return `$${n.toLocaleString()}`;
+}
+
+const TONE_TOKENS: Record<KpiTone, { accent: string; bg: string; fg: string }> = {
+  info: { accent: palette.cobalt, bg: palette.cobaltBg, fg: palette.cobaltFg },
+  clear: { accent: palette.clear, bg: palette.clearBg, fg: palette.clearFg },
+  atRisk: { accent: palette.atRisk, bg: palette.atRiskBg, fg: palette.atRiskFg },
+  blocked: { accent: palette.blocked, bg: palette.blockedBg, fg: palette.blockedFg },
+  neutral: { accent: palette.borderStrong, bg: palette.surfaceAlt, fg: palette.text },
+  violet: { accent: palette.violet, bg: palette.violetBg, fg: palette.violetFg },
+  teal: { accent: palette.teal, bg: palette.tealBg, fg: palette.tealFg },
+};
+
+const styles: Record<string, CSSProperties> = {
+  grid: {
+    // Grid template handled by `.cc-kpi-grid` in src/index.css —
+    // Phase 125G stable 5×2 / 4×3 / 2×5 breakpoints.
+    padding: `${spacing.lg} ${spacing.xxl}`,
+  },
+  tile: {
+    background: palette.surface,
+    border: `1px solid ${palette.border}`,
+    borderRadius: radius.md,
+    boxShadow: shadow.card,
+    padding: `${spacing.md} ${spacing.lg}`,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: spacing.xs,
+    minHeight: 116,
+  },
+  // Intaglio v2 — empties recede: flat (no float), a quieter sunken surface, a
+  // hairline top instead of the 3px accent, and dimmed. They read as clearly
+  // secondary to the live, floating metric tiles.
+  tileMuted: {
+    background: palette.surfaceSubtle,
+    borderTop: `1px solid ${palette.border}`,
+    boxShadow: 'none',
+    opacity: 0.66,
+  },
+  labelMuted: {
+    color: palette.textSubtle,
+  },
+  // Phase 166 — button reset so an interactive KPI tile keeps the exact
+  // card look while gaining native button semantics (keyboard + focus).
+  // `outline` is intentionally NOT removed: the browser focus-visible
+  // ring stays available. `textAlign: left` + `width: 100%` + inherited
+  // font keep the layout identical to the non-clickable div tile.
+  tileButton: {
+    width: '100%',
+    textAlign: 'left',
+    // Longhand (not the `font` shorthand) on purpose: keep the tile's
+    // typography while avoiding a jsdom shorthand-parsing crash during
+    // accessible-name computation in tests.
+    fontFamily: typography.family,
+    color: 'inherit',
+    cursor: 'pointer',
+    appearance: 'none',
+    WebkitAppearance: 'none',
+  },
+  head: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: spacing.xs,
+  },
+  iconChip: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 28,
+    height: 28,
+    borderRadius: radius.sm,
+    flexShrink: 0,
+  },
+  label: {
+    fontSize: typography.size.xs,
+    textTransform: 'uppercase',
+    letterSpacing: typography.letterSpacing.label,
+    color: palette.textMuted,
+    fontWeight: typography.weight.bold,
+  },
+  value: {
+    fontSize: typography.size.hero,
+    fontWeight: typography.weight.bold,
+    fontVariantNumeric: 'tabular-nums',
+    letterSpacing: typography.letterSpacing.hero,
+    lineHeight: 1.05,
+  },
+  valueMissing: {
+    fontSize: typography.size.md,
+    fontWeight: typography.weight.regular,
+    fontStyle: 'italic',
+  },
+  hint: {
+    fontSize: typography.size.xs,
+    color: palette.textMuted,
+    lineHeight: typography.lineHeight.snug,
+    marginTop: 'auto',
+  },
+  failed: {
+    gridColumn: '1 / -1',
+    background: palette.atRiskBg,
+    border: `1px solid ${palette.atRisk}`,
+    borderRadius: radius.sm,
+    padding: spacing.md,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: 2,
+  },
+  failedTitle: {
+    fontWeight: typography.weight.semibold,
+    color: palette.atRiskFg,
+    fontSize: typography.size.md,
+  },
+  failedDetail: {
+    color: palette.text,
+    fontSize: typography.size.sm,
+  },
+  failedHint: {
+    color: palette.textMuted,
+    fontSize: typography.size.xs,
+    fontStyle: 'italic',
+  },
+};

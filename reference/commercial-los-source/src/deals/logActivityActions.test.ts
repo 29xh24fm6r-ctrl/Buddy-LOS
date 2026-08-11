@@ -1,0 +1,334 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+
+vi.mock('../generated/services/Cr664_auditeventsService', () => ({
+  Cr664_auditeventsService: { create: vi.fn() },
+}));
+vi.mock('../generated/services/Cr664_dealtimelineeventsService', () => ({
+  Cr664_dealtimelineeventsService: { create: vi.fn() },
+}));
+
+import { Cr664_auditeventsService } from '../generated/services/Cr664_auditeventsService';
+import { Cr664_dealtimelineeventsService } from '../generated/services/Cr664_dealtimelineeventsService';
+import { logActivity } from './logActivityActions';
+import type { ResolveActorChangedBy } from './newDealAuditActorResolver';
+
+const auditCreate = vi.mocked(Cr664_auditeventsService.create);
+const timelineCreate = vi.mocked(Cr664_dealtimelineeventsService.create);
+
+// Phase 187H / G-5: the audit actor (cr664_ChangedBy) is resolved fail-closed to
+// a cr664_user bind via the platform-user bridge. Tests inject the resolver.
+const CORE_USER_BIND = '/cr664_users(core-1)';
+const okResolver: ResolveActorChangedBy = async () => ({ ok: true, changedByBind: CORE_USER_BIND });
+const failResolver: ResolveActorChangedBy = async () => ({
+  ok: false,
+  reason: 'matched platform-user has no linked cr664_user (CoreUser is empty)',
+});
+
+function input(overrides: Partial<Parameters<typeof logActivity>[0]> = {}) {
+  return {
+    dealId: 'deal-1',
+    dealName: 'Expansion Loan',
+    systemUserId: 'sys-user-1',
+    actorEmail: 'banker@oldglorybank.com',
+    bankerName: 'Matt Paller',
+    note: 'Client called to confirm diligence timing.',
+    ...overrides,
+  };
+}
+
+function successAudit(id: string) {
+  return Promise.resolve({
+    success: true,
+    data: { cr664_auditeventid: id },
+  } as unknown as ReturnType<typeof Cr664_auditeventsService.create> extends Promise<infer R>
+    ? R
+    : never);
+}
+
+function failedAudit(message: string) {
+  return Promise.resolve({
+    success: false,
+    data: undefined,
+    error: { message },
+  } as unknown as ReturnType<typeof Cr664_auditeventsService.create> extends Promise<infer R>
+    ? R
+    : never);
+}
+
+function successTimeline(id: string) {
+  return Promise.resolve({
+    success: true,
+    data: { cr664_dealtimelineeventid: id },
+  } as unknown as ReturnType<
+    typeof Cr664_dealtimelineeventsService.create
+  > extends Promise<infer R>
+    ? R
+    : never);
+}
+
+function failedTimeline(message: string) {
+  return Promise.resolve({
+    success: false,
+    data: undefined,
+    error: { message },
+  } as unknown as ReturnType<
+    typeof Cr664_dealtimelineeventsService.create
+  > extends Promise<infer R>
+    ? R
+    : never);
+}
+
+beforeEach(() => {
+  auditCreate.mockReset();
+  timelineCreate.mockReset();
+});
+
+describe('Phase 160 -- logActivity', () => {
+  it('creates a canonical timeline activity and matching audit row', async () => {
+    timelineCreate.mockReturnValue(successTimeline('activity-1'));
+    auditCreate.mockReturnValue(successAudit('audit-1'));
+
+    const outcome = await logActivity(input(), okResolver);
+
+    expect(outcome).toEqual({ kind: 'success', activityId: 'activity-1' });
+    expect(timelineCreate).toHaveBeenCalledTimes(1);
+    expect(auditCreate).toHaveBeenCalledTimes(1);
+
+    // Phase 187H / G-5: ChangedBy is the resolved cr664_user bind — never a
+    // systemuser id — and the redundant ActorUser + owner/state are gone.
+    const auditPayload = auditCreate.mock.calls[0]![0] as Record<string, unknown>;
+    expect(auditPayload['cr664_ChangedBy@odata.bind']).toBe(CORE_USER_BIND);
+    expect(auditPayload['cr664_ActorUser@odata.bind']).toBeUndefined();
+    expect(auditPayload.ownerid).toBeUndefined();
+    expect(auditPayload.owneridtype).toBeUndefined();
+    expect(auditPayload.statecode).toBeUndefined();
+  });
+
+  it('uses only minimum safe timeline fields and binds to the selected deal/user', async () => {
+    timelineCreate.mockReturnValue(successTimeline('activity-1'));
+    auditCreate.mockReturnValue(successAudit('audit-1'));
+
+    await logActivity(input({ note: '  trimmed note  ' }), okResolver);
+
+    const payload = timelineCreate.mock.calls[0]![0] as Record<string, unknown>;
+    expect(Object.keys(payload).sort()).toEqual(
+      [
+        'cr664_Deal@odata.bind',
+        'cr664_EventBy@odata.bind',
+        'cr664_eventat',
+        'cr664_eventsubtype',
+        'cr664_eventtype',
+        'cr664_issystemgenerated',
+        'cr664_relatedentityid',
+        'cr664_relatedentitytype',
+        'cr664_summary',
+        'cr664_title',
+        'cr664_visibilityscope',
+      ].sort(),
+    );
+    expect(payload.cr664_summary).toBe('trimmed note');
+    expect(payload['cr664_Deal@odata.bind']).toBe('/cr664_loandeals(deal-1)');
+    // cr664_EventBy is the resolved cr664_user (never /systemusers); owner/state
+    // are server-defaulted (removed, matching the task/stage timeline writes).
+    expect(payload['cr664_EventBy@odata.bind']).toBe(CORE_USER_BIND);
+    expect(payload.cr664_eventtype).toBe(788190002);
+    expect(payload.cr664_visibilityscope).toBe(788190000);
+  });
+
+  it('returns activity-failed and does not claim success when the timeline create fails', async () => {
+    timelineCreate.mockReturnValue(failedTimeline('timeline denied'));
+    auditCreate.mockReturnValue(successAudit('audit-failed-1'));
+
+    const outcome = await logActivity(input(), okResolver);
+
+    // Final LOS Completion arc (Workstream P) — never render a raw transport error verbatim.
+    expect(outcome.kind).toBe('activity-failed');
+    if (outcome.kind === 'activity-failed') {
+      expect(outcome.activityError).not.toContain('timeline denied');
+      expect(outcome.activityError).toContain("We couldn't save that action");
+    }
+    expect(auditCreate).toHaveBeenCalledTimes(1);
+    const auditPayload = auditCreate.mock.calls[0]![0] as Record<string, unknown>;
+    expect(auditPayload.cr664_outcomestatus).toBe(788190001);
+    expect(auditPayload.cr664_failurereason).toBe('timeline denied');
+  });
+
+  it('returns governance-partial when activity persists but audit fails', async () => {
+    timelineCreate.mockReturnValue(successTimeline('activity-1'));
+    auditCreate.mockReturnValue(failedAudit('audit denied'));
+
+    const outcome = await logActivity(input(), okResolver);
+
+    expect(outcome.kind).toBe('governance-partial');
+    if (outcome.kind === 'governance-partial') {
+      expect(outcome.activityId).toBe('activity-1');
+      expect(outcome.auditError).not.toContain('audit denied');
+      expect(outcome.auditError).toContain("We couldn't save that action");
+      expect(outcome.timelineError).toBeUndefined();
+    }
+  });
+
+  it('blocks empty notes without creating local or Dataverse activity', async () => {
+    const outcome = await logActivity(input({ note: '   ' }), okResolver);
+
+    expect(outcome.kind).toBe('unknown');
+    expect(timelineCreate).not.toHaveBeenCalled();
+    expect(auditCreate).not.toHaveBeenCalled();
+  });
+
+  it('fails closed when the actor cannot be resolved: timeline persists, NO audit POST, governance-partial', async () => {
+    timelineCreate.mockReturnValue(successTimeline('activity-1'));
+    auditCreate.mockReturnValue(successAudit('should-not-be-used'));
+
+    const outcome = await logActivity(input(), failResolver);
+
+    expect(outcome.kind).toBe('governance-partial');
+    if (outcome.kind === 'governance-partial') {
+      expect(outcome.activityId).toBe('activity-1');
+      // Final LOS Completion arc (Workstream P) — the raw reason carries internal schema jargon.
+      expect(outcome.auditError).not.toMatch(/CoreUser/);
+      expect(outcome.auditError).toContain("We couldn't save that action");
+    }
+    // The primary timeline write still happened.
+    expect(timelineCreate).toHaveBeenCalledTimes(1);
+    // No audit row is POSTed with an unresolved actor — never a systemuser bind.
+    expect(auditCreate).not.toHaveBeenCalled();
+  });
+});
+
+describe('Workstream 2 (final-seven-workstreams) -- canonical activity type + outcome/follow-up', () => {
+  it('defaults to activityType "note" (NoteLogged) when omitted, matching original behavior', async () => {
+    timelineCreate.mockReturnValue(successTimeline('activity-1'));
+    auditCreate.mockReturnValue(successAudit('audit-1'));
+
+    await logActivity(input(), okResolver, {});
+
+    const payload = timelineCreate.mock.calls[0]![0] as Record<string, unknown>;
+    expect(payload.cr664_eventtype).toBe(788190002);
+    expect(payload.cr664_title).toBe('Banker Note logged');
+  });
+
+  it('maps each canonical activityType to the same deal-timeline eventtype code the CRM cross-write uses', async () => {
+    const cases: Array<[string, number]> = [
+      ['call', 788190000],
+      ['email', 788190001],
+      ['meeting', 788190003],
+      ['note', 788190002],
+    ];
+    for (const [activityType, code] of cases) {
+      timelineCreate.mockReset();
+      auditCreate.mockReset();
+      timelineCreate.mockReturnValue(successTimeline('activity-x'));
+      auditCreate.mockReturnValue(successAudit('audit-x'));
+      await logActivity(input({ activityType: activityType as never }), okResolver, {});
+      const payload = timelineCreate.mock.calls[0]![0] as Record<string, unknown>;
+      expect(payload.cr664_eventtype, activityType).toBe(code);
+    }
+  });
+
+  it('folds outcome and next-follow-up date onto cr664_summary as text (no dedicated column exists)', async () => {
+    timelineCreate.mockReturnValue(successTimeline('activity-1'));
+    auditCreate.mockReturnValue(successAudit('audit-1'));
+
+    await logActivity(
+      input({ outcome: 'Left voicemail', nextFollowUpDate: '2026-08-01' }),
+      okResolver,
+      {},
+    );
+
+    const payload = timelineCreate.mock.calls[0]![0] as Record<string, unknown>;
+    expect(payload.cr664_summary).toBe(
+      'Client called to confirm diligence timing. · Outcome: Left voicemail · Next follow-up: 2026-08-01',
+    );
+  });
+
+  it('still only carries the same known field set when activityType/outcome/nextFollowUpDate are supplied', async () => {
+    timelineCreate.mockReturnValue(successTimeline('activity-1'));
+    auditCreate.mockReturnValue(successAudit('audit-1'));
+
+    await logActivity(
+      input({ activityType: 'call', outcome: 'Connected', nextFollowUpDate: '2026-08-01' }),
+      okResolver,
+      {},
+    );
+
+    const payload = timelineCreate.mock.calls[0]![0] as Record<string, unknown>;
+    expect(Object.keys(payload).sort()).toEqual(
+      [
+        'cr664_Deal@odata.bind',
+        'cr664_EventBy@odata.bind',
+        'cr664_eventat',
+        'cr664_eventsubtype',
+        'cr664_eventtype',
+        'cr664_issystemgenerated',
+        'cr664_relatedentityid',
+        'cr664_relatedentitytype',
+        'cr664_summary',
+        'cr664_title',
+        'cr664_visibilityscope',
+      ].sort(),
+    );
+  });
+});
+
+describe('Workstream 2 (final-seven-workstreams) -- reverse cross-write onto the deal\'s bridged CRM company timeline', () => {
+  it('cross-writes a cr664_crmtimelineevents row when the deal\'s client is bridged to a CRM organization', async () => {
+    timelineCreate.mockReturnValue(successTimeline('activity-1'));
+    auditCreate.mockReturnValue(successAudit('audit-1'));
+    const resolveDealBridgedOrganizationId = vi.fn(async (_dealId: string) => ({ status: 'ready' as const, organizationId: 'org-1' }));
+    const createCrmTimelineEvent = vi.fn(async (_payload: Record<string, unknown>) => ({ success: true, id: 'crm-timeline-1' }));
+
+    await logActivity(input({ activityType: 'call' }), okResolver, {
+      resolveDealBridgedOrganizationId,
+      createCrmTimelineEvent,
+    });
+
+    expect(resolveDealBridgedOrganizationId).toHaveBeenCalledWith('deal-1');
+    expect(createCrmTimelineEvent).toHaveBeenCalledTimes(1);
+    const crmPayload = createCrmTimelineEvent.mock.calls[0]![0] as Record<string, unknown>;
+    expect(crmPayload['cr664_Organization@odata.bind']).toBe('/cr664_crmorganizations(org-1)');
+    expect(crmPayload['cr664_OriginatedLoanDeal@odata.bind']).toBe('/cr664_loandeals(deal-1)');
+    expect(crmPayload.cr664_eventtype).toBe('call');
+    expect(crmPayload.cr664_actor).toBe('banker@oldglorybank.com');
+  });
+
+  it.each([
+    ['no-client-link', { status: 'no-client-link' as const }],
+    ['no-org-link', { status: 'no-org-link' as const }],
+    ['unavailable', { status: 'unavailable' as const, error: 'lookup failed' }],
+  ])('does not cross-write when the bridge resolves to %s', async (_label, bridgeResult) => {
+    timelineCreate.mockReturnValue(successTimeline('activity-1'));
+    auditCreate.mockReturnValue(successAudit('audit-1'));
+    const createCrmTimelineEvent = vi.fn(async () => ({ success: true, id: 'crm-timeline-1' }));
+
+    await logActivity(input(), okResolver, {
+      resolveDealBridgedOrganizationId: async () => bridgeResult,
+      createCrmTimelineEvent,
+    });
+
+    expect(createCrmTimelineEvent).not.toHaveBeenCalled();
+  });
+
+  it('does not cross-write at all when no cross-write deps are supplied (backward compatible)', async () => {
+    timelineCreate.mockReturnValue(successTimeline('activity-1'));
+    auditCreate.mockReturnValue(successAudit('audit-1'));
+
+    const outcome = await logActivity(input(), okResolver, {});
+
+    expect(outcome).toEqual({ kind: 'success', activityId: 'activity-1' });
+  });
+
+  it('never lets a cross-write failure affect the primary success outcome', async () => {
+    timelineCreate.mockReturnValue(successTimeline('activity-1'));
+    auditCreate.mockReturnValue(successAudit('audit-1'));
+
+    const outcome = await logActivity(input(), okResolver, {
+      resolveDealBridgedOrganizationId: async () => ({ status: 'ready' as const, organizationId: 'org-1' }),
+      createCrmTimelineEvent: async () => {
+        throw new Error('CRM write blew up');
+      },
+    });
+
+    expect(outcome).toEqual({ kind: 'success', activityId: 'activity-1' });
+  });
+});

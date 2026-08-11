@@ -1,0 +1,595 @@
+/* ---------------------------------------------------------------------------
+ * Phase 79: theme-token foundation.
+ *
+ * Every banker-visible color the app paints flows through one of the
+ * --cc-* CSS variables declared below. The light-mode values are
+ * declared in :root; the dark-mode values are declared in BOTH the
+ * `prefers-color-scheme: dark` media query (so OS preference applies
+ * automatically) AND the [data-theme="dark"] attribute selector (so a
+ * future explicit theme toggle can override OS preference). The
+ * [data-theme="light"] attribute selector re-asserts the light values
+ * for the inverse override.
+ *
+ * No new product workflow. No Dataverse write. No new user-preference
+ * persistence in this phase — the brief explicitly gated that as a
+ * future phase. Phase 79 ships the visual token foundation only.
+ *
+ * Semantic color discipline (unchanged from Phase 4):
+ *   blocked  -> red, true blockers only
+ *   atRisk   -> amber, overdue / stalled
+ *   clear    -> green, complete / received
+ *   neutral  -> gray, draft / pending / system
+ *   info     -> blue, banker action / communication
+ *   primary  -> navy / blue-violet, brand chrome
+ * ------------------------------------------------------------------------- */
+
+:root {
+  /* ── Intaglio type stack (Old Glory Bank — heritage gravitas, modern restraint) ──
+   * Display = Fraunces (optical, high-contrast) for hero numbers + titles only.
+   * UI/Body = IBM Plex Sans (precise humanist grotesque, not Inter-as-everything).
+   * Data    = IBM Plex Mono + tabular figures for all financial values. */
+  --font-display: 'Fraunces Variable', 'Fraunces', Georgia, 'Times New Roman', serif;
+  --font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-mono: 'IBM Plex Mono', ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
+
+  /* Surfaces — warm document paper, never stark white */
+  --cc-page-bg: #f7f4ec;       /* Document Ivory */
+  --cc-surface: #fffdf9;       /* Surface (a hair warm) */
+  --cc-surface-alt: #f1ece0;   /* hover / header wash */
+  --cc-surface-subtle: #faf7ef;
+
+  /* Borders / dividers — warm, never blue-gray */
+  --cc-border: #e7e1d4;
+  --cc-border-strong: #d6cdba;
+  --cc-divider: #efe9dd;
+
+  /* Text — Ink Navy + warm-slate ramp */
+  --cc-text: #111a2e;          /* Ink Navy */
+  --cc-text-muted: #6b6557;    /* warm slate metadata */
+  --cc-text-subtle: #938c7c;
+  --cc-text-inverse: #f7f4ec;
+  --cc-link: #234e84;          /* Treasury Blue */
+
+  /* Brand / primary — Ink Navy (chrome, brand, deep surfaces). The Seal-Red
+   * action lives on --cc-accent so red stays rare. */
+  --cc-primary: #111a2e;
+  --cc-primary-dim: #2a3550;
+  --cc-primary-bg: #e7e8ec;
+  --cc-primary-fg: #0b1220;
+
+  /* Accent — Seal Red. THE one primary action, active indicator, critical alert.
+   * Used sparingly; if it's everywhere it's nowhere. */
+  --cc-accent: #9e2b25;
+  --cc-accent-dim: #b5453e;
+  --cc-accent-bg: #f6e7e2;
+  --cc-accent-fg: #7a201b;
+
+  /* Status — blocked (Seal Red; true blockers / critical alerts only) */
+  --cc-blocked: #9e2b25;
+  --cc-blocked-bg: #f6e7e2;
+  --cc-blocked-fg: #7a201b;
+
+  /* Status — at-risk (amber, rare) */
+  --cc-at-risk: #b5791f;
+  --cc-at-risk-bg: #f6ebd5;
+  --cc-at-risk-fg: #6e480f;
+
+  /* Status — clear (Ledger Green — muted, moneyed) */
+  --cc-clear: #3f6b5a;
+  --cc-clear-bg: #e3ece7;
+  --cc-clear-fg: #2a4c3f;
+
+  /* Neutral status (draft / pending / system — warm slate) */
+  --cc-neutral: #6b6557;
+  --cc-neutral-bg: #efe9dd;
+  --cc-neutral-fg: #4a463b;
+
+  /* Info / interactive — Treasury Blue (so "clickable" reads instantly) */
+  --cc-info: #234e84;
+  --cc-info-bg: #e4eaf2;
+  --cc-info-fg: #1a3c66;
+
+  /* Cockpit accents — retuned into the Intaglio world (no electric blue/violet) */
+  --cc-cobalt: #234e84;        /* Treasury Blue */
+  --cc-cobalt-bg: #e4eaf2;
+  --cc-cobalt-fg: #1a3c66;
+
+  --cc-teal: #3f6b5a;          /* Ledger Green */
+  --cc-teal-bg: #e3ece7;
+  --cc-teal-fg: #2a4c3f;
+
+  --cc-cyan: #4a6b8a;          /* muted steel */
+  --cc-cyan-bg: #e6ecf2;
+  --cc-cyan-fg: #34506b;
+
+  --cc-violet: #5e3b52;        /* restrained plum (premium-tier accent) */
+  --cc-violet-bg: #efe5ec;
+  --cc-violet-fg: #46293d;
+
+  /* Cockpit surfaces — warm slate platform */
+  --cc-panel-bg: #f0ebdf;
+  --cc-panel-border: #e0d9c9;
+  --cc-deck-bg: #f7f4ec;
+  --cc-deck-tile: #fffdf9;
+  --cc-glass-panel: rgba(255, 253, 249, 0.78);
+
+  /* Focus ring — Treasury Blue */
+  --cc-focus-ring: #234e84;
+
+  /* Engraved security rule — the 1px intaglio line beneath a page header */
+  --cc-security-rule: #9e2b25;
+
+  /* Warm ivory "document" surface — reserved for the few places that should
+   * read like an actual certificate/record sheet (a deliberate accent). */
+  --cc-ivory: #f4efe3;
+  --cc-ivory-fg: #2a2417;
+
+  /* Surface top-highlight (the 1px light edge that makes a card read as raised). */
+  --cc-surface-highlight: rgba(17, 26, 46, 0.04);
+
+  /* Elevation — theme-aware shadow tokens (deepened hard on dark; see below).
+   * The JS `shadow` object references these so inline-styled cards float too. */
+  --cc-shadow-card: 0 1px 2px rgba(20, 26, 42, 0.04), 0 1px 1px rgba(20, 26, 42, 0.03);
+  --cc-shadow-rise: 0 4px 12px rgba(20, 26, 42, 0.08);
+  --cc-shadow-elevated: 0 2px 4px rgba(20, 26, 42, 0.06), 0 4px 10px rgba(20, 26, 42, 0.05);
+  --cc-shadow-hero: 0 8px 24px rgba(20, 26, 42, 0.10), 0 2px 4px rgba(20, 26, 42, 0.06);
+  --cc-shadow-glow: 0 0 0 1px rgba(96, 165, 250, 0.18) inset, 0 12px 28px rgba(15, 23, 42, 0.16);
+  --cc-shadow-deck: 0 1px 0 rgba(255, 255, 255, 0.55) inset, 0 1px 3px rgba(15, 23, 42, 0.08);
+  /* The one accent glow — the single Seal-Red primary action / active tab. */
+  --cc-shadow-accent-glow: 0 0 0 1px var(--cc-accent), 0 4px 16px rgba(158, 43, 37, 0.22);
+
+  font-family: var(--font-sans);
+  font-size: 15px;
+  color: var(--cc-text);
+  background: var(--cc-page-bg);
+  color-scheme: light;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* Dark theme — applied when (a) the OS preference is dark, OR (b) the
+ * root element carries data-theme="dark" (explicit override). Color
+ * choices preserve the semantic palette: red stays red, amber stays
+ * amber, etc., but brightened / desaturated for legibility on dark
+ * surfaces. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme='light']) {
+    /* Intaglio v2 dark — deep, warm Ink-Navy "document on a desk at night" */
+    --cc-page-bg: #0c1322;
+    --cc-page-gradient: linear-gradient(180deg, #0f1a2e 0%, #0c1322 62%);
+    --cc-surface: #16223a;
+    --cc-surface-alt: #1b2b47;
+    --cc-surface-subtle: #121c30;
+
+    --cc-border: rgba(255, 255, 255, 0.08);
+    --cc-border-strong: rgba(255, 255, 255, 0.16);
+    --cc-divider: rgba(255, 255, 255, 0.06);
+
+    --cc-text: #ede8dc;          /* warm off-white ink */
+    --cc-text-muted: #aab5c4;   /* v3: secondary lifted ~7.6:1 on card (was #9ba6b8) */
+    --cc-text-subtle: #7e8799;  /* v3: muted lifted ~4.3:1 on card (was #6f7a8e) */
+    --cc-text-inverse: #0c1322;
+    --cc-link: #5b8fd9;          /* Treasury Blue */
+
+    --cc-primary: #c9d2e6;       /* light ink for chrome on dark */
+    --cc-primary-dim: #aab4cc;
+    --cc-primary-bg: #1b2b47;
+    --cc-primary-fg: #ede8dc;
+
+    --cc-accent: #c23b34;        /* Seal Red — the rare accent; glows on dark */
+    --cc-accent-dim: #d9544c;
+    --cc-accent-bg: #2a1512;
+    --cc-accent-fg: #f3cdc8;
+
+    --cc-blocked: #d9544c;
+    --cc-blocked-bg: #2a1512;
+    --cc-blocked-fg: #f3cdc8;
+
+    --cc-at-risk: #d7a85a;
+    --cc-at-risk-bg: #33270f;
+    --cc-at-risk-fg: #ecd4a2;
+
+    --cc-clear: #6fb39a;         /* Ledger Green, lifted for dark */
+    --cc-clear-bg: #14301f;
+    --cc-clear-fg: #c6e6d6;
+
+    --cc-neutral: #9ba6b8;
+    --cc-neutral-bg: #1e2840;
+    --cc-neutral-fg: #c9d2e0;
+
+    --cc-info: #5b8fd9;          /* Treasury Blue */
+    --cc-info-bg: #16243c;
+    --cc-info-fg: #c3d6f0;
+
+    /* Cockpit accents (dark, Intaglio v2) */
+    --cc-cobalt: #5b8fd9;
+    --cc-cobalt-bg: #16243c;
+    --cc-cobalt-fg: #c3d6f0;
+
+    --cc-teal: #6fb39a;
+    --cc-teal-bg: #14301f;
+    --cc-teal-fg: #c6e6d6;
+
+    --cc-cyan: #7fa0bf;
+    --cc-cyan-bg: #142430;
+    --cc-cyan-fg: #c2d6e6;
+
+    --cc-violet: #b189a4;
+    --cc-violet-bg: #271b27;
+    --cc-violet-fg: #e3cbdb;
+
+    /* Cockpit surfaces (dark) */
+    --cc-panel-bg: #101a2c;
+    --cc-panel-border: rgba(255, 255, 255, 0.07);
+    --cc-deck-bg: #121c30;
+    --cc-deck-tile: #1b2b47;
+    --cc-glass-panel: rgba(22, 34, 58, 0.72);
+
+    --cc-focus-ring: #5b8fd9;
+    --cc-security-rule: #c23b34;
+
+    --cc-ivory: #f4efe3;
+    --cc-ivory-fg: #2a2417;
+    --cc-surface-highlight: rgba(255, 255, 255, 0.06);
+
+    /* Elevation — deep, real drop shadows + a 1px top highlight so cards float. */
+    --cc-shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 8px 24px rgba(0, 0, 0, 0.35);
+    --cc-shadow-rise: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 14px 34px rgba(0, 0, 0, 0.46);
+    --cc-shadow-elevated: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 10px 28px rgba(0, 0, 0, 0.40);
+    --cc-shadow-hero: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 20px 50px rgba(0, 0, 0, 0.52);
+    --cc-shadow-glow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 14px 34px rgba(0, 0, 0, 0.46);
+    --cc-shadow-deck: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 4px 14px rgba(0, 0, 0, 0.30);
+    --cc-shadow-accent-glow: 0 0 0 1px var(--cc-accent), 0 4px 16px rgba(194, 59, 52, 0.30);
+
+    /* Design-system primitives (--ig-*) inherit the deep dark elevation too. */
+    --ig-shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 8px 24px rgba(0, 0, 0, 0.35);
+    --ig-shadow-rise: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 14px 34px rgba(0, 0, 0, 0.46);
+
+    color-scheme: dark;
+  }
+}
+
+/* Explicit data-theme="dark" override — wins over OS preference. Used
+ * by a future settings UI; in Phase 79 the attribute is unset by
+ * default, so this block is dormant until a consumer sets it. */
+:root[data-theme='dark'] {
+  /* Intaglio v2 dark — deep, warm Ink-Navy (mirrors the media-query block) */
+  --cc-page-bg: #0c1322;
+  --cc-page-gradient: linear-gradient(180deg, #0f1a2e 0%, #0c1322 62%);
+  --cc-surface: #16223a;
+  --cc-surface-alt: #1b2b47;
+  --cc-surface-subtle: #121c30;
+
+  --cc-border: rgba(255, 255, 255, 0.08);
+  --cc-border-strong: rgba(255, 255, 255, 0.16);
+  --cc-divider: rgba(255, 255, 255, 0.06);
+
+  --cc-text: #ede8dc;
+  --cc-text-muted: #aab5c4;   /* v3: secondary lifted ~7.6:1 on card (was #9ba6b8) */
+  --cc-text-subtle: #7e8799;  /* v3: muted lifted ~4.3:1 on card (was #6f7a8e) */
+  --cc-text-inverse: #0c1322;
+  --cc-link: #5b8fd9;
+
+  --cc-primary: #c9d2e6;
+  --cc-primary-dim: #aab4cc;
+  --cc-primary-bg: #1b2b47;
+  --cc-primary-fg: #ede8dc;
+
+  --cc-accent: #c23b34;
+  --cc-accent-dim: #d9544c;
+  --cc-accent-bg: #2a1512;
+  --cc-accent-fg: #f3cdc8;
+
+  --cc-blocked: #d9544c;
+  --cc-blocked-bg: #2a1512;
+  --cc-blocked-fg: #f3cdc8;
+
+  --cc-at-risk: #d7a85a;
+  --cc-at-risk-bg: #33270f;
+  --cc-at-risk-fg: #ecd4a2;
+
+  --cc-clear: #6fb39a;
+  --cc-clear-bg: #14301f;
+  --cc-clear-fg: #c6e6d6;
+
+  --cc-neutral: #9ba6b8;
+  --cc-neutral-bg: #1e2840;
+  --cc-neutral-fg: #c9d2e0;
+
+  --cc-info: #5b8fd9;
+  --cc-info-bg: #16243c;
+  --cc-info-fg: #c3d6f0;
+
+  /* Cockpit accents (dark, Intaglio v2) */
+  --cc-cobalt: #5b8fd9;
+  --cc-cobalt-bg: #16243c;
+  --cc-cobalt-fg: #c3d6f0;
+
+  --cc-teal: #6fb39a;
+  --cc-teal-bg: #14301f;
+  --cc-teal-fg: #c6e6d6;
+
+  --cc-cyan: #7fa0bf;
+  --cc-cyan-bg: #142430;
+  --cc-cyan-fg: #c2d6e6;
+
+  --cc-violet: #b189a4;
+  --cc-violet-bg: #271b27;
+  --cc-violet-fg: #e3cbdb;
+
+  /* Cockpit surfaces (dark) */
+  --cc-panel-bg: #101a2c;
+  --cc-panel-border: rgba(255, 255, 255, 0.07);
+  --cc-deck-bg: #121c30;
+  --cc-deck-tile: #1b2b47;
+  --cc-glass-panel: rgba(22, 34, 58, 0.72);
+
+  --cc-focus-ring: #5b8fd9;
+  --cc-security-rule: #c23b34;
+
+  --cc-ivory: #f4efe3;
+  --cc-ivory-fg: #2a2417;
+  --cc-surface-highlight: rgba(255, 255, 255, 0.06);
+
+  --cc-shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 8px 24px rgba(0, 0, 0, 0.35);
+  --cc-shadow-rise: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 14px 34px rgba(0, 0, 0, 0.46);
+  --cc-shadow-elevated: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 10px 28px rgba(0, 0, 0, 0.40);
+  --cc-shadow-hero: inset 0 1px 0 rgba(255, 255, 255, 0.07), 0 20px 50px rgba(0, 0, 0, 0.52);
+  --cc-shadow-glow: inset 0 1px 0 rgba(255, 255, 255, 0.06), 0 14px 34px rgba(0, 0, 0, 0.46);
+  --cc-shadow-deck: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 4px 14px rgba(0, 0, 0, 0.30);
+  --cc-shadow-accent-glow: 0 0 0 1px var(--cc-accent), 0 4px 16px rgba(194, 59, 52, 0.30);
+
+  --ig-shadow-card: inset 0 1px 0 rgba(255, 255, 255, 0.05), 0 8px 24px rgba(0, 0, 0, 0.35);
+  --ig-shadow-rise: inset 0 1px 0 rgba(255, 255, 255, 0.08), 0 14px 34px rgba(0, 0, 0, 0.46);
+
+  color-scheme: dark;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  /* Phase 125G — smooth scroll for the DealCockpitNav anchor strip.
+   * Users who prefer reduced motion get the default (instant) jump. */
+  scroll-behavior: smooth;
+}
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  /* Dark theme supplies --cc-page-gradient (a faint warm Ink-Navy vertical wash);
+   * light theme leaves it unset, so the flat page-bg shows through. */
+  background: var(--cc-page-gradient, var(--cc-page-bg));
+  background-color: var(--cc-page-bg);
+  background-attachment: fixed;
+}
+
+#root {
+  min-height: 100vh;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* ---------------------------------------------------------------------------
+ * Intaglio v2 motion — a short load sequence + a barely-perceptible guilloché
+ * drift. ALL of it is gated behind prefers-reduced-motion: no-preference, so a
+ * reduced-motion user gets the final state instantly with zero animation.
+ * ------------------------------------------------------------------------- */
+@keyframes cc-rise-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes cc-guilloche-drift {
+  from { transform: translateY(-50%) rotate(0deg); }
+  to { transform: translateY(-50%) rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: no-preference) {
+  /* Cards / bands fade + rise on load. */
+  .cc-rise-in {
+    animation: cc-rise-in 260ms cubic-bezier(0.2, 0.6, 0.2, 1) both;
+  }
+  /* KPI strip rises in a short stagger (~200ms total across the row). */
+  .cc-kpi-grid > * {
+    animation: cc-rise-in 240ms cubic-bezier(0.2, 0.6, 0.2, 1) both;
+  }
+  .cc-kpi-grid > *:nth-child(1) { animation-delay: 0ms; }
+  .cc-kpi-grid > *:nth-child(2) { animation-delay: 24ms; }
+  .cc-kpi-grid > *:nth-child(3) { animation-delay: 48ms; }
+  .cc-kpi-grid > *:nth-child(4) { animation-delay: 72ms; }
+  .cc-kpi-grid > *:nth-child(5) { animation-delay: 96ms; }
+  .cc-kpi-grid > *:nth-child(6) { animation-delay: 120ms; }
+  .cc-kpi-grid > *:nth-child(7) { animation-delay: 144ms; }
+  .cc-kpi-grid > *:nth-child(8) { animation-delay: 168ms; }
+  .cc-kpi-grid > *:nth-child(9) { animation-delay: 192ms; }
+  .cc-kpi-grid > *:nth-child(10) { animation-delay: 216ms; }
+  /* The hero guilloché drifts very slowly, like a security pattern catching light. */
+  .cc-hero-guilloche {
+    animation: cc-guilloche-drift 120s linear infinite;
+  }
+}
+
+/* Utility classes for things React inline styles can't express
+   (pseudo-classes, hover, focus-visible). Used by tables and clickable
+   rows in the banker workspace. All colors flow through the --cc-*
+   tokens so dark mode follows automatically. */
+
+/* v3 FIX 2 — clickable tile float lift (theme-aware; matches the KPI live cards'
+   elevation family). Base elevation comes from the inline shadow.elevated token;
+   this only adds the hover lift + deepen. */
+.cc-tile-lift {
+  transition: transform 150ms ease, box-shadow 150ms ease;
+}
+.cc-tile-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--cc-shadow-hero);
+}
+@media (prefers-reduced-motion: reduce) {
+  .cc-tile-lift {
+    transition: none;
+  }
+  .cc-tile-lift:hover {
+    transform: none;
+  }
+}
+
+.cc-row-hover {
+  transition: background-color 120ms ease;
+}
+.cc-row-hover:hover {
+  background-color: var(--cc-surface-alt);
+}
+.cc-row-hover:focus-visible {
+  outline: 2px solid var(--cc-focus-ring);
+  outline-offset: -2px;
+  background-color: var(--cc-surface-alt);
+}
+
+.cc-link {
+  color: var(--cc-link);
+  text-decoration: none;
+  font-weight: 500;
+}
+.cc-link:hover {
+  text-decoration: underline;
+}
+.cc-link:focus-visible {
+  outline: 2px solid var(--cc-focus-ring);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Subtle table-header style available globally so PersonalPipeline
+   and any future workspace tables share it. */
+.cc-th {
+  text-align: left;
+  padding: 0.6rem 0.9rem;
+  background: var(--cc-surface-alt);
+  border-bottom: 1px solid var(--cc-border);
+  font-weight: 600;
+  font-size: 0.78rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--cc-text-muted);
+  white-space: nowrap;
+}
+
+.cc-td {
+  padding: 0.65rem 0.9rem;
+  border-bottom: 1px solid var(--cc-divider);
+  white-space: nowrap;
+  vertical-align: middle;
+  color: var(--cc-text);
+  font-size: 0.92rem;
+}
+
+.cc-td-num {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+/* Intaglio — tabular figures for ALL financial values (aligned decimals are a
+   craft signal that reads "financial product"). Apply to any element rendering
+   money / counts. */
+.cc-tnum {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1, 'lnum' 1;
+}
+
+/* Intaglio — display face (Fraunces). Hero numbers + page/section titles only;
+   never body. Pair with tabular figures for the $-pipeline moment. */
+.cc-display {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
+  letter-spacing: -0.012em;
+}
+
+/* Intaglio v2 — the hero guilloché elevated to atmosphere behind the dashboard
+   band. Large, low-opacity, anchored off the right edge, behind the content. */
+.cc-hero-guilloche {
+  position: absolute;
+  top: 50%;
+  right: -70px;
+  transform: translateY(-50%);
+  pointer-events: none;
+  z-index: 0;
+}
+
+/* Intaglio — the engraved "security rule": a fine 1px line beneath a primary
+   page header, in Seal Red. One per page header; the identity is spent here. */
+.cc-security-rule {
+  height: 1px;
+  border: 0;
+  margin: 0;
+  background: linear-gradient(
+    to right,
+    var(--cc-security-rule) 0,
+    var(--cc-security-rule) 64px,
+    var(--cc-border) 64px,
+    var(--cc-border) 100%
+  );
+}
+
+/* Phase 125G — deal metric-deck tile grid stable layout.
+ *
+ * 6 tonal tiles + the completeness ring on the left. The tiles
+ * lay out as a stable 3×2 grid on desktop (≥ 980px) and 2×3
+ * on narrower screens, so the deck never falls into a 5+1
+ * orphan row.
+ */
+.cc-metric-deck-tiles {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.75rem;
+  min-width: 0;
+}
+@media (max-width: 980px) {
+  .cc-metric-deck-tiles {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+@media (max-width: 560px) {
+  .cc-metric-deck-tiles {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Phase 125G — banker KPI grid stable layout.
+ *
+ * Replaces the Phase 125F `auto-fit, minmax(178px, 1fr)` rule that
+ * could land a lone tile on its own row at intermediate widths
+ * (the "9 + 1" awkwardness the user flagged). The fixed-column
+ * breakpoints below guarantee balanced rows:
+ *
+ *   ≥ 1241px → 5 columns × 2 rows  (10 tiles, no orphan)
+ *   ≤ 1240px → 4 columns × 3 rows  (10 → row 4-4-2; still balanced
+ *                                    because no single tile is
+ *                                    orphaned on its own row)
+ *   ≤  760px → 2 columns × 5 rows
+ */
+.cc-kpi-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 1rem;
+}
+@media (max-width: 1240px) {
+  .cc-kpi-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+@media (max-width: 760px) {
+  .cc-kpi-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

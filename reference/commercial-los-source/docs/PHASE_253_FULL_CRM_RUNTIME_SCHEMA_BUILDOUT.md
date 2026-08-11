@@ -1,0 +1,189 @@
+# Phase 253 — Full CRM Runtime Schema Buildout
+
+## Outcome
+
+**An idempotent, resume-safe, additive CRM schema buildout is ready. No schema was applied
+by this assistant (no live token here), and no gate was flipped.**
+`pac code push` was **not performed**.
+`enabledCount = 1 / 6`. `fullLaunchAchieved = false`. CRM runtime hydration stays correctly
+false until the operator applies the schema and exports fresh evidence.
+
+## The gap (from Phase 252)
+
+A real token-backed measurement showed the live CRM schema is only the minimal spine:
+
+| | Live (Phase 252) | Full runtime contract |
+| --- | --- | --- |
+| Tables | **5** | **10** |
+| Columns | **40** | **147** |
+| Relationships | **0** | **28** |
+
+Decision (per spec): build the live schema **up** to the full contract — do NOT reconcile
+the bridge down to the spine.
+
+## Phase 253A — relationship idempotency hotfix
+
+A first `-Apply` run created all 10 tables + 147 columns, then failed on the first
+relationship: `An attribute with the specified name cr664_EmployerOrganization already
+exists for entity cr664_Crmperson`.
+
+**Root cause:** relationship creation was idempotent only by the relationship **schema
+name**. When the referencing **lookup attribute** already exists (e.g. from a prior
+partial apply, or created under a different relationship schema name), Dataverse rejects
+the relationship create even though the schema-name probe found nothing.
+
+**Fix:** `create-full-crm-runtime-schema.ps1` now resolves each relationship by BOTH the
+relationship schema name AND the referencing lookup attribute (mirroring
+`src/crm/crmRelationshipIdempotency.ts :: resolveCrmRelationshipAction`):
+
+- relationship schema exists → **present** (skip);
+- referencing lookup attribute exists and targets the expected entity → **present** (skip,
+  even under a different relationship schema name);
+- an attribute with that name exists but is not a lookup, OR a lookup targeting a
+  **different** entity → **mismatch / FAIL CLOSED** (no mutation attempted);
+- neither exists → create (apply) / planned (dry-run).
+
+`verify-full-crm-schema.ps1` likewise counts a relationship covered by either the
+relationship metadata or a correctly-targeted lookup attribute — without weakening target
+validation. Still create-missing-only: no delete, rename, overwrite, or data mutation.
+
+**Operator retry:** simply re-run
+`powershell -File scripts/dataverse/create-full-crm-runtime-schema.ps1 -Apply` — it now
+skips the already-present `cr664_EmployerOrganization` lookup and continues; rerunning is
+safe and resumes from where it stopped.
+
+## Phase 253B — register full CRM SDK / data sources + stabilize the verifier
+
+After the live schema was applied (10 tables), `export-runtime-schema-evidence.ps1` reported
+CRM `services=5/10 datasources=5/10 live=10/10` → **BLOCKED**: the live tables exist, but only
+the old 5 generated services + 5 data-source registrations were present locally.
+
+**Root cause:** `regenerate-powerapps-sdk.ps1` enumerated the old **5-table spine**
+(`crm-spine.schema.json`), so re-running it only ever registered/generated 5 CRM tables. The
+5 new tables (contactpoint, communicationpreference, contactauthorization, vendorprofile,
+auditentry) were never added.
+
+**Fix:**
+- `regenerate-powerapps-sdk.ps1` now enumerates `crm-full.schema.json` (**10 CRM tables**), so
+  a regen registers all 10 data sources and generates all 10 `Cr664_crm*Service.ts` services.
+- A new contract (`src/crm/crmSdkContract.ts`) pins **10 generated services / 10 data
+  sources**, fail-closed: `services=5/10` or `datasources=5/10` stays **BLOCKED**; hydration
+  needs 10/10 services + 10/10 data sources + live 10/10 + the full measured schema.
+- The `.power` data-source manifest is operator-local (gitignored); the generated services are
+  pac output from live metadata. This commit fixes the path + contract + verifier — the
+  operator regenerates to actually produce the 10 services/registrations.
+
+**Verifier stabilization (`verify-full-crm-schema.ps1`):** metadata probes are now tri-state —
+`present` (200) / `missing` (404) / `unknown` (any other error = transient/throttle). A
+transient error is NEVER counted as missing (that caused 10/10 to regress to a false 3/10). If
+ANY check is inconclusive, STATUS is **UNKNOWN** ("re-run", not a missing-schema FAIL), and no
+`measured` block is emitted. Token-backed metadata (EntityDefinitions/Attributes) is treated
+distinctly from PAC fetch reachability (`verify-pac-table-access.ps1`).
+
+**Operator retry:**
+```powershell
+powershell -File scripts/dataverse/regenerate-powerapps-sdk.ps1 -Apply   # now registers all 10 CRM tables
+npm run build
+powershell -File scripts/dataverse/verify-full-crm-schema.ps1            # PASS at 10/10/147/147/28/28 (UNKNOWN if metadata unstable - re-run)
+powershell -File scripts/dataverse/export-runtime-schema-evidence.ps1    # CRM services=10/10 datasources=10/10
+```
+Then transcribe the fresh measured output into `CURRENT_CRM_VERIFICATION_EVIDENCE`. No gate is
+flipped and `pac code push` was **not performed**.
+
+## CRM schema delta
+
+The full contract is generated from `src/crm/crmDataverseSchemaPlan.ts` into
+`scripts/dataverse/schema/crm-full.schema.json` (**10 tables / 147 columns / 28
+relationships / 10 option sets**). Against the Phase 252 live spine, the buildout adds:
+
+- **Tables added (5):** `cr664_crmcontactpoint`, `cr664_crmcommunicationpreference`,
+  `cr664_crmcontactauthorization`, `cr664_crmvendorprofile`, `cr664_crmauditentry`
+  (the existing 5: organization, person, relationship, roleassignment, timelineevent).
+- **Columns added (107):** 147 plan columns minus the 40 spine columns already live.
+  Types: String, Memo, Boolean, DateTime, Integer, and **11 choice (Picklist) columns**
+  (created as local option sets with a placeholder option — enrich values later).
+- **Relationships added (28):** all CRM lookups in the plan. 18 target CRM tables
+  (always created); 10 target external tables (`cr664_portfolioboardedloan`,
+  `cr664_loandeal`, `cr664_team`, `cr664_platformuser`) — created when the target exists
+  live, otherwise **skipped non-blocking** (mirrors `CRM_OPTIONAL_EXTERNAL_TARGETS`).
+
+## The buildout script (idempotent, resume-safe, additive)
+
+`scripts/dataverse/create-full-crm-runtime-schema.ps1`:
+
+- **DRY-RUN by default**; `-Apply` mutates (gated by an `APPLY` confirmation, `-Force` to
+  skip the prompt). `-Apply` requires a Dataverse-authorized token (WhoAmI 200) or it
+  aborts with no mutation.
+- **CREATE-MISSING-ONLY:** every table / column / relationship is checked for existence
+  first and skipped if present. **No delete / rename / data-mutation path. Additive only.**
+- **Idempotent + resume-safe:** safe to rerun after partial success.
+- Reuses the repo's `_common.ps1` helpers; handles all CRM column types + lookups; skips
+  optional external relationships whose target table is absent.
+
+## Operator commands to apply the full CRM schema
+
+From `code-app/` with a Dataverse-authorized session:
+
+```powershell
+# 1. Authenticate (token path the verifier/export already use)
+Connect-AzAccount -Tenant e5d2be43-2e2c-4968-b5f3-c73dd825ee80
+#   (or set $env:DATAVERSE_ACCESS_TOKEN to an app-user-authorized token)
+
+# 2. Preview the plan (read-only)
+powershell -File scripts/dataverse/create-full-crm-runtime-schema.ps1
+
+# 3. Apply (create-missing-only; confirmed)
+powershell -File scripts/dataverse/create-full-crm-runtime-schema.ps1 -Apply
+
+# 4. Publish customizations (so relationships/metadata settle)
+powershell -File scripts/dataverse/publish-customizations.ps1 -Apply
+```
+
+## Operator commands to regenerate SDK / data sources
+
+```powershell
+# Register the new tables as data sources + regenerate the typed SDK (10 Cr664_crm*Service.ts)
+powershell -File scripts/dataverse/regenerate-powerapps-sdk.ps1 -Apply
+npm run build
+```
+
+## Verification commands
+
+```powershell
+# Full CRM contract verifier: PASS only at 10/10 tables, 147/147 columns, 28/28 relationships
+powershell -File scripts/dataverse/verify-full-crm-schema.ps1
+
+# Token-backed runtime evidence export (CRM now measures the full schema)
+powershell -File scripts/dataverse/export-runtime-schema-evidence.ps1
+
+# PAC table reachability (unchanged) + full schema verifier (unchanged otherwise)
+powershell -File scripts/dataverse/verify-pac-table-access.ps1
+```
+
+Then transcribe the fresh real measured output (`scripts/dataverse/evidence/runtime-schema-evidence.crm.json`)
+into `CURRENT_CRM_VERIFICATION_EVIDENCE` in `src/admin/runtimeVerifiedSchemaBridge.ts`.
+
+## Expected post-apply CRM hydration result
+
+After the operator applies the schema, regenerates the SDK, and exports fresh evidence
+showing CRM `services=10/10 datasources=10/10 live=10/10 measured={tables:10, columns:147,
+relationships:28}`, `hydrateVerifiedCrmSchemaState` returns **hydrated: true** (proven by
+the synthetic full-measurement test). The runtime gate still additionally requires the
+live flag + authorized operator + injected transport (all fail-closed) — this phase flips
+none of them.
+
+## Safety
+
+No feature flag flipped, no CRM/portfolio/borrower/checklist gate enabled, no `pac code
+push`, no weakening of `runtimeVerifiedSchemaBridge`, and the CRM contract was NOT
+reconciled down to the spine. Portfolio full buildout is a later phase (only CRM
+relationships to already-existing portfolio tables are referenced here).
+
+## Remaining blockers (after CRM buildout)
+
+1. Operator applies the CRM schema + regenerates SDK + exports fresh evidence → CRM
+   hydrates. Until then CRM runtime verified state stays fail-closed.
+2. Even hydrated, the CRM live-persistence gate (`CRM_LIVE_PERSISTENCE_ENABLED`) stays off
+   until a separate governed cutover + smoke.
+3. Portfolio full schema buildout (219 columns / 12 required relationships) — later phase.
+4. Stage advancement controlled smoke; borrower-send LIVE deploy + certification.

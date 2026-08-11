@@ -1,0 +1,424 @@
+// @vitest-environment jsdom
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, within } from '@testing-library/react';
+import type { AdminData } from './AdminDataProvider';
+import {
+  DELIBERATELY_BLOCKED,
+  GOVERNED_WRITES,
+  LOCAL_ONLY_FLOWS,
+  NOT_WIRED,
+} from '../shared/governance/platformInventory';
+
+// The real AdminDataProvider transitively imports @microsoft/power-apps
+// service files Vitest cannot resolve. Stub the hook the same way
+// DealStageProgressionCard.test.tsx stubs useDealData.
+vi.mock('./AdminDataProvider', () => ({
+  useAdminData: vi.fn(),
+}));
+
+// The gate now reads the live stage-governance loader so a seeded environment is
+// reflected here (matching the Stage Governance Diagnostics card). Control it.
+const loadStageMock = vi.fn();
+vi.mock('./stageGovernanceDiagnosticsLoader', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./stageGovernanceDiagnosticsLoader')>();
+  return { ...actual, loadStageGovernanceDiagnostics: () => loadStageMock() };
+});
+
+import { useAdminData } from './AdminDataProvider';
+import { ReleaseReadinessGate } from './ReleaseReadinessGate';
+import {
+  loadStageGovernanceDiagnosticsWith,
+  type StageGovernanceReaders,
+} from './stageGovernanceDiagnosticsLoader';
+import { CANONICAL_STAGES, type StageReferenceRow } from '../workflow/stageOrderingContract';
+import { CANONICAL_STATUS_CODES, type StatusReferenceRow } from '../workflow/statusReferenceContract';
+
+const useAdminDataMock = vi.mocked(useAdminData);
+
+const READY_STAGES: StageReferenceRow[] = CANONICAL_STAGES.map((s) => ({
+  cr664_code: s.code, cr664_name: s.name, cr664_sequence: s.sequence, cr664_activeflag: true,
+}));
+const READY_STATUSES: StatusReferenceRow[] = CANONICAL_STATUS_CODES.map((c) => ({
+  cr664_code: c, cr664_name: c, cr664_activeflag: true,
+}));
+const readyReaders: StageGovernanceReaders = {
+  readStageRows: async () => READY_STAGES,
+  readStatusRows: async () => READY_STATUSES,
+};
+const failReaders: StageGovernanceReaders = {
+  readStageRows: async () => { throw new Error('cr664_sequence not provisioned'); },
+  readStatusRows: async () => { throw new Error('status data source not registered'); },
+};
+async function readyDiag() { return loadStageGovernanceDiagnosticsWith(readyReaders); }
+async function blockedDiag() { return loadStageGovernanceDiagnosticsWith(failReaders); }
+
+beforeEach(async () => {
+  loadStageMock.mockReset();
+  // Default: the live loader reports the honest not-seeded blocked state — the pre-seed
+  // environment the existing assertions were written against.
+  loadStageMock.mockResolvedValue(await blockedDiag());
+});
+
+function makeAdminData(overrides: Partial<AdminData> = {}): AdminData {
+  return {
+    dataQuality: { kind: 'ready', data: [] },
+    auditAnomalies: { kind: 'ready', data: [] },
+    alerts: { kind: 'ready', data: [] },
+    refreshStatus: { kind: 'ready', data: null },
+    configuration: {
+      kind: 'ready',
+      data: { systemSettings: [], activeKpiThresholds: [] },
+    },
+    platformOperations: { kind: 'ready', data: { capabilities: [] } },
+    refresh: () => undefined,
+    ...overrides,
+  };
+}
+
+describe('ReleaseReadinessGate — Phase 30 admin dashboard', () => {
+  it('renders the overall badge and the eight category rows', () => {
+    useAdminDataMock.mockReturnValue(makeAdminData());
+    render(<ReleaseReadinessGate />);
+    // Overall badge — at minimum we see one of the four phrases.
+    const overallTexts = screen.getAllByText(
+      /Not ready to promote|Review required|Cannot fully verify|Ready to promote/i,
+    );
+    expect(overallTexts.length).toBeGreaterThan(0);
+    // Eight category labels exist inside the readiness list.
+    // Phase 68 added a Capability Inventory section that also
+    // surfaces some of the same labels; scope queries to the
+    // readiness list so the assertion remains unambiguous.
+    const readinessList = screen.getByRole('list', {
+      name: /release readiness categories/i,
+    });
+    expect(
+      within(readinessList).getByText(/Workspace isolation/i),
+    ).toBeInTheDocument();
+    expect(
+      within(readinessList).getByText(/Permission-before-query/i),
+    ).toBeInTheDocument();
+    expect(
+      within(readinessList).getByText(/Executive snapshot safety/i),
+    ).toBeInTheDocument();
+    expect(
+      within(readinessList).getByText(/Admin diagnostics health/i),
+    ).toBeInTheDocument();
+    expect(
+      within(readinessList).getByText(/Governed write coverage/i),
+    ).toBeInTheDocument();
+    expect(
+      within(readinessList).getByText(/Stage progression readiness/i),
+    ).toBeInTheDocument();
+    expect(
+      within(readinessList).getByText(/Data quality \/ alert backlog/i),
+    ).toBeInTheDocument();
+    expect(
+      within(readinessList).getByText(/Test coverage \/ build verification/i),
+    ).toBeInTheDocument();
+  });
+
+  it('reports the Stage Progression row as Blocked when the live loader reports a not-seeded environment', async () => {
+    useAdminDataMock.mockReturnValue(makeAdminData());
+    render(<ReleaseReadinessGate />);
+    // Default mock: the live stage-governance read resolves to the honest not-seeded
+    // blocked state. Await the load, then the stage row carries a Blocked badge.
+    const stageRow = (await screen.findByText(/Stage progression readiness/i)).closest('li')!;
+    expect(stageRow.textContent).toMatch(/Blocked/i);
+  });
+
+  it('reports Test coverage / build verification as Not Wired (per the brief guardrail)', () => {
+    useAdminDataMock.mockReturnValue(makeAdminData());
+    render(<ReleaseReadinessGate />);
+    // Scope to the readiness list since Phase 68's Capability
+    // Inventory also surfaces a NOT_WIRED entry with a similar
+    // label ("Test coverage / build verification (in-app)").
+    const readinessList = screen.getByRole('list', {
+      name: /release readiness categories/i,
+    });
+    const row = within(readinessList)
+      .getByText(/Test coverage \/ build verification/i)
+      .closest('li')!;
+    expect(row.textContent).toMatch(/Not Wired/i);
+    expect(row.textContent).toMatch(/no in-process signal/i);
+  });
+
+  it('rolls overall up to "Not ready to promote" because the stage row is Blocked', async () => {
+    useAdminDataMock.mockReturnValue(makeAdminData());
+    render(<ReleaseReadinessGate />);
+    expect(
+      await screen.findByText(/Not ready to promote — blockers open/i),
+    ).toBeInTheDocument();
+  });
+
+  it('flips the Stage Progression row off Blocked once the live loader reports a seeded environment', async () => {
+    useAdminDataMock.mockReturnValue(makeAdminData());
+    loadStageMock.mockResolvedValue(await readyDiag());
+    render(<ReleaseReadinessGate />);
+    // Once the seeded stage governance resolves, the hard block clears: overall is no
+    // longer "Not ready to promote" and the stage row is no longer Blocked. This is the
+    // fix — a seeded environment is now reflected in the Release Readiness Gate.
+    await screen.findByText(/Cannot fully verify|Ready to promote/i);
+    const stageRow = screen.getByText(/Stage progression readiness/i).closest('li')!;
+    expect(stageRow.textContent).not.toMatch(/Blocked/i);
+    expect(screen.queryByText(/Not ready to promote — blockers open/i)).toBeNull();
+  });
+
+  it('renders NO action / promote / deploy / approve button — read-only gate', () => {
+    useAdminDataMock.mockReturnValue(makeAdminData());
+    render(<ReleaseReadinessGate />);
+    // The brief: "No promotion or remediation action is performed here."
+    expect(screen.queryAllByRole('button')).toEqual([]);
+  });
+
+  it('footer reiterates read-only intent and the Not-Wired honesty rule', () => {
+    useAdminDataMock.mockReturnValue(makeAdminData());
+    render(<ReleaseReadinessGate />);
+    expect(
+      screen.getByText(/Read-only governance gate/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(/not observable in-app is reported as Not Wired/i),
+    ).toBeInTheDocument();
+  });
+
+  it('rolls up to Blocked when a critical alert is observed in the admin data', () => {
+    useAdminDataMock.mockReturnValue(
+      makeAdminData({
+        alerts: {
+          kind: 'ready',
+          data: [
+            {
+              id: 'a1',
+              alertName: 'SLA breach',
+              alertStatus: 'Open',
+              severity: 'Critical',
+              severityKey: 'Critical',
+              priority: undefined,
+              alertCategory: undefined,
+              alertType: undefined,
+              assignedToName: undefined,
+              assignedToId: undefined,
+              createdDate: undefined,
+              dueDate: undefined,
+              slaBreachDate: undefined,
+              slaDueDate: undefined,
+              escalationLevel: undefined,
+            },
+          ],
+        },
+      }),
+    );
+    render(<ReleaseReadinessGate />);
+    const row = screen
+      .getByText(/Data quality \/ alert backlog/i)
+      .closest('li')!;
+    expect(row.textContent).toMatch(/Blocked/i);
+    expect(row.textContent).toMatch(/1 critical alert/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 68 — Capability inventory section assertions
+//
+// The Capability Inventory surfaces the platformInventory canonical data
+// so stakeholders can distinguish governed writes from local-only flows,
+// not-wired-by-blocker-kind, and deliberately-blocked surfaces. The
+// existing readiness rollup is unchanged — these tests pin the new
+// section's content and conservative-copy discipline.
+// ---------------------------------------------------------------------------
+
+function getInventorySection(): HTMLElement {
+  return screen.getByRole('region', { name: /capability inventory/i });
+}
+
+describe('ReleaseReadinessGate — Phase 68 capability inventory', () => {
+  it('renders the Capability inventory section with its lead sentence', () => {
+    useAdminDataMock.mockReturnValue(makeAdminData());
+    render(<ReleaseReadinessGate />);
+    const inv = getInventorySection();
+    expect(inv).toBeInTheDocument();
+    expect(
+      within(inv).getByText(/Derived from the canonical platformInventory/i),
+    ).toBeInTheDocument();
+  });
+
+  it('reports the current count of governed writes (count is 23 — 14 shipped through Phase 237, plus 6 durable-record writes Workstream M registered, plus the data-quality-flag-create write Workstream O added, plus credit-memo-finalize and assign-servicing-owner from the 146 Factory arc)', () => {
+    useAdminDataMock.mockReturnValue(makeAdminData());
+    render(<ReleaseReadinessGate />);
+    const inv = getInventorySection();
+    expect(GOVERNED_WRITES.length).toBe(28);
+    expect(
+      within(inv).getByText(`Governed writes (${GOVERNED_WRITES.length})`),
+    ).toBeInTheDocument();
+  });
+
+  it('lists every LOCAL_ONLY flow with the "Local-only · no Dataverse write" pin', () => {
+    useAdminDataMock.mockReturnValue(makeAdminData());
+    render(<ReleaseReadinessGate />);
+    const inv = getInventorySection();
+    // Each LOCAL_ONLY_FLOWS label appears.
+    for (const flow of LOCAL_ONLY_FLOWS) {
+      expect(within(inv).getByText(flow.label)).toBeInTheDocument();
+    }
+    // The borrower-safe status packet (Phase 66 / 67) is explicitly
+    // present.
+    expect(
+      within(inv).getByText('Borrower-safe status packet'),
+    ).toBeInTheDocument();
+    // The Phase 67 in-modal handoff is mentioned by the flow's
+    // note. Phase 101 added a second `mailto`-bearing inventory
+    // entry (`outlook-summary-handoff`), so we use getAllByText
+    // and assert that at least one match exists rather than
+    // pinning a single occurrence.
+    expect(
+      within(inv).getAllByText(/mailto/i).length,
+    ).toBeGreaterThanOrEqual(1);
+    // The "Local-only · no Dataverse write" pin appears at least once
+    // per flow.
+    const pins = within(inv).getAllByText(
+      /Local-only · no Dataverse write/i,
+    );
+    expect(pins.length).toBe(LOCAL_ONLY_FLOWS.length);
+  });
+
+  it('renders no upstream-blocker groups when current NOT_WIRED is empty', () => {
+    useAdminDataMock.mockReturnValue(makeAdminData());
+    render(<ReleaseReadinessGate />);
+    const inv = getInventorySection();
+    expect(NOT_WIRED).toEqual([]);
+    expect(
+      within(inv).queryByText(/Connector not registered \(upstream blocked\)/i),
+    ).toBeNull();
+    expect(
+      within(inv).queryByText(/Schema column missing \(upstream blocked\)/i),
+    ).toBeNull();
+    expect(
+      within(inv).queryByText(/Compound upstream blocker/i),
+    ).toBeNull();
+    expect(
+      within(inv).queryByText(/Governance non-goal/i),
+    ).toBeNull();
+    expect(
+      within(inv).queryByText(/In-app observability not wired/i),
+    ).toBeNull();
+  });
+
+  it('surfaces external identity as a deliberate blocker while the private portal is wired', () => {
+    useAdminDataMock.mockReturnValue(makeAdminData());
+    render(<ReleaseReadinessGate />);
+    const inv = getInventorySection();
+    const entry = DELIBERATELY_BLOCKED.find((e) => e.id === 'borrower-external-identity');
+    expect(entry).toBeDefined();
+    expect(within(inv).getByText(entry!.label)).toBeInTheDocument();
+  });
+
+  it('does not surface document-upload after live File-column verification', () => {
+    useAdminDataMock.mockReturnValue(makeAdminData());
+    render(<ReleaseReadinessGate />);
+    const inv = getInventorySection();
+    const entry = NOT_WIRED.find((e) => e.id === 'document-upload');
+    expect(entry).toBeUndefined();
+    expect(within(inv).queryByText('Deal document binary upload')).toBeNull();
+  });
+
+  it('no longer surfaces outlook-connector-live-send — Phase 104 swap removed it from NOT_WIRED', () => {
+    // The Phase 61 LIVE stub was a connector-blocker until the Office
+    // 365 Outlook connector was registered for this Code App. With
+    // Phase 104 the document-request email LIVE path is wired through
+    // Office365OutlookService.SendEmailV2 and the NOT_WIRED entry was
+    // removed. Phase 105 retired NOT_WIRED.email-delivery as well
+    // (the second governed-write LIVE send for borrower-update).
+    const entry = NOT_WIRED.find(
+      (e) => e.id === 'outlook-connector-live-send',
+    );
+    expect(entry).toBeUndefined();
+  });
+
+  // Phase 106: prove the rendered Capability Inventory contains no
+  // email-delivery-shaped row. The data-layer pin lives in
+  // platformInventory.test.ts and emailLiveReleaseReadiness.test.ts;
+  // this is the DOM-level confirmation that the gate's rendered
+  // output stays honest with the inventory.
+  it('Phase 106: ReleaseReadinessGate no longer renders any "Borrower update email delivery" / "email-delivery" row', () => {
+    useAdminDataMock.mockReturnValue(makeAdminData());
+    render(<ReleaseReadinessGate />);
+    const inv = getInventorySection();
+    // The Phase 23 NOT_WIRED row label was "Borrower update email
+    // delivery (Outlook/Graph)". After Phase 105 it must not appear
+    // anywhere in the rendered inventory.
+    expect(
+      within(inv).queryByText(/Borrower update email delivery/i),
+    ).toBeNull();
+    // And no row labeled "email-delivery" (the internal id) either —
+    // verbatim string match, not a regex (so we don't accidentally
+    // match prose like "LIVE email delivery").
+    expect(within(inv).queryByText('email-delivery')).toBeNull();
+  });
+
+  it('lists every DELIBERATELY_BLOCKED entry with reason text', () => {
+    useAdminDataMock.mockReturnValue(makeAdminData());
+    render(<ReleaseReadinessGate />);
+    const inv = getInventorySection();
+    for (const entry of DELIBERATELY_BLOCKED) {
+      expect(within(inv).getByText(entry.label)).toBeInTheDocument();
+    }
+    // Each entry carries the "Deliberately blocked" pin. The group
+    // heading also contains the phrase, so the regex matches at
+    // least (DELIBERATELY_BLOCKED.length + 1) times — header + N pins.
+    const pins = within(inv).getAllByText(/Deliberately blocked/i);
+    expect(pins.length).toBeGreaterThanOrEqual(DELIBERATELY_BLOCKED.length);
+  });
+
+  it('no LOCAL_ONLY flow ID appears in GOVERNED_WRITES (Phase 68 classification invariant)', () => {
+    const writeIds = new Set(GOVERNED_WRITES.map((w) => w.id));
+    for (const flow of LOCAL_ONLY_FLOWS) {
+      expect(writeIds.has(flow.id)).toBe(false);
+    }
+  });
+
+  it('no NOT_WIRED ID appears in GOVERNED_WRITES (Phase 68 classification invariant)', () => {
+    const writeIds = new Set(GOVERNED_WRITES.map((w) => w.id));
+    for (const entry of NOT_WIRED) {
+      expect(writeIds.has(entry.id)).toBe(false);
+    }
+  });
+});
+
+describe('ReleaseReadinessGate — Phase 68 conservative-copy ban list', () => {
+  it('renders NO "production-ready" / "production ready" claim anywhere on screen', () => {
+    useAdminDataMock.mockReturnValue(makeAdminData());
+    render(<ReleaseReadinessGate />);
+    const everyText = document.body.textContent ?? '';
+    expect(everyText).not.toMatch(/\bproduction[ -]?ready\b/i);
+  });
+
+  it('renders NO "live email enabled" / "email sent" / "email delivered" claim', () => {
+    useAdminDataMock.mockReturnValue(makeAdminData());
+    render(<ReleaseReadinessGate />);
+    const everyText = document.body.textContent ?? '';
+    expect(everyText).not.toMatch(/\blive email enabled\b/i);
+    expect(everyText).not.toMatch(/\bemail (sent|delivered)\b/i);
+    expect(everyText).not.toMatch(/\bsent\s+(an?\s+)?email\b/i);
+  });
+
+  it('renders NO "portal available" / "upload available" claim', () => {
+    useAdminDataMock.mockReturnValue(makeAdminData());
+    render(<ReleaseReadinessGate />);
+    const everyText = document.body.textContent ?? '';
+    expect(everyText).not.toMatch(/\bportal available\b/i);
+    expect(everyText).not.toMatch(/\bupload available\b/i);
+  });
+
+  it('uses the current canonical labels verbatim ("handoff", "local-only", "not wired", "deliberately blocked")', () => {
+    useAdminDataMock.mockReturnValue(makeAdminData());
+    render(<ReleaseReadinessGate />);
+    const everyText = document.body.textContent ?? '';
+    // NOT_WIRED is currently empty, so historical upstream/schema
+    // subgroup labels correctly do not render.
+    expect(everyText).toMatch(/handoff/i);
+    expect(everyText).toMatch(/local-only/i);
+    expect(everyText).toMatch(/not wired/i);
+    expect(everyText).toMatch(/deliberately blocked/i);
+    expect(everyText).not.toMatch(/schema column missing/i);
+  });
+});

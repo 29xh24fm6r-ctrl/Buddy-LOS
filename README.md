@@ -30,6 +30,7 @@ npm run check
 - [Target architecture](docs/architecture/TARGET-SAAS-ARCHITECTURE.md)
 - [Product build plan](docs/product/PRODUCT-BUILD-PLAN.md)
 - [Controlled build arc](docs/product/CONTROLLED-BUILD-ARC.md)
+- [Full-system port contract](docs/product/FULL-SYSTEM-PORT-CONTRACT.md)
 - [Security baseline](docs/security/SECURITY-BASELINE.md)
 
 ## Product boundary

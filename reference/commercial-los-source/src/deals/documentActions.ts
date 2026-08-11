@@ -1,0 +1,753 @@
+﻿import { Cr664_documentchecklistsService } from '../generated/services/Cr664_documentchecklistsService';
+import { Cr664_auditeventsService } from '../generated/services/Cr664_auditeventsService';
+import { Cr664_dealtimelineeventsService } from '../generated/services/Cr664_dealtimelineeventsService';
+import { newCorrelationId } from '../shared/governance/correlationId';
+import { AUDIT_OUTCOME_SUCCEEDED, AUDIT_OUTCOME_FAILED } from '../shared/governance/auditEnums';
+import { TIMELINE_VISIBILITY_BANKER_AND_MANAGER } from '../shared/governance/timelineEnums';
+import { assertChangedByCoreUserBind } from '../shared/governance/auditActorBind';
+import {
+  createActorChangedByResolver,
+  type ActorChangedByResolution,
+  type ResolveActorChangedBy,
+} from './newDealAuditActorResolver';
+import { timelineEventByBind } from './timelineActorBind';
+import { extractCoreUserId, isSameCoreUser, SEGREGATION_OF_DUTIES_BLOCK_REASON } from './documentReviewSegregationOfDuties';
+import { mapBusinessSafeError } from '../shared/errors/businessSafeErrorMapping';
+import { REQUIREMENT_STATUS_CODES } from './documentRequirementStatusCodes';
+
+/**
+ * Phase 22: governed write for requesting an outstanding document on
+ * a deal. Same three-write coordination as phase 21 (completeTask):
+ *
+ *   1. Update cr664_DocumentChecklist.cr664_requestdate = now ISO.
+ *      The schema has NO request-by / request-note columns; the note
+ *      and actor live only in the audit + timeline events.
+ *   2. Emit cr664_AuditEvent (Lifecycle / StatusChange) recording the
+ *      request, with the prior request date in the before state.
+ *   3. Emit cr664_DealTimelineEvent with eventtype=DocumentRequested
+ *      (788190009 â€” exact enum match) so the deal's activity ledger
+ *      records the request.
+ *
+ * Outcome shape mirrors completeTask exactly: success | doc-failed |
+ * governance-partial (audit and/or timeline failed; doc IS updated) |
+ * unknown.
+ *
+ * Per the phase-22 guardrail: this is an IN-APP governed request only.
+ * No borrower email / Outlook integration. External communication
+ * (delivery failure, borrower-safe content rules) is a later phase.
+ */
+
+export type RequestDocumentOutcome =
+  | { kind: 'success' }
+  | { kind: 'doc-failed'; docError: string }
+  | {
+      kind: 'governance-partial';
+      auditError: string | undefined;
+      timelineError: string | undefined;
+    }
+  | { kind: 'unknown'; message: string };
+
+export interface RequestDocumentInput {
+  documentId: string;
+  documentName: string;
+  dealId: string;
+  /** Prior cr664_requestdate, if any. Captured at click time so the
+   *  audit event records 'Not yet requested' vs 'Re-requested (after
+   *  <date>)' precisely. */
+  priorRequestDate: string | undefined;
+  systemUserId: string;
+  /** Acting banker's email â€” resolved fail-closed to the audit's REQUIRED
+   *  cr664_ChangedBy (a cr664_user lookup) via the platform-user bridge.
+   *  A systemuser id is NEVER bound into cr664_ChangedBy (Phase 187H / G-5). */
+  actorEmail: string;
+  requestNote: string;
+}
+
+// Enum constants â€” locked to the verified schema, kept inline so the
+// action doesn't depend on the generated runtime enum maps.
+const AUDIT_EVENT_CATEGORY_LIFECYCLE = 788190002;
+const AUDIT_EVENT_TYPE_STATUS_CHANGE = 788190001;
+const AUDIT_ENTITY_TYPE_LOAN_DEAL = 788190000;
+
+const TIMELINE_EVENT_TYPE_DOCUMENT_REQUESTED = 788190009;
+const TIMELINE_EVENT_TYPE_DOCUMENT_UPLOADED = 788190010;
+const TIMELINE_EVENT_TYPE_NOTE_LOGGED = 788190002;
+const TIMELINE_SUBTYPE_DOCUMENT_REVIEWED = 'documentchecklist:reviewed';
+
+// Canonical cr664_requirementstatus option-set values — the SINGLE source of truth is
+// documentRequirementActions.ts REQUIREMENT_STATUS_CODES. Stamped here so the legacy Documents-panel
+// request/receive/review path persists the SAME canonical status the Document Requirements workspace
+// reads. Previously these actions wrote only the fact fields (requestdate / receiveddate / reviewer)
+// and left cr664_requirementstatus unset, so the two panels could disagree (Documents showed
+// "Received/Reviewed" while Requirements inferred a different lifecycle state). (Defect 8.)
+const REQUIREMENT_STATUS_REQUESTED = REQUIREMENT_STATUS_CODES.requested;
+function beforeStateForRequest(prior: string | undefined): string {
+  if (!prior) return 'Not yet requested';
+  return `Previously requested (${prior})`;
+}
+
+async function emitAuditEvent(opts: {
+  input: RequestDocumentInput;
+  actor: ActorChangedByResolution;
+  correlationId: string;
+  outcome: number;
+  failureReason: string | undefined;
+  nowIso: string;
+}): Promise<{ id: string | undefined; error: string | undefined }> {
+  // Fail closed: never POST an audit row without a resolved cr664_user actor.
+  // No systemuser id is ever bound into cr664_ChangedBy (it targets cr664_user).
+  if (!opts.actor.ok || !opts.actor.changedByBind) {
+    return { id: undefined, error: opts.actor.reason ?? 'audit actor identity unresolved' };
+  }
+  assertChangedByCoreUserBind(opts.actor.changedByBind);
+  const payload = {
+    cr664_auditeventname: 'DocumentChecklist Requested',
+    cr664_eventcategory: AUDIT_EVENT_CATEGORY_LIFECYCLE,
+    cr664_eventtype: AUDIT_EVENT_TYPE_STATUS_CHANGE,
+    cr664_entitytype: AUDIT_ENTITY_TYPE_LOAN_DEAL,
+    cr664_entityid: opts.input.documentId,
+    cr664_relatedentitytype: 'cr664_documentchecklist',
+    cr664_relatedentityid: opts.input.documentId,
+    'cr664_LoanDeal@odata.bind': `/cr664_loandeals(${opts.input.dealId})`,
+    cr664_outcomestatus: opts.outcome,
+    cr664_failurereason: opts.failureReason,
+    cr664_changeddate: opts.nowIso,
+    // The ONLY actor/user bind. REQUIRED, targets cr664_user; value resolved
+    // fail-closed from the actor email via the platform-user bridge. No
+    // cr664_ActorUser, no ownerid/owneridtype/statecode (server-defaulted).
+    'cr664_ChangedBy@odata.bind': opts.actor.changedByBind,
+    cr664_fieldname: 'cr664_requestdate',
+    cr664_oldvalue: opts.input.priorRequestDate ?? '',
+    cr664_newvalue: opts.nowIso,
+    cr664_beforestate: beforeStateForRequest(opts.input.priorRequestDate),
+    cr664_afterstate: 'Requested',
+    cr664_notes: opts.input.requestNote,
+    cr664_sourcescreensourceprocess: 'DealWorkspace/DealDocuments/request',
+    cr664_correlationid: opts.correlationId,
+  };
+  try {
+    const result = await Cr664_auditeventsService.create(
+      payload as unknown as Parameters<typeof Cr664_auditeventsService.create>[0],
+    );
+    if (!result.success) {
+      return {
+        id: undefined,
+        error: result.error?.message ?? 'AuditEvent create returned non-success',
+      };
+    }
+    return { id: result.data?.cr664_auditeventid, error: undefined };
+  } catch (err: unknown) {
+    return { id: undefined, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+async function emitTimelineEvent(opts: {
+  input: RequestDocumentInput;
+  actor: ActorChangedByResolution;
+  correlationId: string;
+  nowIso: string;
+}): Promise<{ id: string | undefined; error: string | undefined }> {
+  const payload = {
+    cr664_title: opts.input.documentName,
+    cr664_summary: opts.input.requestNote,
+    cr664_eventat: opts.nowIso,
+    cr664_eventtype: TIMELINE_EVENT_TYPE_DOCUMENT_REQUESTED,
+    cr664_visibilityscope: TIMELINE_VISIBILITY_BANKER_AND_MANAGER,
+    cr664_issystemgenerated: false,
+    cr664_relatedentitytype: 'cr664_documentchecklist',
+    cr664_relatedentityid: opts.input.documentId,
+    'cr664_Deal@odata.bind': `/cr664_loandeals(${opts.input.dealId})`,
+    // cr664_EventBy targets cr664_user (not systemuser) â€” bind the resolved
+    // cr664_user, omit when unresolved (fail-closed). Owner/state server-defaulted.
+    ...timelineEventByBind(opts.actor),
+    cr664_eventsubtype: `correlation:${opts.correlationId}`,
+  };
+  try {
+    const result = await Cr664_dealtimelineeventsService.create(
+      payload as unknown as Parameters<
+        typeof Cr664_dealtimelineeventsService.create
+      >[0],
+    );
+    if (!result.success) {
+      return {
+        id: undefined,
+        error: result.error?.message ?? 'DealTimelineEvent create returned non-success',
+      };
+    }
+    return { id: result.data?.cr664_dealtimelineeventid, error: undefined };
+  } catch (err: unknown) {
+    return { id: undefined, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+export async function requestDocument(
+  input: RequestDocumentInput,
+  resolveActorChangedBy: ResolveActorChangedBy = createActorChangedByResolver(),
+): Promise<RequestDocumentOutcome> {
+  const note = input.requestNote.trim();
+  if (note.length === 0) {
+    return { kind: 'unknown', message: 'Request note must not be empty.' };
+  }
+
+  const correlationId = newCorrelationId('dr');
+  const nowIso = new Date().toISOString();
+  // Resolve the audit actor's cr664_user bind once, fail-closed.
+  const actor = await resolveActorChangedBy(input.actorEmail);
+
+  // Step 1: stamp the document's request date.
+  try {
+    const update = await Cr664_documentchecklistsService.update(input.documentId, {
+      cr664_requestdate: nowIso,
+      cr664_requirementstatus: REQUIREMENT_STATUS_REQUESTED,
+    } as unknown as Parameters<typeof Cr664_documentchecklistsService.update>[1]);
+    if (!update.success) {
+      void emitAuditEvent({
+        input,
+        actor,
+        correlationId,
+        outcome: AUDIT_OUTCOME_FAILED,
+        failureReason: update.error?.message ?? 'Unknown document update error',
+        nowIso,
+      });
+      return {
+        kind: 'doc-failed',
+        // Final LOS Completion arc (Workstream P) — never render a raw transport error verbatim.
+        docError: mapBusinessSafeError(update.error?.message ?? 'Document update failed', correlationId).safeMessage,
+      };
+    }
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    void emitAuditEvent({
+      input,
+      actor,
+      correlationId,
+      outcome: AUDIT_OUTCOME_FAILED,
+      failureReason: message,
+      nowIso,
+    });
+    return { kind: 'doc-failed', docError: mapBusinessSafeError(message, correlationId).safeMessage };
+  }
+
+  // Step 2 + 3: audit + timeline in parallel. Either failing flips
+  // the outcome to governance-partial.
+  const [audit, timeline] = await Promise.all([
+    emitAuditEvent({
+      input,
+      actor,
+      correlationId,
+      outcome: AUDIT_OUTCOME_SUCCEEDED,
+      failureReason: undefined,
+      nowIso,
+    }),
+    emitTimelineEvent({ input, actor, correlationId, nowIso }),
+  ]);
+
+  if (audit.error || timeline.error) {
+    return {
+      kind: 'governance-partial',
+      // Final LOS Completion arc (Workstream P) — never render a raw transport error verbatim.
+      auditError: audit.error ? mapBusinessSafeError(audit.error, correlationId).safeMessage : undefined,
+      timelineError: timeline.error ? mapBusinessSafeError(timeline.error, correlationId).safeMessage : undefined,
+    };
+  }
+  return { kind: 'success' };
+}
+
+// ---------------------------------------------------------------------------
+// Phase 51: governed write for marking an outstanding document received.
+//
+// What this is:
+//   - A metadata-only governed write that stamps cr664_receiveddate on
+//     an existing cr664_DocumentChecklist row. This is what flips the
+//     row from "outstanding" to "received" in the DealDocuments UI
+//     (see dealDocumentQueries.ts â†’ deriveStatus).
+//
+// What this is NOT (honestly):
+//   - It is not a binary file upload. The cr664_DocumentChecklist
+//     schema has NO File column today; there is nowhere to upload to.
+//     The @microsoft/power-apps SDK supports uploadFileToRecord, but
+//     the Dataverse table needs a File column registered first. Until
+//     that schema work lands, this phase wires the metadata side of
+//     the workflow only.
+//   - It does NOT set cr664_uploadstatus. That flag is reserved for
+//     a future phase that wires actual in-app binary upload. Setting
+//     it here would conflate "marked received" with "uploaded through
+//     this app" and break the existing "Source: Uploaded" surface
+//     semantics.
+//
+// Three-write coordination matches Phase 22 (requestDocument):
+//   1. Update cr664_DocumentChecklist.cr664_receiveddate = now ISO.
+//   2. Emit cr664_AuditEvent ('DocumentChecklist Received') with
+//      outcome=Succeeded.
+//   3. Emit cr664_DealTimelineEvent with eventtype=DocumentUploaded
+//      (788190010 â€” the closest existing schema enum value; the
+//      banker is recording that the document has arrived). The
+//      summary uses banker-safe "Document marked received" wording
+//      throughout â€” no claim of binary upload.
+//
+// Outcome shape mirrors requestDocument: success | receive-failed |
+// governance-partial | unknown.
+// ---------------------------------------------------------------------------
+
+export type MarkDocumentReceivedOutcome =
+  | { kind: 'success' }
+  | { kind: 'receive-failed'; docError: string }
+  | {
+      kind: 'governance-partial';
+      auditError: string | undefined;
+      timelineError: string | undefined;
+    }
+  | { kind: 'unknown'; message: string };
+
+export interface MarkDocumentReceivedInput {
+  documentId: string;
+  documentName: string;
+  dealId: string;
+  systemUserId: string;
+  /** Acting banker's email â€” resolved fail-closed to the audit's REQUIRED
+   *  cr664_ChangedBy (a cr664_user lookup) via the platform-user bridge.
+   *  A systemuser id is NEVER bound into cr664_ChangedBy (Phase 187H / G-5). */
+  actorEmail: string;
+  receiveNote: string;
+}
+
+async function emitAuditEventForReceive(opts: {
+  input: MarkDocumentReceivedInput;
+  actor: ActorChangedByResolution;
+  correlationId: string;
+  outcome: number;
+  failureReason: string | undefined;
+  nowIso: string;
+}): Promise<{ id: string | undefined; error: string | undefined }> {
+  // Fail closed: never POST an audit row without a resolved cr664_user actor.
+  // No systemuser id is ever bound into cr664_ChangedBy (it targets cr664_user).
+  if (!opts.actor.ok || !opts.actor.changedByBind) {
+    return { id: undefined, error: opts.actor.reason ?? 'audit actor identity unresolved' };
+  }
+  assertChangedByCoreUserBind(opts.actor.changedByBind);
+  const payload = {
+    cr664_auditeventname: 'DocumentChecklist Received',
+    cr664_eventcategory: AUDIT_EVENT_CATEGORY_LIFECYCLE,
+    cr664_eventtype: AUDIT_EVENT_TYPE_STATUS_CHANGE,
+    cr664_entitytype: AUDIT_ENTITY_TYPE_LOAN_DEAL,
+    cr664_entityid: opts.input.documentId,
+    cr664_relatedentitytype: 'cr664_documentchecklist',
+    cr664_relatedentityid: opts.input.documentId,
+    'cr664_LoanDeal@odata.bind': `/cr664_loandeals(${opts.input.dealId})`,
+    cr664_outcomestatus: opts.outcome,
+    cr664_failurereason: opts.failureReason,
+    cr664_changeddate: opts.nowIso,
+    // The ONLY actor/user bind. REQUIRED, targets cr664_user; value resolved
+    // fail-closed from the actor email via the platform-user bridge. No
+    // cr664_ActorUser, no ownerid/owneridtype/statecode (server-defaulted).
+    'cr664_ChangedBy@odata.bind': opts.actor.changedByBind,
+    cr664_fieldname: 'cr664_receiveddate',
+    cr664_oldvalue: '',
+    cr664_newvalue: opts.nowIso,
+    cr664_beforestate: 'Outstanding',
+    cr664_afterstate: 'Received',
+    cr664_notes: opts.input.receiveNote,
+    cr664_sourcescreensourceprocess: 'DealWorkspace/DealDocuments/receive',
+    cr664_correlationid: opts.correlationId,
+  };
+  try {
+    const result = await Cr664_auditeventsService.create(
+      payload as unknown as Parameters<typeof Cr664_auditeventsService.create>[0],
+    );
+    if (!result.success) {
+      return {
+        id: undefined,
+        error: result.error?.message ?? 'AuditEvent create returned non-success',
+      };
+    }
+    return { id: result.data?.cr664_auditeventid, error: undefined };
+  } catch (err: unknown) {
+    return { id: undefined, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+async function emitTimelineEventForReceive(opts: {
+  input: MarkDocumentReceivedInput;
+  actor: ActorChangedByResolution;
+  correlationId: string;
+  nowIso: string;
+}): Promise<{ id: string | undefined; error: string | undefined }> {
+  const payload = {
+    cr664_title: opts.input.documentName,
+    cr664_summary: opts.input.receiveNote,
+    cr664_eventat: opts.nowIso,
+    cr664_eventtype: TIMELINE_EVENT_TYPE_DOCUMENT_UPLOADED,
+    cr664_visibilityscope: TIMELINE_VISIBILITY_BANKER_AND_MANAGER,
+    cr664_issystemgenerated: false,
+    cr664_relatedentitytype: 'cr664_documentchecklist',
+    cr664_relatedentityid: opts.input.documentId,
+    'cr664_Deal@odata.bind': `/cr664_loandeals(${opts.input.dealId})`,
+    // cr664_EventBy targets cr664_user (not systemuser) â€” bind the resolved
+    // cr664_user, omit when unresolved (fail-closed). Owner/state server-defaulted.
+    ...timelineEventByBind(opts.actor),
+    cr664_eventsubtype: `correlation:${opts.correlationId}`,
+  };
+  try {
+    const result = await Cr664_dealtimelineeventsService.create(
+      payload as unknown as Parameters<
+        typeof Cr664_dealtimelineeventsService.create
+      >[0],
+    );
+    if (!result.success) {
+      return {
+        id: undefined,
+        error: result.error?.message ?? 'DealTimelineEvent create returned non-success',
+      };
+    }
+    return { id: result.data?.cr664_dealtimelineeventid, error: undefined };
+  } catch (err: unknown) {
+    return { id: undefined, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+export async function markDocumentReceived(
+  input: MarkDocumentReceivedInput,
+  resolveActorChangedBy: ResolveActorChangedBy = createActorChangedByResolver(),
+): Promise<MarkDocumentReceivedOutcome> {
+  const note = input.receiveNote.trim();
+  if (note.length === 0) {
+    return { kind: 'unknown', message: 'Receipt note must not be empty.' };
+  }
+
+  const correlationId = newCorrelationId('rd');
+  const nowIso = new Date().toISOString();
+  // Resolve the audit actor's cr664_user bind once, fail-closed.
+  const actor = await resolveActorChangedBy(input.actorEmail);
+
+  // Step 1: stamp cr664_receiveddate (+ the resolved receiver identity, when
+  // resolved — best-effort, matching this function's established
+  // actor-resolution posture: an unresolved actor never blocks the primary
+  // write here). cr664_ReceivedBy is the durable fact
+  // markDocumentReviewed's segregation-of-duties check (N-16) reads back.
+  try {
+    const update = await Cr664_documentchecklistsService.update(input.documentId, {
+      cr664_receiveddate: nowIso,
+      cr664_requirementstatus: REQUIREMENT_STATUS_CODES.under_review,
+      ...(actor.ok && actor.changedByBind ? { 'cr664_ReceivedBy@odata.bind': actor.changedByBind } : {}),
+    } as unknown as Parameters<typeof Cr664_documentchecklistsService.update>[1]);
+    if (!update.success) {
+      void emitAuditEventForReceive({
+        input,
+        actor,
+        correlationId,
+        outcome: AUDIT_OUTCOME_FAILED,
+        failureReason: update.error?.message ?? 'Unknown document update error',
+        nowIso,
+      });
+      return {
+        kind: 'receive-failed',
+        // Final LOS Completion arc (Workstream P) — never render a raw transport error verbatim.
+        docError: mapBusinessSafeError(update.error?.message ?? 'Document update failed', correlationId).safeMessage,
+      };
+    }
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    void emitAuditEventForReceive({
+      input,
+      actor,
+      correlationId,
+      outcome: AUDIT_OUTCOME_FAILED,
+      failureReason: message,
+      nowIso,
+    });
+    return { kind: 'receive-failed', docError: mapBusinessSafeError(message, correlationId).safeMessage };
+  }
+
+  // Step 2 + 3: audit + timeline in parallel. Either failing flips
+  // the outcome to governance-partial.
+  const [audit, timeline] = await Promise.all([
+    emitAuditEventForReceive({
+      input,
+      actor,
+      correlationId,
+      outcome: AUDIT_OUTCOME_SUCCEEDED,
+      failureReason: undefined,
+      nowIso,
+    }),
+    emitTimelineEventForReceive({ input, actor, correlationId, nowIso }),
+  ]);
+
+  if (audit.error || timeline.error) {
+    return {
+      kind: 'governance-partial',
+      // Final LOS Completion arc (Workstream P) — never render a raw transport error verbatim.
+      auditError: audit.error ? mapBusinessSafeError(audit.error, correlationId).safeMessage : undefined,
+      timelineError: timeline.error ? mapBusinessSafeError(timeline.error, correlationId).safeMessage : undefined,
+    };
+  }
+  return { kind: 'success' };
+}
+
+// ---------------------------------------------------------------------------
+// Phase 55: governed write for marking a received document reviewed.
+//
+// What this is:
+//   - The third (and final, given the current schema) transition in the
+//     document lifecycle: outstanding â†’ received â†’ reviewed. Writes the
+//     banker's display name to cr664_reviewer so the existing
+//     deriveStatus logic flips the row Received â†’ Reviewed. Clears the
+//     Phase 54 pending-review signal automatically (the predicate
+//     keys off reviewer presence).
+//
+// What this is NOT (honestly):
+//   - It is NOT approval. The banker has read the document and is
+//     stamping their identity as the reviewer. The audit + timeline
+//     events use conservative wording ("Document reviewed") â€” never
+//     "approved", "cleared", "accepted", "validated".
+//   - It is NOT a content judgment. The note flows verbatim to the
+//     audit trail; the action makes no claim about what the document
+//     contains.
+//   - It does NOT touch cr664_uploadstatus, the file column (which
+//     still doesn't exist), or any other field besides cr664_reviewer.
+//
+// Three-write coordination mirrors Phase 22 / Phase 51:
+//   1. Update cr664_DocumentChecklist.cr664_reviewer = <banker name>.
+//   2. Emit cr664_AuditEvent ('DocumentChecklist Reviewed') with
+//      outcome=Succeeded.
+//   3. Emit cr664_DealTimelineEvent (NoteLogged, subtype
+//      'documentchecklist:reviewed|correlation:<id>') so the deal
+//      activity ledger records the review.
+//
+// Outcome shape: success | review-failed | governance-partial |
+// unknown â€” same Phase 47 four-branch shape every other governed
+// write uses.
+// ---------------------------------------------------------------------------
+
+export type MarkDocumentReviewedOutcome =
+  | { kind: 'success' }
+  | { kind: 'review-failed'; docError: string; correlationId: string }
+  | {
+      kind: 'governance-partial';
+      auditError: string | undefined;
+      timelineError: string | undefined;
+      correlationId: string;
+    }
+  /** N-16 â€” the same resolved identity that ran `receive` on this row attempted `review`. No write. */
+  | { kind: 'segregation-of-duties'; reason: string }
+  | { kind: 'unknown'; message: string };
+
+export interface MarkDocumentReviewedInput {
+  documentId: string;
+  documentName: string;
+  dealId: string;
+  systemUserId: string;
+  /** Display name written to cr664_reviewer. This is the banker's
+   *  visible identity on the deal-documents card (the schema's
+   *  reviewer field is a text column, not a user lookup). The
+   *  systemUserId on the audit + timeline events is the durable
+   *  identity link; the reviewer field is the human-readable
+   *  display. */
+  reviewerName: string;
+  /** Acting banker's email â€” resolved fail-closed to the audit's REQUIRED
+   *  cr664_ChangedBy (a cr664_user lookup) via the platform-user bridge.
+   *  A systemuser id is NEVER bound into cr664_ChangedBy (Phase 187H / G-5). */
+  actorEmail: string;
+  reviewNote: string;
+  /**
+   * The row's CURRENTLY-PERSISTED `cr664_ReceivedBy` (a resolved cr664_user
+   * row id), from the caller's already-loaded document â€” never re-derived
+   * here. When present, N-16 segregation-of-duties blocks a reviewer whose
+   * OWN resolved identity matches it. Undefined for a row that predates this
+   * fact (legacy row, or receive ran with an unresolved actor) â€” review then
+   * proceeds, since there is nothing durable to compare against.
+   */
+  receivedByCoreUserId?: string;
+}
+
+async function emitAuditEventForReview(opts: {
+  input: MarkDocumentReviewedInput;
+  actor: ActorChangedByResolution;
+  correlationId: string;
+  outcome: number;
+  failureReason: string | undefined;
+  nowIso: string;
+}): Promise<{ id: string | undefined; error: string | undefined }> {
+  // Fail closed: never POST an audit row without a resolved cr664_user actor.
+  // No systemuser id is ever bound into cr664_ChangedBy (it targets cr664_user).
+  if (!opts.actor.ok || !opts.actor.changedByBind) {
+    return { id: undefined, error: opts.actor.reason ?? 'audit actor identity unresolved' };
+  }
+  assertChangedByCoreUserBind(opts.actor.changedByBind);
+  const payload = {
+    cr664_auditeventname: 'DocumentChecklist Reviewed',
+    cr664_eventcategory: AUDIT_EVENT_CATEGORY_LIFECYCLE,
+    cr664_eventtype: AUDIT_EVENT_TYPE_STATUS_CHANGE,
+    cr664_entitytype: AUDIT_ENTITY_TYPE_LOAN_DEAL,
+    cr664_entityid: opts.input.documentId,
+    cr664_relatedentitytype: 'cr664_documentchecklist',
+    cr664_relatedentityid: opts.input.documentId,
+    'cr664_LoanDeal@odata.bind': `/cr664_loandeals(${opts.input.dealId})`,
+    cr664_outcomestatus: opts.outcome,
+    cr664_failurereason: opts.failureReason,
+    cr664_changeddate: opts.nowIso,
+    // The ONLY actor/user bind. REQUIRED, targets cr664_user; value resolved
+    // fail-closed from the actor email via the platform-user bridge. No
+    // cr664_ActorUser, no ownerid/owneridtype/statecode (server-defaulted).
+    'cr664_ChangedBy@odata.bind': opts.actor.changedByBind,
+    cr664_fieldname: 'cr664_reviewer',
+    cr664_oldvalue: '',
+    cr664_newvalue: opts.input.reviewerName,
+    cr664_beforestate: 'Received',
+    cr664_afterstate: 'Reviewed',
+    cr664_notes: opts.input.reviewNote,
+    cr664_sourcescreensourceprocess: 'DealWorkspace/DealDocuments/review',
+    cr664_correlationid: opts.correlationId,
+  };
+  try {
+    const result = await Cr664_auditeventsService.create(
+      payload as unknown as Parameters<typeof Cr664_auditeventsService.create>[0],
+    );
+    if (!result.success) {
+      return {
+        id: undefined,
+        error: result.error?.message ?? 'AuditEvent create returned non-success',
+      };
+    }
+    return { id: result.data?.cr664_auditeventid, error: undefined };
+  } catch (err: unknown) {
+    return { id: undefined, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+async function emitTimelineEventForReview(opts: {
+  input: MarkDocumentReviewedInput;
+  actor: ActorChangedByResolution;
+  correlationId: string;
+  nowIso: string;
+}): Promise<{ id: string | undefined; error: string | undefined }> {
+  const payload = {
+    cr664_title: opts.input.documentName,
+    cr664_summary: opts.input.reviewNote,
+    cr664_eventat: opts.nowIso,
+    cr664_eventtype: TIMELINE_EVENT_TYPE_NOTE_LOGGED,
+    cr664_visibilityscope: TIMELINE_VISIBILITY_BANKER_AND_MANAGER,
+    cr664_issystemgenerated: false,
+    cr664_relatedentitytype: 'cr664_documentchecklist',
+    cr664_relatedentityid: opts.input.documentId,
+    'cr664_Deal@odata.bind': `/cr664_loandeals(${opts.input.dealId})`,
+    // cr664_EventBy targets cr664_user â€” bind the resolved cr664_user, omit when
+    // unresolved (fail-closed); never a systemuser id. Owner/state server-defaulted.
+    ...timelineEventByBind(opts.actor),
+    cr664_eventsubtype: `${TIMELINE_SUBTYPE_DOCUMENT_REVIEWED}|correlation:${opts.correlationId}`,
+  };
+  try {
+    const result = await Cr664_dealtimelineeventsService.create(
+      payload as unknown as Parameters<
+        typeof Cr664_dealtimelineeventsService.create
+      >[0],
+    );
+    if (!result.success) {
+      return {
+        id: undefined,
+        error: result.error?.message ?? 'DealTimelineEvent create returned non-success',
+      };
+    }
+    return { id: result.data?.cr664_dealtimelineeventid, error: undefined };
+  } catch (err: unknown) {
+    return { id: undefined, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+export async function markDocumentReviewed(
+  input: MarkDocumentReviewedInput,
+  resolveActorChangedBy: ResolveActorChangedBy = createActorChangedByResolver(),
+): Promise<MarkDocumentReviewedOutcome> {
+  const note = input.reviewNote.trim();
+  if (note.length === 0) {
+    return { kind: 'unknown', message: 'Review note must not be empty.' };
+  }
+  const reviewerName = input.reviewerName.trim();
+  if (reviewerName.length === 0) {
+    return {
+      kind: 'unknown',
+      message: 'Reviewer display name must not be empty.',
+    };
+  }
+
+  const correlationId = newCorrelationId('rv');
+  const nowIso = new Date().toISOString();
+  // Resolve the audit actor's cr664_user bind once, fail-closed.
+  const actor = await resolveActorChangedBy(input.actorEmail);
+
+  // N-16 â€” segregation of duties: the resolved identity attempting `review` must not be the
+  // same resolved identity that ran `receive` on this row. Checked BEFORE any write, using the
+  // caller's already-loaded `receivedByCoreUserId` (never re-derived here) against the
+  // reviewer's just-resolved identity. Undefined receivedByCoreUserId (legacy row, or receive
+  // ran with an unresolved actor) has nothing durable to compare against, so review proceeds.
+  if (input.receivedByCoreUserId) {
+    const reviewerCoreUserId = extractCoreUserId(actor.ok ? actor.changedByBind : undefined);
+    if (isSameCoreUser(input.receivedByCoreUserId, reviewerCoreUserId)) {
+      return { kind: 'segregation-of-duties', reason: SEGREGATION_OF_DUTIES_BLOCK_REASON };
+    }
+  }
+
+  // Step 1: stamp cr664_reviewer. This is the only schema-level
+  // write â€” the deriveStatus selector flips the document from
+  // received â†’ reviewed off this field alone, and the Phase 54
+  // pending-review signal clears because its predicate keys off
+  // reviewer presence.
+  try {
+    const update = await Cr664_documentchecklistsService.update(input.documentId, {
+      cr664_reviewer: reviewerName,
+      cr664_revieweddate: nowIso,
+      cr664_requirementstatus: REQUIREMENT_STATUS_CODES.reviewed,
+    } as unknown as Parameters<typeof Cr664_documentchecklistsService.update>[1]);
+    if (!update.success) {
+      void emitAuditEventForReview({
+        input,
+        actor,
+        correlationId,
+        outcome: AUDIT_OUTCOME_FAILED,
+        failureReason: update.error?.message ?? 'Unknown document update error',
+        nowIso,
+      });
+      return {
+        kind: 'review-failed',
+        // Final LOS Completion arc (Workstream P) — never render a raw transport error verbatim.
+        docError: mapBusinessSafeError(update.error?.message ?? 'Document update failed', correlationId).safeMessage,
+        correlationId,
+      };
+    }
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    void emitAuditEventForReview({
+      input,
+      actor,
+      correlationId,
+      outcome: AUDIT_OUTCOME_FAILED,
+      failureReason: message,
+      nowIso,
+    });
+    return { kind: 'review-failed', docError: mapBusinessSafeError(message, correlationId).safeMessage, correlationId };
+  }
+
+  // Step 2 + 3: audit + timeline in parallel. Either failing flips
+  // the outcome to governance-partial.
+  const [audit, timeline] = await Promise.all([
+    emitAuditEventForReview({
+      input,
+      actor,
+      correlationId,
+      outcome: AUDIT_OUTCOME_SUCCEEDED,
+      failureReason: undefined,
+      nowIso,
+    }),
+    emitTimelineEventForReview({ input, actor, correlationId, nowIso }),
+  ]);
+
+  if (audit.error || timeline.error) {
+    return {
+      kind: 'governance-partial',
+      // Final LOS Completion arc (Workstream P) — never render a raw transport error verbatim.
+      auditError: audit.error ? mapBusinessSafeError(audit.error, correlationId).safeMessage : undefined,
+      timelineError: timeline.error ? mapBusinessSafeError(timeline.error, correlationId).safeMessage : undefined,
+      correlationId,
+    };
+  }
+  return { kind: 'success' };
+}
