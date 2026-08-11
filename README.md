@@ -37,6 +37,7 @@ npm run check
 - [CRM and deal-pipeline parity](docs/product/CRM-DEAL-PIPELINE-PARITY.md)
 - [Underwriting readiness foundation](docs/product/UNDERWRITING-READINESS-FOUNDATION.md)
 - [Private document foundation](docs/product/PRIVATE-DOCUMENT-FOUNDATION.md)
+- [Governed document upload preparation](docs/product/DOCUMENT-UPLOAD-PREPARATION.md)
 - [Security baseline](docs/security/SECURITY-BASELINE.md)
 - [Identity and tenant gate](docs/security/IDENTITY-AND-TENANT-GATE.md)
 
