@@ -16,7 +16,7 @@ export function AppShell({ context, children }: { context: ReadyContext; childre
         <p className="workspace-pill">{workspaceLabels[context.workspace]}</p>
         <nav aria-label="Workspace navigation">
           <Link href="/app">Command center</Link>
-          <span>CRM</span><Link href="/app">Deals</Link><Link href="/app/intake">New intake</Link><span>Tasks</span><span>Documents</span><span>Portfolio</span>
+          <Link href="/app/crm">CRM</Link><Link href="/app/deals">Deals</Link><Link href="/app/intake">New intake</Link><span>Tasks</span><span>Documents</span><span>Portfolio</span>
         </nav>
         <form action={signOut}><button type="submit">Sign out</button></form>
       </aside>
