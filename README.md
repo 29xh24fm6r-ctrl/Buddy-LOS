@@ -1,10 +1,10 @@
 # Buddy LOS
 
-Buddy LOS is the standalone SaaS successor to the Microsoft Power Platform-based Commercial LOS. This repository targets Vercel and Supabase and is intentionally isolated from the original repository.
+Buddy LOS is a native, standalone commercial lending SaaS product built with Next.js, Vercel, and Supabase.
 
 ## Status
 
-**Foundation only — not production-ready.** No production Supabase project, migrated customer data, Microsoft integration, or live lending workflow is connected.
+**Early foundation — not production-ready.** The website and Supabase project exist, but authentication and lending workflows remain disabled until their security gates pass.
 
 ## Local development
 
@@ -28,10 +28,10 @@ npm run check
 
 - [Architecture decision](docs/architecture/ADR-0001-standalone-saas-boundary.md)
 - [Target architecture](docs/architecture/TARGET-SAAS-ARCHITECTURE.md)
-- [Migration traceability](docs/migration/MIGRATION-TRACEABILITY-MATRIX.md)
-- [Controlled build arc](docs/migration/CONTROLLED-BUILD-ARC.md)
+- [Product build plan](docs/product/PRODUCT-BUILD-PLAN.md)
+- [Controlled build arc](docs/product/CONTROLLED-BUILD-ARC.md)
 - [Security baseline](docs/security/SECURITY-BASELINE.md)
 
-## Repository boundary
+## Product boundary
 
-`Commercial-LOS` is read-only reference material. Code is migrated only after it is classified as portable domain/UI logic or deliberately replaced behind a platform-neutral interface.
+Buddy LOS owns its product model, user experience, database, website, deployment, and operating controls. No external platform schema is part of its runtime architecture.

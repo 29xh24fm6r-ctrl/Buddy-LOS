@@ -3,7 +3,7 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Buddy LOS",
-  description: "Standalone commercial lending operating system",
+  description: "A modern commercial lending operating system for lenders and borrowers.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
