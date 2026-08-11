@@ -2,6 +2,7 @@ import "server-only";
 import { createClient } from "@/lib/supabase/server";
 import { canReadInstitutionPipeline, type BorrowerSummary, type DealSummary } from "./read-model";
 import type { AccessContext } from "@/lib/auth/access-context";
+import { deriveUnderwritingReadiness, type ReadinessItem, type UnderwritingReadiness } from "./underwriting-readiness";
 
 type ReadyContext = Extract<AccessContext, { kind: "ready" }>;
 type DealRow = {
@@ -14,7 +15,7 @@ type BorrowerDirectoryRecord = BorrowerRow & {
   borrower_kind: string; external_reference: string | null; relationship_start_date: string | null;
 };
 
-export type DealDetail = DealSummary & { purpose: string | null; createdAt: string; version: number };
+export type DealDetail = DealSummary & { purpose: string | null; createdAt: string; version: number; readiness: UnderwritingReadiness };
 export type BorrowerDetail = {
   id: string; legalName: string; borrowerKind: string; externalReference: string | null;
   relationshipStartDate: string | null; contacts: { id: string; kind: string; label: string | null; value: string; isPrimary: boolean; isVerified: boolean; restrictedUse: boolean }[];
@@ -91,11 +92,18 @@ export async function loadDealDetail(context: ReadyContext, dealId: string): Pro
     if (assignmentError) throw new Error("Unable to verify deal assignment.");
     if (!assignment) return null;
   }
-  const { data: borrower, error: borrowerError } = await supabase.from("borrowers").select("legal_name")
-    .eq("organization_id", organizationId).eq("id", data.borrower_id).maybeSingle();
-  if (borrowerError) throw new Error("Unable to load the borrower.");
+  const [{ data: borrower, error: borrowerError }, { data: checklist, error: checklistError }, { data: documents, error: documentsError }] = await Promise.all([
+    supabase.from("borrowers").select("legal_name").eq("organization_id", organizationId).eq("id", data.borrower_id).maybeSingle(),
+    supabase.from("application_checklist_items").select("id, label, category, status, is_required, due_date").eq("organization_id", organizationId).eq("deal_id", dealId).order("created_at"),
+    supabase.from("deal_document_requirements").select("id, document_type, category, status, is_required, due_date").eq("organization_id", organizationId).eq("deal_id", dealId).order("created_at"),
+  ]);
+  if (borrowerError || checklistError || documentsError) throw new Error("Unable to load the deal readiness record.");
   const summary = toSummary(data as DealRow, borrower?.legal_name ?? "Borrower unavailable");
-  return { ...summary, purpose: data.purpose, createdAt: data.created_at, version: data.version };
+  const mapItem = (item: { id: string; label?: string; document_type?: string; category: string; status: string; is_required: boolean; due_date: string | null }): ReadinessItem => ({
+    id: item.id, label: item.label ?? item.document_type ?? "Unnamed requirement", category: item.category, status: item.status, required: item.is_required, dueDate: item.due_date,
+  });
+  return { ...summary, purpose: data.purpose, createdAt: data.created_at, version: data.version,
+    readiness: deriveUnderwritingReadiness((checklist ?? []).map(mapItem), (documents ?? []).map(mapItem)) };
 }
 
 export async function loadBorrowerDetail(context: ReadyContext, borrowerId: string): Promise<BorrowerDetail | null> {

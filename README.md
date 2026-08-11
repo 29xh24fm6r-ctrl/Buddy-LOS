@@ -35,6 +35,7 @@ npm run check
 - [Banker command-center parity](docs/product/BANKER-COMMAND-CENTER-PARITY.md)
 - [Governed loan intake](docs/product/GOVERNED-LOAN-INTAKE.md)
 - [CRM and deal-pipeline parity](docs/product/CRM-DEAL-PIPELINE-PARITY.md)
+- [Underwriting readiness foundation](docs/product/UNDERWRITING-READINESS-FOUNDATION.md)
 - [Security baseline](docs/security/SECURITY-BASELINE.md)
 - [Identity and tenant gate](docs/security/IDENTITY-AND-TENANT-GATE.md)
 
