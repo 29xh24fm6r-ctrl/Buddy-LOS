@@ -40,6 +40,7 @@ npm run check
 - [Governed document upload preparation](docs/product/DOCUMENT-UPLOAD-PREPARATION.md)
 - [Document quarantine completion](docs/product/DOCUMENT-QUARANTINE-COMPLETION.md)
 - [Clean document access authorization](docs/product/CLEAN-DOCUMENT-ACCESS-AUTHORIZATION.md)
+- [Trusted document download exchange](docs/product/TRUSTED-DOCUMENT-DOWNLOAD-EXCHANGE.md)
 - [Security baseline](docs/security/SECURITY-BASELINE.md)
 - [Identity and tenant gate](docs/security/IDENTITY-AND-TENANT-GATE.md)
 
