@@ -1,0 +1,4568 @@
+import { describe, it, expect } from 'vitest';
+import { existsSync, readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+import {
+  GOVERNED_WRITES,
+  LOCAL_ONLY_FLOWS,
+  NOT_WIRED,
+  DELIBERATELY_BLOCKED,
+} from './platformInventory';
+
+/**
+ * Phase 111 Ã¢â‚¬â€ Release-Candidate Readiness Snapshot pin.
+ *
+ * This file is the lightweight CI-time guard that the
+ * `docs/PHASE_111_RELEASE_CANDIDATE_SNAPSHOT.md` doc's headline
+ * counts stay in sync with the actual inventory data. It does NOT
+ * pin behavior Ã¢â‚¬â€ that's the job of the Phase 104Ã¢â‚¬â€œ110 governance
+ * sweeps. It pins ONLY:
+ *
+ *   1. The Phase 111 doc exists on disk.
+ *   2. The four inventory counts the doc cites match what the
+ *      `platformInventory.ts` module reports.
+ *   3. The Phase 104Ã¢â‚¬â€œ110 governance pin files all exist on disk,
+ *      so an operator running this test can trust that the rest
+ *      of the release-lock evidence is in place.
+ *
+ * Intentional non-scope:
+ *   - Bundle size is NOT pinned (rebuild noise is not a release
+ *     signal).
+ *   - Test count is NOT pinned (every new test would force a doc
+ *     refresh, which is too tight).
+ *   - Per-id presence is NOT re-pinned (Phase 110's lock file
+ *     already covers id-level invariants).
+ *
+ * Failure mode: if any inventory count slips, this test fails with
+ * a message naming the count that drifted, and the operator must
+ * update the Phase 111 snapshot doc before promoting.
+ */
+
+const REPO_ROOT = resolve(__dirname, '..', '..', '..');
+
+function readDoc(rel: string): string {
+  return readFileSync(resolve(REPO_ROOT, rel), 'utf8');
+}
+
+/**
+ * Snapshot anchor at Phase 111. If any value drifts, refresh
+ * `docs/PHASE_111_RELEASE_CANDIDATE_SNAPSHOT.md` Ã‚Â§0 to match and
+ * update the value here in the same commit.
+ */
+const PHASE_111_SNAPSHOT = Object.freeze({
+  // Final LOS Completion arc (Workstream M) registered the six durable-record governed writes
+  // Workstreams C/D/E/F/H/J shipped (Credit Approval Decision, Commitment, Condition
+  // Verification, Executed Document Attestation, Booking QC, Adverse Action Record) -- a
+  // registry blind spot those workstreams had until now, not new gaps. Workstream O then added
+  // the data-quality-flag-create write (the first write that CREATES a data quality flag).
+  // 146 Factory arc added credit-memo-finalize (146-B) and assign-servicing-owner (146-E);
+  // PR D registered auto-portfolio boarding; PR E registered live Return/Decline/Withdraw.
+  governedWrites: 28,
+  localOnlyFlows: 16,
+  // PR 105 added two NOT_WIRED entries (origination-loan-structure-fields,
+  // financial-spread-persistence) for the schema-pending Global Cash Flow /
+  // core loan structure capabilities -- see
+  // docs/factory-arc/PR105_LOAN_STRUCTURE_SCHEMA_MIGRATION.md. PR 106 added
+  // one more (risk-rating-persistence) -- see
+  // docs/factory-arc/PR106_RISK_RATING_SCHEMA_MIGRATION.md. PR 107 added two
+  // more (closing-document-persistence, funding-authorization-persistence)
+  // -- see docs/factory-arc/PR107_CLOSING_FUNDING_ACTIVATION.md. Factory Arc
+  // Phase 3 closed origination-loan-structure-fields -- loan purpose/term/
+  // ownership now write/read via updateDealProfile.ts against the live PR105
+  // columns -- see docs/factory-arc/PR114_LOAN_DEAL_SDK_REGENERATION_ESCALATION.md.
+  // Phase 4 closed financial-spread-persistence -- Global Cash Flow figures now
+  // write/read via updateDealProfile.ts against the live PR105
+  // cr664_financialspreadinputs column -- see
+  // docs/factory-arc/PR116_GLOBAL_CASH_FLOW_PERSISTENCE.md.
+  // Factory Arc Phase 5 closed risk-rating-persistence -- risk rating /
+  // underwriting recommendation now write/read via updateDealProfile.ts against
+  // the live PR106 columns -- see docs/factory-arc/PR117_RISK_RATING_PERSISTENCE.md.
+  // Factory Arc Phase 14 added annual-review-persistence plus a temporary
+  // portfolio-boarding registration gap; PR D closed and removed that temporary row.
+  // Workstream O added the data-quality-flag-create governed write (see GOVERNED_WRITES) and
+  // Workstream R added one more NOT_WIRED entry (portfolio-migration-reconciliation -- the
+  // reconciliation engine exists and is tested; only the migration-control schema is missing).
+  notWired: 0,
+  deliberatelyBlocked: 3,
+});
+
+describe('Phase 111 Ã¢â‚¬â€ Release-candidate snapshot exists and is current', () => {
+  it('docs/PHASE_111_RELEASE_CANDIDATE_SNAPSHOT.md exists on disk', () => {
+    expect(
+      existsSync(resolve(REPO_ROOT, 'docs/PHASE_111_RELEASE_CANDIDATE_SNAPSHOT.md')),
+    ).toBe(true);
+  });
+
+  it('Phase 111 doc cites the current GOVERNED_WRITES count', () => {
+    expect(GOVERNED_WRITES.length).toBe(PHASE_111_SNAPSHOT.governedWrites);
+    const doc = readDoc('docs/PHASE_111_RELEASE_CANDIDATE_SNAPSHOT.md');
+    // The doc's snapshot table cites the count in a row like:
+    //   | `GOVERNED_WRITES` | **12** entries | ... |
+    const pattern = new RegExp(
+      `\\\`GOVERNED_WRITES\\\`\\s*\\|\\s*\\*\\*${PHASE_111_SNAPSHOT.governedWrites}\\*\\*`,
+    );
+    expect(
+      pattern.test(doc),
+      `Phase 111 doc must cite GOVERNED_WRITES = ${PHASE_111_SNAPSHOT.governedWrites}`,
+    ).toBe(true);
+  });
+
+  it('Phase 111 doc cites the current LOCAL_ONLY_FLOWS count', () => {
+    expect(LOCAL_ONLY_FLOWS.length).toBe(PHASE_111_SNAPSHOT.localOnlyFlows);
+    const doc = readDoc('docs/PHASE_111_RELEASE_CANDIDATE_SNAPSHOT.md');
+    const pattern = new RegExp(
+      `\\\`LOCAL_ONLY_FLOWS\\\`\\s*\\|\\s*\\*\\*${PHASE_111_SNAPSHOT.localOnlyFlows}\\*\\*`,
+    );
+    expect(pattern.test(doc)).toBe(true);
+  });
+
+  it('Phase 111 doc cites the current NOT_WIRED count', () => {
+    expect(NOT_WIRED.length).toBe(PHASE_111_SNAPSHOT.notWired);
+    const doc = readDoc('docs/PHASE_111_RELEASE_CANDIDATE_SNAPSHOT.md');
+    const pattern = new RegExp(
+      `\\\`NOT_WIRED\\\`\\s*\\|\\s*\\*\\*${PHASE_111_SNAPSHOT.notWired}\\*\\*`,
+    );
+    expect(pattern.test(doc)).toBe(true);
+  });
+
+  it('Phase 111 doc cites the current DELIBERATELY_BLOCKED count', () => {
+    expect(DELIBERATELY_BLOCKED.length).toBe(
+      PHASE_111_SNAPSHOT.deliberatelyBlocked,
+    );
+    const doc = readDoc('docs/PHASE_111_RELEASE_CANDIDATE_SNAPSHOT.md');
+    const pattern = new RegExp(
+      `\\\`DELIBERATELY_BLOCKED\\\`\\s*\\|\\s*\\*\\*${PHASE_111_SNAPSHOT.deliberatelyBlocked}\\*\\*`,
+    );
+    expect(pattern.test(doc)).toBe(true);
+  });
+});
+
+describe('Phase 111 Ã¢â‚¬â€ Phase 104Ã¢â‚¬â€œ110 governance pin files all still exist', () => {
+  const REQUIRED_PIN_FILES: readonly string[] = [
+    // Phase 106 Ã¢â‚¬â€ operator-safety release-readiness pin.
+    'src/shared/governance/emailLiveReleaseReadiness.test.ts',
+    // Phase 107 Ã¢â‚¬â€ activity-evidence consistency pin.
+    'src/shared/governance/communicationActivityLedger.test.ts',
+    // Phase 108 Ã¢â‚¬â€ post-send refresh wiring.
+    'src/deals/borrowerUpdateRefresh.test.tsx',
+    // Phase 109 Ã¢â‚¬â€ operator smoke-test harness.
+    'src/admin/emailLiveSmokeTest.test.ts',
+    'src/admin/EmailLiveDiagnostics.test.tsx',
+    // Phase 110 Ã¢â‚¬â€ final communication-lane release lock.
+    'src/shared/governance/communicationLaneReleaseLock.test.ts',
+  ];
+
+  for (const rel of REQUIRED_PIN_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+});
+
+describe('Phase 111 Ã¢â‚¬â€ Phase 104Ã¢â‚¬â€œ110 release doc files all still exist', () => {
+  const REQUIRED_DOC_FILES: readonly string[] = [
+    'docs/PHASE_104_OUTLOOK_LIVE_SEND.md',
+    'docs/PHASE_105_BORROWER_UPDATE_LIVE_SEND.md',
+    'docs/PHASE_106_EMAIL_MODE_RELEASE_READINESS.md',
+    'docs/PHASE_107_COMMUNICATION_ACTIVITY_LEDGER.md',
+    'docs/PHASE_108_BORROWER_UPDATE_REFRESH.md',
+    'docs/PHASE_109_EMAIL_LIVE_SMOKE_TEST.md',
+    'docs/PHASE_110_COMMUNICATION_LANE_RELEASE_LOCK.md',
+    'docs/PHASE_111_RELEASE_CANDIDATE_SNAPSHOT.md',
+    // Phase 112 Ã¢â‚¬â€ operator-facing release-candidate validation script.
+    // Pin added alongside the Phase 112 doc itself so a future docs-only
+    // edit cannot quietly delete the operator script.
+    'docs/PHASE_112_OPERATOR_RC_VALIDATION_SCRIPT.md',
+    // Phase 113 Ã¢â‚¬â€ Microsoft environment landing plan. Phase 112 cannot
+    // execute against a deployed app until Ã‚Â§G.1Ã¢â‚¬â€œG.6 of Phase 113 are
+    // green; deleting the landing plan would silently strand the
+    // operator validation script.
+    'docs/PHASE_113_MICROSOFT_ENVIRONMENT_LANDING_PLAN.md',
+    // Phase 115 Ã¢â‚¬â€ first-launch identity provisioning. Documents the
+    // legacy cr664_user Ã¢â€ â€™ cr664_platformuser entry-point swap that
+    // unblocked the deployed app's AuthGate.
+    'docs/PHASE_115_FIRST_LAUNCH_IDENTITY_PROVISIONING.md',
+    // Phase 116 Ã¢â‚¬â€ first-live-launch stabilization. Documents the
+    // explicit Platform Workspace alias map + the maker-portal grid
+    // pitfall + the Portfolio Management Ã¢â€ â€™ manager routing decision.
+    'docs/PHASE_116_FIRST_LIVE_LAUNCH_STABILIZATION.md',
+    // Phase 117 Ã¢â‚¬â€ banker workspace UX parity. Documents the
+    // product-grade shell (dark sidebar, KPI grid, tabs, right rail)
+    // that replaces the pre-Phase-117 bare stacked-card surface, plus
+    // the deliberate omission of Contacts / Due Diligence / Alerts
+    // tabs and New Deal / Log Activity buttons.
+    'docs/PHASE_117_BANKER_WORKSPACE_UX_PARITY.md',
+    // Phase 118 Ã¢â‚¬â€ original UI/UX inventory + restoration backlog.
+    // Classifies every original Banker Workspace UI surface against
+    // the Phase 117 shell into AÃ¢â‚¬â€œF buckets (already-implemented-
+    // not-composed, implemented-needs-seed, loader-missing, write-
+    // missing, deliberately-blocked, pure polish). Sequences the
+    // restoration phases against governance reality. Docs-only: no
+    // production code change.
+    'docs/PHASE_118_ORIGINAL_UI_UX_INVENTORY.md',
+    // Phase 119 Ã¢â‚¬â€ restore original Banker Workspace UI/UX, part 1
+    // (bucket-A wave 1 from the Phase 118 backlog). Stage-grouped
+    // pipeline + 3 new derived KPI tiles (Urgent items, In
+    // Underwriting, Stale 14d+) + My-Tasks right-rail panel. No
+    // schema change, no new loader, no governed write, no email-
+    // lane change.
+    'docs/PHASE_119_RESTORE_ORIGINAL_BANKER_WORKSPACE_UI_UX_PART_1.md',
+    // Phase 120 Ã¢â‚¬â€ restore original Banker Workspace UI/UX, part 2
+    // (bucket-A wave 2 from the Phase 118 backlog). Activity tab +
+    // Due Diligence tab (both composition-only, no new query) +
+    // per-row stale badges in PersonalPipeline + sidebar-footer
+    // workspace switcher rendering the honest single-workspace
+    // state from the bootstrap result. No schema change, no new
+    // loader, no governed write, no email-lane change. Tab bar
+    // grew 5 Ã¢â€ â€™ 7.
+    'docs/PHASE_120_RESTORE_ORIGINAL_BANKER_WORKSPACE_UI_UX_PART_2.md',
+    // Phase 121 Ã¢â‚¬â€ live banker data seed (deferred). Manual seed
+    // recipe the operator runs in make.powerapps.com so the
+    // restored workspace can be validated in a populated state.
+    // Now unblocked once Phase 120 ships. Docs-only: no schema
+    // change, no React fake data, no automation, no email-lane
+    // exercise.
+    'docs/PHASE_121_LIVE_BANKER_DATA_SEED.md',
+    // Phase 121 Ã¢â‚¬â€ simplified click-by-click operator checklist
+    // produced after a `pac env fetch` pre-flight against the
+    // deployed environment. Carries pre-verified live values
+    // (Matt's banker row id, environment id, the Ã‚Â§2.3 reference-
+    // table-empty fallback path made mandatory by audit findings).
+    // The streamlined entry point for execution; the longer
+    // PHASE_121_LIVE_BANKER_DATA_SEED.md doc remains as the
+    // reference runbook. Docs-only.
+    'docs/PHASE_121_OPERATOR_SEED_CHECKLIST.md',
+    // Phase 122 Ã¢â‚¬â€ Dataverse-config phase that retargets the
+    // modern operational child-table Deal lookups (confirmed:
+    // cr664_documentchecklist.cr664_Deal; candidates: dealtask1
+    // / creditmemo1 / creditmemodraftsection / dealtimelineevent)
+    // from legacy cr664_deal to cr664_loandeal. Explicitly NOT a
+    // React phase Ã¢â‚¬â€ production app already binds correctly to
+    // /cr664_loandeals(...); Phase 122 makes the live schema
+    // match. Unblocks the deferred Phase 121 Steps 6 + 7.
+    'docs/PHASE_122_RETARGET_DEAL_LOOKUPS.md',
+    // Phase 122B Ã¢â‚¬â€ Automated Dataverse lookup repair. Replaces the
+    // manual Maker Portal click-path with a Node script
+    // (scripts/phase122-lookup-repair.mjs) that audits the live
+    // env, prints a full plan with exact Web API payloads, and
+    // refuses to execute live writes unless every safety gate
+    // passes (LoanOpsExport publisher prefix = cr664, rollback
+    // artifacts exist, DATAVERSE_BEARER_TOKEN env var set, no
+    // plan step is a stop-condition, zero non-NULL rows on every
+    // pseudo-column scheduled for deletion). Default is dry-run;
+    // --commit explicitly required for writes. 29 new static-
+    // source pins on the script's safety guards + constants in
+    // phase122BScriptContract.test.ts. Continues to honor the
+    // Phase 122 react-side contract pins (22 cases) and Phase
+    // 110 communication lock.
+    'docs/PHASE_122B_AUTOMATED_LOOKUP_REPAIR.md',
+    // Phase 122A Ã¢â‚¬â€ OGB LOS original UI/UX recovery audit.
+    // Documentation-only. Headline finding: no archived richer
+    // UI exists in the repo; the Phase 117/119/120 shell IS the
+    // only banker UI ever built here. Audit produces a forward-
+    // looking visual restoration backlog (A/B/C/D buckets) and
+    // proposes Phases 123Ã¢â‚¬â€œ129 covering banker-shell visual
+    // polish, Kanban pipeline, deal-workspace cockpit, signals/
+    // relationships polish, credit-memo workspace, task/doc UX
+    // after Phase 122, and manager/team/executive visual parity.
+    'docs/PHASE_122A_OGB_LOS_ORIGINAL_UI_UX_RECOVERY_AUDIT.md',
+    // Phase 123 Ã¢â‚¬â€ Premium OGB Banker Command Center visual
+    // shell. First wave of bucket-A visual restoration: hero
+    // header band, KPI grid grouped into Pipeline / Work items /
+    // Attention with hero anchor tiles (Active deals + Pipeline),
+    // premium tab bar, accent-striped right-rail panels,
+    // polished sidebar + workspace switcher pill, framed empty
+    // states across PersonalPipeline / Activity / Due Diligence
+    // / right rail. Composition-only Ã¢â‚¬â€ no Dataverse / loader /
+    // governed-write changes, no new dependencies, no email-
+    // lane changes. Two additive theme shadow tokens added.
+    'docs/PHASE_123_PREMIUM_BANKER_COMMAND_CENTER_VISUAL_SHELL.md',
+    // Phase 124 Ã¢â‚¬â€ Rich pipeline / stage-board. Replaces the
+    // Phase 119 flat-table-per-stage Pipeline tab with a
+    // horizontal Kanban: one lane per canonical non-terminal
+    // STAGE_CATALOG stage + custom lanes for operator-named
+    // stages + Stage-unknown fallback. Premium deal cards
+    // (name + stale badge + client + status + amount-or-
+    // "Amount not set" + target-close-if-real + last-touched).
+    // Lane headers with deal-count pill + compact-currency
+    // amount summary (honestly omitted when no parseable
+    // amounts). Terminal stages excluded Ã¢â‚¬â€ loader already
+    // filters them out. Composition-only Ã¢â‚¬â€ no Dataverse /
+    // loader / governed-write / email-lane changes. 8 new
+    // regression tests added.
+    'docs/PHASE_124_RICH_PIPELINE_STAGE_BOARD.md',
+    // Phase 125 Ã¢â‚¬â€ Deal workspace cockpit. DealHeader becomes a
+    // hero band (primary accent stripe + hero name + amount
+    // hero block + relative target-close countdown + honest
+    // "Not set" copy for missing fields). DealBlockers +
+    // DealStageProgressionCard signal/reason rows get
+    // severity-tinted framed treatment. DealTasks /
+    // DealDocuments / CreditMemo / ActivityTimeline /
+    // BorrowerCommunication honest-empty states become framed
+    // dashed-border cards consistent with Phase 123/124
+    // pattern. Composition-only Ã¢â‚¬â€ no Dataverse / loader /
+    // governed-write / email-lane changes. 10 new test cases
+    // in new src/deals/DealHeader.test.tsx.
+    'docs/PHASE_125_DEAL_WORKSPACE_COCKPIT.md',
+    // Phase 125B Ã¢â‚¬â€ Deal workspace visual redesign. Implements
+    // the design-pass-first critique against the live deal
+    // workspace screenshot: navy hero band with glass metric
+    // strip, two-column cockpit layout (left = intelligence,
+    // right = attention + work), honest "Not set" copy across
+    // every metric cell. Preserves the Phase 125 hook hoist in
+    // DealAutopilotPanel. Composition-only Ã¢â‚¬â€ no Dataverse /
+    // loader / governed-write / email-lane changes. 10 new
+    // BankerDealWorkspace cockpit tests + updated DealHeader
+    // markup assertions.
+    'docs/PHASE_125B_DEAL_WORKSPACE_VISUAL_REDESIGN.md',
+    // Phase 125C Ã¢â‚¬â€ Premium deal cockpit visual upgrade. Adds the
+    // cobalt / teal / cyan / violet accent families to the Phase
+    // 79 theme tokens (light + dark + explicit data-theme="dark"
+    // blocks). Adds a layered shadow.glow + shadow.hero stack on
+    // the DealHeader navy band. Adds a horizontal canonical-stage
+    // pill rail to DealStageProgressionCard (current-stage
+    // aria-current + past/future tone discipline + custom-stage
+    // fallback note for the Phase 121 sparse-seed path). Adds a
+    // shared inline-SVG SeverityGlyph (warning triangle / alert
+    // circle / info circle) replacing the small color dot on
+    // DealBlockers signal rows and DealStageProgressionCard reason
+    // rows. Adds a cobalt liquid-glass overlay backdrop to the
+    // BankerDealWorkspace right column (column-level backdrop Ã¢â‚¬â€
+    // each card keeps its own framing). Refreshes the
+    // DealAutopilotPanel priority stripe color system (high
+    // Ã¢â€ â€™ at-risk, medium Ã¢â€ â€™ cobalt, low Ã¢â€ â€™ teal). Phase 125 hook
+    // hoist preserved verbatim. Composition-only Ã¢â‚¬â€ no Dataverse
+    // / loader / governed-write / email-lane changes. 10 new
+    // Phase 125C invariant tests across two new files.
+    'docs/PHASE_125C_PREMIUM_DEAL_COCKPIT_VISUAL_UPGRADE.md',
+    // Phase 125D Ã¢â‚¬â€ Bloomberg / Apple deal cockpit redesign.
+    // Promotes the workspace to a fully instrumented operating
+    // cockpit: slate panel backdrop (Phase 79 token system gains
+    // panelBg / deckBg / deckTile / glassPanel / panelBorder),
+    // pure-function deriveDealCockpitMetrics() producing every
+    // KPI deck / workstream bar / right-rail count badge value,
+    // six shared visual primitives (MetricTile / CompletenessRing
+    // / WorkstreamBar / CountBadge / SeverityMeter / GlassPanel),
+    // DealMetricDeck KPI strip (8 tonal tiles + ring + missing-
+    // fields readout), DealWorkstreamPanel (4 mini progress bars),
+    // DealBlockers Attention Console (severity meter header),
+    // DealStageProgressionCard Stage Map (connected nodes +
+    // glass next-action command strip), DealAutopilotPanel
+    // Action Console (priority meter header), DealSummary
+    // grouped metric sections, right-rail count badges on
+    // Tasks + Documents. Phase 125 hook hoist preserved.
+    // Composition-only Ã¢â‚¬â€ no Dataverse / loader / governed-write
+    // / email-lane changes. 37 new Phase 125D invariant tests
+    // across three new files.
+    'docs/PHASE_125D_BLOOMBERG_APPLE_DEAL_COCKPIT.md',
+    // Phase 125E Ã¢â‚¬â€ Full deal cockpit recomposition. Replaces
+    // the Phase 125D layout with a recomposed visual hierarchy:
+    // command hero (no metric strip Ã¢â‚¬â€ identity slots only) +
+    // 6 large tonal KPI tiles + completeness ring + a big
+    // Attention Console (severity meter + missing-data
+    // checklist + signal rows) + a large connected-node
+    // Stage Map (44/52px nodes + thick connectors + cobalt
+    // halo) + an icon-led Action Console + workstream bars +
+    // detail cards with WidgetHeader (icon halo + count badge
+    // + mini progress bar) on every right-rail widget. Deal
+    // Summary demoted to the bottom of the left column as a
+    // compact key/value table. New shared primitives:
+    // cockpitIcons.tsx (16 inline-SVG glyphs + IconChip
+    // halo wrapper), LargeMetricTile + WidgetHeader added
+    // to cockpitPrimitives.tsx. New typography.size.display
+    // scale token. Phase 125 hook hoist preserved.
+    // Composition-only Ã¢â‚¬â€ no Dataverse / loader / governed-
+    // write / email-lane changes. 13 new Phase 125E invariant
+    // tests in phase125ERecomposition.test.tsx.
+    'docs/PHASE_125E_FULL_DEAL_COCKPIT_RECOMPOSITION.md',
+    // Phase 125F Ã¢â‚¬â€ Lending OS shell restoration. Restores the
+    // original Lending OS reference shell ACROSS the banker home
+    // AND the per-deal cockpit (unified chrome). Extracts a
+    // shared LendingOSLayout (dark sidebar with grouped nav,
+    // current-workspace pill, identity card). Adds GreetingHeader
+    // (personal "Good afternoon, X" greeting + honest task /
+    // meeting count + disabled-placeholder search / Log Activity
+    // / + New Deal). Flattens the KPI grid into 10 tonal tiles
+    // (BankerKpiGrid) with cockpit-icon halos; WEIGHTED / WIN
+    // RATE / HIGH PROB / YTD CLOSED render italic "Not yet wired"
+    // with Phase 118 bucket-C tooltips. Adds tab count badges,
+    // renames "Closing soon" rail to "Today's Schedule" with an
+    // honest calendar disclaimer. Disabled-placeholder sidebar
+    // entries for Schedule / Contacts / Vendors / Settings /
+    // Help & Support carry aria-disabled + tooltips. Wraps
+    // BankerDealWorkspace inside LendingOSLayout so the dark
+    // sidebar persists when a banker clicks a deal. Phase 48
+    // cross-role-import allowlist extended. Phase 125 hook hoist
+    // preserved. Composition-only Ã¢â‚¬â€ no Dataverse / loader /
+    // governed-write / email-lane changes. 13 new Phase 125F
+    // invariant tests + BankerShell.test.tsx rewrite.
+    'docs/PHASE_125F_LENDING_OS_SHELL_RESTORATION.md',
+    // Phase 125G Ã¢â‚¬â€ Lending OS cockpit fit-and-finish. Polish
+    // pass after Phase 125F. Six targeted changes: (1) stable
+    // .cc-kpi-grid CSS class for the banker KPI grid (5Ãƒâ€”2 /
+    // 4Ãƒâ€”3 / 2Ãƒâ€”5 explicit breakpoints Ã¢â‚¬â€ no orphan tile);
+    // (2) stable .cc-metric-deck-tiles class for the deal
+    // metric deck (3Ãƒâ€”2 / 2Ãƒâ€”3 / 1) + tighter padding + ring
+    // divider; (3) new DealCockpitNav 8-anchor strip under
+    // the deck with smooth-scroll links to every cockpit
+    // module (anchor IDs declared on each module's outer
+    // wrapper in BankerDealWorkspace); (4) AttentionConsole
+    // missing-field chips grouped by category (Economics /
+    // Parties / Timing / Stage & status / Structure);
+    // (5) DealHeader "Deal Cockpit" lockup pill + brighter
+    // eyebrow accent; (6) right-rail widget minHeight for
+    // consistent height. Composition-only Ã¢â‚¬â€ no Dataverse /
+    // loader / governed-write / email-lane changes. Phase
+    // 125 hook hoist preserved. 16 new Phase 125G invariant
+    // tests.
+    'docs/PHASE_125G_LENDING_OS_COCKPIT_FIT_AND_FINISH.md',
+    // Phase 126 Ã¢â‚¬â€ Relationships + Signals visual restoration.
+    // RelationshipMemory client rows gain a primary-accent left
+    // stripe + bumped client-name typography. BankerAutopilotRollup
+    // rows gain a severity-tinted left stripe driven by row
+    // priority. Both cards' empty / loading states become
+    // framed dashed-border cards. All Phase 76 / 82 / 83 / 100
+    // / 101 derivations + local ledgers + clipboard / mailto
+    // handoffs preserved verbatim. Composition-only Ã¢â‚¬â€ no
+    // Dataverse / loader / governed-write / email-lane changes.
+    // 8 new static-source pin cases added (4 per file) asserting
+    // Phase 110 lock + no fabricated-AI claim vocabulary on
+    // both source files.
+    'docs/PHASE_126_RELATIONSHIPS_SIGNALS_VISUAL_RESTORATION.md',
+  ];
+
+  for (const rel of REQUIRED_DOC_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+});
+
+describe('Phase 112 Ã¢â‚¬â€ Operator validation script cross-references', () => {
+  it('docs/PHASE_111_RELEASE_CANDIDATE_SNAPSHOT.md references Phase 112 as the operator validation script', () => {
+    const doc = readDoc('docs/PHASE_111_RELEASE_CANDIDATE_SNAPSHOT.md');
+    expect(doc).toMatch(/PHASE_112_OPERATOR_RC_VALIDATION_SCRIPT\.md/);
+  });
+
+  it('docs/STABILIZATION_CHECKLIST.md references the Phase 112 operator validation script', () => {
+    const doc = readDoc('docs/STABILIZATION_CHECKLIST.md');
+    expect(doc).toMatch(/PHASE_112_OPERATOR_RC_VALIDATION_SCRIPT\.md/);
+  });
+
+  it('docs/MICROSOFT_VIBE_CAPABILITY_COVERAGE.md references the Phase 112 operator validation script', () => {
+    const doc = readDoc('docs/MICROSOFT_VIBE_CAPABILITY_COVERAGE.md');
+    expect(doc).toMatch(/PHASE_112_OPERATOR_RC_VALIDATION_SCRIPT\.md/);
+  });
+});
+
+describe('Phase 111 Ã¢â‚¬â€ Stable cross-doc pointers', () => {
+  it('STABILIZATION_CHECKLIST.md points at the current snapshot (Phase 111), not the previous one (Phase 103)', () => {
+    const doc = readDoc('docs/STABILIZATION_CHECKLIST.md');
+    // The header pointer block must reference Phase 111 as the
+    // current authoritative snapshot. Phase 103 may still appear as
+    // a historical reference, but the "current counts" pointer
+    // belongs at Phase 111.
+    expect(doc).toMatch(/Phase 111/);
+    expect(doc).toMatch(/PHASE_111_RELEASE_CANDIDATE_SNAPSHOT\.md/);
+  });
+
+  it('MICROSOFT_VIBE_CAPABILITY_COVERAGE.md references the Phase 111 snapshot somewhere', () => {
+    const doc = readDoc('docs/MICROSOFT_VIBE_CAPABILITY_COVERAGE.md');
+    expect(doc).toMatch(/PHASE_111_RELEASE_CANDIDATE_SNAPSHOT\.md/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 135A Ã¢â‚¬â€ Executive demo readiness + release snapshot
+// ---------------------------------------------------------------------------
+
+describe('Phase 135A Ã¢â‚¬â€ Executive workspace release docs exist on disk', () => {
+  const REQUIRED_EXECUTIVE_DOCS: readonly string[] = [
+    'docs/PHASE_133A_EXECUTIVE_WORKSPACE_COMMAND_CENTER.md',
+    'docs/PHASE_133B_EXECUTIVE_WORKSPACE_REACHABILITY.md',
+    'docs/PHASE_133C_EXECUTIVE_PRIMARY_WORKSPACE_SEED.md',
+    'docs/PHASE_134A_EXECUTIVE_WORKSPACE_RUNTIME_VERIFICATION.md',
+    'docs/PHASE_134B_EXECUTIVE_COMMAND_CENTER_DENSITY.md',
+    'docs/PHASE_135A_EXECUTIVE_DEMO_READINESS.md',
+    'docs/PHASE_135B_EXECUTIVE_FINAL_DEMO_SMOKE.md',
+  ];
+  for (const rel of REQUIRED_EXECUTIVE_DOCS) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+});
+
+describe('Phase 135A Ã¢â‚¬â€ Executive demo contract is pinned in the doc', () => {
+  const doc = readDoc('docs/PHASE_135A_EXECUTIVE_DEMO_READINESS.md');
+
+  it('pins that Executive is primary-workspace-name gated', () => {
+    expect(doc).toMatch(/primary[- ]workspace[- ]name gated/i);
+    expect(doc).toMatch(/Executive Dashboard/);
+  });
+
+  it('pins that manager/team entitlement does not proxy Executive access', () => {
+    expect(doc).toMatch(
+      /Manager\/team entitlement does (?:\*\*)?not(?:\*\*)? proxy Executive access/i,
+    );
+  });
+
+  it('pins that the Executive cockpit is dense but honest', () => {
+    expect(doc).toMatch(/Executive cockpit is dense but honest/i);
+  });
+
+  it('pins that empty/partial states are expected demo states', () => {
+    expect(doc).toMatch(/Empty\/partial states are expected demo states/i);
+  });
+
+  it('pins that live provisioning remains pending operator auth availability', () => {
+    expect(doc).toMatch(
+      /Live provisioning remains pending operator auth availability/i,
+    );
+  });
+
+  it('pins that Copilot remains not-configured unless a future connector phase changes it', () => {
+    expect(doc).toMatch(
+      /Copilot remains not-configured[\s\S]*?future connector phase/i,
+    );
+  });
+
+  it('explicitly states no fake metrics / no runtime mock data / no access widening / no Copilot live connector', () => {
+    expect(doc).toMatch(/No fake metrics\./i);
+    expect(doc).toMatch(/No runtime mock data\./i);
+    expect(doc).toMatch(/No access widening\./i);
+    expect(doc).toMatch(/No Copilot live connector\./i);
+  });
+
+  it('does not imply any live Dataverse write is part of Phase 135A', () => {
+    expect(doc).toMatch(/No live Dataverse write is part of Phase 135A/i);
+  });
+});
+
+describe('Phase 135B Ã¢â‚¬â€ Executive final demo smoke contract is pinned in the doc', () => {
+  const doc = readDoc('docs/PHASE_135B_EXECUTIVE_FINAL_DEMO_SMOKE.md');
+
+  it('declares itself a finish pass, not a feature expansion', () => {
+    expect(doc).toMatch(/demo-ready and stable/i);
+    expect(doc).toMatch(/final polish\/hardening pass/i);
+    expect(doc).toMatch(/not(?:\*\*)? a (?:new )?feature expansion/i);
+  });
+
+  it('documents the four+ exact demo states (no-auth, auth-pending, populated, empty, partial)', () => {
+    expect(doc).toMatch(/No-auth ?\/ ?local state/i);
+    expect(doc).toMatch(/Auth-pending state/i);
+    expect(doc).toMatch(/Populated Executive data/i);
+    expect(doc).toMatch(/Empty Executive data/i);
+    expect(doc).toMatch(/Partial Executive data/i);
+  });
+
+  it('pins the known limitations (auth-dependent provisioning, figures not wired, Copilot not configured)', () => {
+    expect(doc).toMatch(
+      /Live Phase 133C provisioning still depends on operator auth\s+availability/i,
+    );
+    expect(doc).toMatch(
+      /Profitability and performance figures remain not wired by\s+governance\s+choice/i,
+    );
+    expect(doc).toMatch(/Copilot remains not configured/i);
+  });
+
+  it('reaffirms the no-write / no-widening guardrails', () => {
+    expect(doc).toMatch(/No Dataverse writes/i);
+    expect(doc).toMatch(/No entitlement widening/i);
+    expect(doc).toMatch(/No write affordances/i);
+    expect(doc).toMatch(/Phase 133C seed behavior unchanged/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 136A Ã¢â‚¬â€ Cross-workspace final parity smoke
+// ---------------------------------------------------------------------------
+
+describe('Phase 136A Ã¢â‚¬â€ Cross-workspace final smoke doc exists and is smoke-only', () => {
+  it('docs/PHASE_136A_CROSS_WORKSPACE_FINAL_SMOKE.md exists on disk', () => {
+    expect(
+      existsSync(
+        resolve(REPO_ROOT, 'docs/PHASE_136A_CROSS_WORKSPACE_FINAL_SMOKE.md'),
+      ),
+    ).toBe(true);
+  });
+
+  const doc = readDoc('docs/PHASE_136A_CROSS_WORKSPACE_FINAL_SMOKE.md');
+
+  it('declares itself a tests + docs smoke phase (not feature work)', () => {
+    expect(doc).toMatch(/tests \+ docs smoke phase/i);
+    expect(doc).toMatch(/not new feature\s+work/i);
+  });
+
+  it('pins that it does not widen access (Executive stays primary-name gated; no proxy)', () => {
+    expect(doc).toMatch(
+      /Executive access comes only from the primary workspace name/i,
+    );
+    expect(doc).toMatch(/Portfolio is a query marker on the manager route/i);
+    expect(doc).toMatch(/no manager\/team\/executive proxy/i);
+  });
+
+  it('pins that it adds no live connectors and keeps every surface read-only', () => {
+    expect(doc).toMatch(/no Copilot live connector/i);
+    expect(doc).toMatch(/Copilot stays governed/i);
+    expect(doc).toMatch(/Every surface is read-only/i);
+  });
+
+  it('pins the known limitations (Executive auth, Copilot not configured, profitability future work)', () => {
+    expect(doc).toMatch(
+      /Executive live provisioning still needs operator auth/i,
+    );
+    expect(doc).toMatch(/Copilot remains not configured/i);
+    expect(doc).toMatch(
+      /Profitability \/ live-connector metrics remain governed future\s+work/i,
+    );
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 137A Ã¢â‚¬â€ Copilot live connector implementation DECISION (doc-only)
+// ---------------------------------------------------------------------------
+
+describe('Phase 137A Ã¢â‚¬â€ Copilot live connector decision is recorded and runtime stays not-configured', () => {
+  const rel = 'docs/PHASE_137A_COPILOT_LIVE_CONNECTOR_DECISION.md';
+
+  it('the Phase 137A decision doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('pins the doc as a decision/spec/governance phase Ã¢â‚¬â€ not an implementation', () => {
+    expect(doc).toMatch(/decision ?\/ ?spec ?\/ ?governance phase, not an\s+implementation/i);
+  });
+
+  it('pins the recommended primary path (Dataverse Custom API + server-side Azure OpenAI)', () => {
+    expect(doc).toMatch(/Dataverse Custom API/i);
+    expect(doc).toMatch(/Azure OpenAI server-side/i);
+  });
+
+  it('pins that the Copilot live connector remains decision-only / not-configured after 137A', () => {
+    expect(doc).toMatch(/Decision documented only\. Runtime remains\s+not-configured/i);
+    expect(doc).toMatch(/No connector code\./i);
+    expect(doc).toMatch(/No enabling live mode\./i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 137B Ã¢â‚¬â€ Copilot Custom API CONTRACT (docs + tests only)
+// ---------------------------------------------------------------------------
+
+describe('Phase 137B Ã¢â‚¬â€ Copilot Custom API contract is recorded and runtime stays not_configured', () => {
+  const rel = 'docs/PHASE_137B_COPILOT_CUSTOM_API_CONTRACT.md';
+
+  it('the Phase 137B contract doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('pins the doc as contract/spec only Ã¢â‚¬â€ no implementation in this phase', () => {
+    expect(doc).toMatch(/Contract ?\/ ?spec only/i);
+    expect(doc).toMatch(/No implementation\./i);
+    expect(doc).toMatch(/No live traffic\./i);
+  });
+
+  it('pins the future Custom API boundary (browser Ã¢â€ â€™ Dataverse Custom API Ã¢â€ â€™ server-side Azure OpenAI)', () => {
+    expect(doc).toMatch(/cr664_RunLosCopilotAssist|cr664_RunCopilotAssist/);
+    expect(doc).toMatch(/The browser calls the Dataverse Custom API only/i);
+    expect(doc).toMatch(/calls Azure OpenAI server-side/i);
+  });
+
+  it('pins that the Copilot runtime remains not_configured after 137B', () => {
+    expect(doc).toMatch(/Runtime remains `?not_configured`?/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 137C Ã¢â‚¬â€ Copilot connector adapter skeleton (disabled by default)
+// ---------------------------------------------------------------------------
+
+describe('Phase 137C Ã¢â‚¬â€ Copilot connector skeleton is inert and runtime stays not_configured', () => {
+  const rel = 'docs/PHASE_137C_COPILOT_CONNECTOR_SKELETON.md';
+
+  it('the Phase 137C skeleton doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('pins the skeleton as disabled-by-default with no network call', () => {
+    expect(doc).toMatch(/disabled by default/i);
+    expect(doc).toMatch(/no network call/i);
+    expect(doc).toMatch(/No transport is wired/i);
+  });
+
+  it('pins that no live mode is enabled and the runtime default stays not_configured', () => {
+    expect(doc).toMatch(/No live mode\./i);
+    expect(doc).toMatch(/default stays \*?\*?`?not_configured`?/i);
+  });
+
+  it('pins that the contract + adapter skeleton files were added', () => {
+    expect(doc).toMatch(/copilotCustomApiContract\.ts/);
+    expect(doc).toMatch(/copilotCustomApiAdapter\.ts/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 137D Ã¢â‚¬â€ Copilot transport seam + config resolver (disabled by default)
+// ---------------------------------------------------------------------------
+
+describe('Phase 137D Ã¢â‚¬â€ Copilot transport seam adds config gating only, no concrete transport', () => {
+  const rel = 'docs/PHASE_137D_COPILOT_TRANSPORT_SEAM.md';
+
+  it('the Phase 137D transport-seam doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('pins the config resolver + transport seam as disabled-by-default with no network', () => {
+    expect(doc).toMatch(/config resolver/i);
+    expect(doc).toMatch(/transport seam/i);
+    expect(doc).toMatch(/no network call/i);
+    expect(doc).toMatch(/disabled by default/i);
+  });
+
+  it('pins that no concrete transport exists and the default stays not_configured', () => {
+    expect(doc).toMatch(/it does not exist in this phase|no concrete transport exists yet/i);
+    expect(doc).toMatch(/default (?:stays|remains) `?not_configured`?/i);
+  });
+
+  it('pins that secret-looking config fails closed', () => {
+    expect(doc).toMatch(/fail(?:s|ing)? closed/i);
+    expect(doc).toMatch(/secret/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 137E Ã¢â‚¬â€ Copilot Custom API transport stub (no concrete live transport)
+// ---------------------------------------------------------------------------
+
+describe('Phase 137E Ã¢â‚¬â€ Copilot transport stub is fail-closed and no live transport is enabled', () => {
+  const rel = 'docs/PHASE_137E_COPILOT_CUSTOM_API_TRANSPORT_STUB.md';
+
+  it('the Phase 137E transport-stub doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('pins the doc as a stub/factory only Ã¢â‚¬â€ no concrete live transport', () => {
+    expect(doc).toMatch(/transport stub/i);
+    expect(doc).toMatch(/fail(?:s|ing)? closed/i);
+    expect(doc).toMatch(/no network call/i);
+  });
+
+  it('pins that the default stays not_configured and no transport is wired by default', () => {
+    expect(doc).toMatch(/default (?:stays|remains) `?not_configured`?/i);
+    expect(doc).toMatch(/there is no default/i);
+  });
+
+  it('pins the readiness blockers for a real implementation', () => {
+    expect(doc).toMatch(/transport is not implemented/i);
+    expect(doc).toMatch(/Audit \/ event ledger logger not wired/i);
+    expect(doc).toMatch(/DLP and Azure OpenAI model policy not approved/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 137G Ã¢â‚¬â€ Copilot Custom API metadata script (guarded dry-run first)
+// ---------------------------------------------------------------------------
+
+describe('Phase 137G Ã¢â‚¬â€ Copilot Custom API metadata script is dry-run-first with no live connector', () => {
+  const rel = 'docs/PHASE_137G_COPILOT_CUSTOM_API_METADATA_SCRIPT.md';
+
+  it('the Phase 137G metadata-script doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('pins the script as dry-run-first / spec only with nothing created', () => {
+    expect(doc).toMatch(/dry-run first/i);
+    expect(doc).toMatch(/nothing is created/i);
+    expect(doc).toMatch(/live metadata creation is[\s\S]{0,40}not\s+implemented/i);
+  });
+
+  it('pins the cr664_RunLosCopilotAssist target and the inspect/seed commands', () => {
+    expect(doc).toMatch(/cr664_RunLosCopilotAssist/);
+    expect(doc).toMatch(/--inspect-copilot-custom-api/);
+    expect(doc).toMatch(/--seed-copilot-custom-api-metadata/);
+  });
+
+  it('pins that the runtime Copilot connector remains not_configured and no live connector is enabled', () => {
+    expect(doc).toMatch(/stays \*?\*?`?not_configured`?|remains not_configured/i);
+    expect(doc).toMatch(/no live enablement/i);
+    expect(doc).toMatch(/no browser-direct Azure OpenAI|no real `?fetch`? to Azure\/OpenAI/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 137H Ã¢â‚¬â€ Copilot server-side plugin / Azure Function skeleton spec
+// ---------------------------------------------------------------------------
+
+describe('Phase 137H Ã¢â‚¬â€ Copilot server-side skeleton spec is docs-only with no runtime/live behavior', () => {
+  const rel = 'docs/PHASE_137H_COPILOT_SERVER_SIDE_SKELETON_SPEC.md';
+
+  it('the Phase 137H server-side skeleton-spec doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('pins the doc as server-side skeleton/spec only Ã¢â‚¬â€ nothing created', () => {
+    expect(doc).toMatch(/server-side skeleton ?\/ ?spec only/i);
+    expect(doc).toMatch(/No plugin code\./i);
+    expect(doc).toMatch(/No live traffic\./i);
+    expect(doc).toMatch(/No client runtime change\./i);
+  });
+
+  it('pins the cr664_RunLosCopilotAssist target + plugin-primary / Azure-Function-alternative recommendation', () => {
+    expect(doc).toMatch(/cr664_RunLosCopilotAssist/);
+    expect(doc).toMatch(/Dataverse plugin[\s\S]*?recommended/i);
+    expect(doc).toMatch(/Azure Function/);
+  });
+
+  it('pins server-side Azure OpenAI only + audit/fail-closed + runtime not_configured', () => {
+    expect(doc).toMatch(/Server-side only/i);
+    expect(doc).toMatch(/audit_unavailable/);
+    expect(doc).toMatch(/Runtime remains `?not_configured`?/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 137I Ã¢â‚¬â€ Copilot audit / event ledger design (docs-only)
+// ---------------------------------------------------------------------------
+
+describe('Phase 137I Ã¢â‚¬â€ Copilot audit/event ledger design is docs-only with no runtime/live behavior', () => {
+  const rel = 'docs/PHASE_137I_COPILOT_AUDIT_EVENT_LEDGER_DESIGN.md';
+
+  it('the Phase 137I audit-ledger design doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('pins the doc as audit-design only Ã¢â‚¬â€ no table/migration/runtime created', () => {
+    expect(doc).toMatch(/audit ?\/ ?event ledger design only/i);
+    expect(doc).toMatch(/No Dataverse table creation\./i);
+    expect(doc).toMatch(/No live enablement\./i);
+  });
+
+  it('pins the audit-before-model rule + audit_unavailable fail-closed', () => {
+    expect(doc).toMatch(/before any Azure\s+OpenAI ?\/ ?model call/i);
+    expect(doc).toMatch(/failClosedCode: audit_unavailable/);
+  });
+
+  it('pins the proposed cr664_copilotauditevent ledger + correlationId discipline', () => {
+    expect(doc).toMatch(/cr664_copilotauditevent/);
+    expect(doc).toMatch(/cr664_correlationid/);
+  });
+
+  it('pins that the runtime Copilot connector remains not_configured', () => {
+    expect(doc).toMatch(/Runtime remains `?not_configured`?/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 137J Ã¢â‚¬â€ Copilot audit-event table metadata script (dry-run first)
+// ---------------------------------------------------------------------------
+
+describe('Phase 137J Ã¢â‚¬â€ Copilot audit-table metadata script is dry-run-only with no live/runtime behavior', () => {
+  const rel = 'docs/PHASE_137J_COPILOT_AUDIT_TABLE_METADATA_SCRIPT.md';
+
+  it('the Phase 137J audit-table metadata-script doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('pins the script as dry-run metadata script/spec only Ã¢â‚¬â€ no table created', () => {
+    expect(doc).toMatch(/Dry-run metadata script ?\/ ?spec only/i);
+    expect(doc).toMatch(/No table creation in Phase 137J/i);
+    expect(doc).toMatch(/not implemented/i);
+  });
+
+  it('pins the cr664_copilotauditevent target + inspect/seed commands', () => {
+    expect(doc).toMatch(/cr664_copilotauditevent/);
+    expect(doc).toMatch(/--inspect-copilot-audit-table/);
+    expect(doc).toMatch(/--seed-copilot-audit-table-metadata/);
+  });
+
+  it('pins the audit-before-model rule and runtime staying not_configured', () => {
+    expect(doc).toMatch(/audit_start[\s\S]{0,80}before any Azure\s+OpenAI ?\/ ?model call/i);
+    expect(doc).toMatch(/audit_unavailable/);
+    expect(doc).toMatch(/remains[\s>*`]+not_configured/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 138B Ã¢â‚¬â€ Copilot audit-table guarded commit path (future-only)
+// ---------------------------------------------------------------------------
+
+describe('Phase 138B Ã¢â‚¬â€ Copilot audit-table commit path is operator-only and live stays not_configured', () => {
+  const rel = 'docs/PHASE_138B_COPILOT_AUDIT_TABLE_COMMIT_PATH.md';
+
+  it('the Phase 138B audit-table commit-path doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('pins the commit path as future-only / not implemented, dry-run default, no write', () => {
+    expect(doc).toMatch(/Dry-run remains the default/i);
+    expect(doc).toMatch(/Commit is future-only ?\/ ?NOT IMPLEMENTED in 138B/i);
+    expect(doc).toMatch(/No table is created/i);
+  });
+
+  it('pins commit mode as operator-only (not run by tests) + idempotent inspect-first contract', () => {
+    expect(doc).toMatch(/test tenant/i);
+    expect(doc).toMatch(/Inspect first/i);
+    expect(doc).toMatch(/Idempotent/i);
+    expect(doc).toMatch(/Bail on ambiguous/i);
+  });
+
+  it('pins live Copilot still remains not_configured after 138B', () => {
+    expect(doc).toMatch(/Copilot still remains not_configured/i);
+    expect(doc).toMatch(/stays[\s>*`]+not_configured/i);
+    expect(doc).toMatch(/cr664_copilotauditevent/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 138C Ã¢â‚¬â€ Copilot controlled live-enablement bundle (guarded, blocked)
+// ---------------------------------------------------------------------------
+
+describe('Phase 138C Ã¢â‚¬â€ Copilot controlled live-enablement bundle: guarded, production blocked', () => {
+  const DOCS = [
+    'docs/PHASE_138C_COPILOT_SERVER_HANDLER_DEPLOYMENT_PLAN.md',
+    'docs/PHASE_138C_COPILOT_CONTROLLED_TEST_TENANT_ENABLEMENT.md',
+    'docs/PHASE_138C_COPILOT_LIVE_READINESS_CERTIFICATION.md',
+  ];
+
+  for (const rel of DOCS) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  it('the live-readiness certification pins repo complete / live disabled / production blocked', () => {
+    const doc = readDoc('docs/PHASE_138C_COPILOT_LIVE_READINESS_CERTIFICATION.md');
+    expect(doc).toMatch(/Repo-side Copilot work is complete/i);
+    expect(doc).toMatch(/Live Copilot remains disabled/i);
+    expect(doc).toMatch(/Production[\s\S]{0,30}[Bb]locked/);
+    expect(doc).toMatch(/Default connector mode:[\s\S]{0,20}not_configured/i);
+  });
+
+  it('the test-tenant runbook requires all prerequisites before live_read_only', () => {
+    const doc = readDoc('docs/PHASE_138C_COPILOT_CONTROLLED_TEST_TENANT_ENABLEMENT.md');
+    expect(doc).toMatch(/Audit table exists and verified/i);
+    expect(doc).toMatch(/Custom API exists and verified/i);
+    expect(doc).toMatch(/Disable switch configured/i);
+    expect(doc).toMatch(/Test tenant only/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 139A Ã¢â‚¬â€ Copilot final completion bundle (repo complete, live blocked)
+// ---------------------------------------------------------------------------
+
+describe('Phase 139A Ã¢â‚¬â€ Copilot final completion: repo complete, live disabled, production blocked', () => {
+  const DOCS = [
+    'docs/PHASE_139A_COPILOT_FINAL_OPERATOR_COMMANDS.md',
+    'docs/PHASE_139A_COPILOT_SERVER_HANDLER_PACKAGE_PLAN.md',
+    'docs/PHASE_139A_COPILOT_TEST_TENANT_VALIDATION_PACKET.md',
+    'docs/PHASE_139A_COPILOT_FINAL_COMPLETION_CERTIFICATION.md',
+  ];
+
+  for (const rel of DOCS) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  const cert = readDoc('docs/PHASE_139A_COPILOT_FINAL_COMPLETION_CERTIFICATION.md');
+
+  it('the final certification pins repo-complete end-to-end, live disabled, default not_configured', () => {
+    expect(cert).toMatch(/Repo-side Copilot work is complete end-to-end/i);
+    expect(cert).toMatch(/Live Copilot remains disabled/i);
+    expect(cert).toMatch(/Default mode remains `?not_configured`?/i);
+  });
+
+  it('the final certification pins production blocked + both commit paths future-only', () => {
+    expect(cert).toMatch(/Production remains blocked/i);
+    expect(cert).toMatch(/Audit table tooling[\s\S]{0,60}commit future-only ?\/ ?not implemented/i);
+    expect(cert).toMatch(/Custom API tooling[\s\S]{0,60}commit future-only ?\/ ?not implemented/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 137K Ã¢â‚¬â€ Copilot audit-logger skeleton (disabled)
+// ---------------------------------------------------------------------------
+
+describe('Phase 137K Ã¢â‚¬â€ Copilot audit-logger skeleton is inert with no live write/runtime behavior', () => {
+  const rel = 'docs/PHASE_137K_COPILOT_AUDIT_LOGGER_SKELETON.md';
+
+  it('the Phase 137K audit-logger skeleton doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('pins the doc as skeleton/interface only Ã¢â‚¬â€ no Dataverse table write, no table creation', () => {
+    expect(doc).toMatch(/Skeleton ?\/ ?interface only/i);
+    expect(doc).toMatch(/No Dataverse table write\./i);
+    expect(doc).toMatch(/No table creation\./i);
+  });
+
+  it('pins the disabled logger fail-closed behavior (audit_unavailable, no event id)', () => {
+    expect(doc).toMatch(/audit_unavailable/);
+    expect(doc).toMatch(/never fabricates an `?eventId`?/i);
+    expect(doc).toMatch(/cr664_copilotauditevent/);
+  });
+
+  it('pins the audit-before-model rule and runtime staying not_configured', () => {
+    expect(doc).toMatch(/before any Azure\s+OpenAI ?\/ ?model\s+call/i);
+    expect(doc).toMatch(/remains[\s>*`]+not_configured/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 137L Ã¢â‚¬â€ Copilot server handler + readiness bundle (disabled)
+// ---------------------------------------------------------------------------
+
+describe('Phase 137L Ã¢â‚¬â€ Copilot server-handler readiness bundle is disabled with no live behavior', () => {
+  const rel = 'docs/PHASE_137L_COPILOT_SERVER_HANDLER_READINESS_BUNDLE.md';
+
+  it('the Phase 137L readiness-bundle doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('pins the doc as a disabled readiness bundle with no live enablement', () => {
+    expect(doc).toMatch(/Disabled readiness bundle only/i);
+    expect(doc).toMatch(/No live enablement in (Phase )?137L/i);
+  });
+
+  it('pins the audit-before-model fail-closed handler + never-ready harness', () => {
+    expect(doc).toMatch(/audit_start[\s\S]{0,120}before any Azure\s+OpenAI ?\/ ?model\s+call/i);
+    expect(doc).toMatch(/audit_unavailable/);
+    expect(doc).toMatch(/model boundary is (an interface only|never|never reached)/i);
+  });
+
+  it('pins runtime staying not_configured + the remaining blockers', () => {
+    expect(doc).toMatch(/stays[\s>*`]+not_configured/i);
+    expect(doc).toMatch(/cr664_copilotauditevent/);
+    expect(doc).toMatch(/Live mode not enabled/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 137M Ã¢â‚¬â€ Copilot governance checkpoint packet (docs-only)
+// ---------------------------------------------------------------------------
+
+describe('Phase 137M Ã¢â‚¬â€ Copilot governance checkpoint is docs-only with no runtime/live behavior', () => {
+  const rel = 'docs/PHASE_137M_COPILOT_GOVERNANCE_CHECKPOINT.md';
+
+  it('the Phase 137M governance checkpoint doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('pins the doc as a governance checkpoint only Ã¢â‚¬â€ no live enablement, no runtime change', () => {
+    expect(doc).toMatch(/Governance checkpoint only/i);
+    expect(doc).toMatch(/No live enablement in 137M/i);
+    expect(doc).toMatch(/No runtime behavior change\./i);
+  });
+
+  it('pins the full 137AÃ¢â‚¬â€œ137L summary + architecture + gates + runtime not_configured', () => {
+    expect(doc).toMatch(/137A/);
+    expect(doc).toMatch(/137L/);
+    expect(doc).toMatch(/Browser.*Dataverse Custom API/i);
+    expect(doc).toMatch(/Gate 1/);
+    expect(doc).toMatch(/Gate 9/);
+    expect(doc).toMatch(/Runtime default remains `?not_configured`?/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 138A Ã¢â‚¬â€ Copilot completion certification (docs-only)
+// ---------------------------------------------------------------------------
+
+describe('Phase 138A Ã¢â‚¬â€ Copilot completion certification is docs-only and live not enabled', () => {
+  const rel = 'docs/PHASE_138A_COPILOT_COMPLETION_CERTIFICATION.md';
+
+  it('the Phase 138A completion certification doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  it('the full 137AÃ¢â‚¬â€œ137M Copilot doc set still exists', () => {
+    const DOCS = [
+      'docs/PHASE_137A_COPILOT_LIVE_CONNECTOR_DECISION.md',
+      'docs/PHASE_137B_COPILOT_CUSTOM_API_CONTRACT.md',
+      'docs/PHASE_137C_COPILOT_CONNECTOR_SKELETON.md',
+      'docs/PHASE_137D_COPILOT_TRANSPORT_SEAM.md',
+      'docs/PHASE_137E_COPILOT_CUSTOM_API_TRANSPORT_STUB.md',
+      'docs/PHASE_137F_COPILOT_CUSTOM_API_REGISTRATION_RUNBOOK.md',
+      'docs/PHASE_137G_COPILOT_CUSTOM_API_METADATA_SCRIPT.md',
+      'docs/PHASE_137H_COPILOT_SERVER_SIDE_SKELETON_SPEC.md',
+      'docs/PHASE_137I_COPILOT_AUDIT_EVENT_LEDGER_DESIGN.md',
+      'docs/PHASE_137J_COPILOT_AUDIT_TABLE_METADATA_SCRIPT.md',
+      'docs/PHASE_137K_COPILOT_AUDIT_LOGGER_SKELETON.md',
+      'docs/PHASE_137L_COPILOT_SERVER_HANDLER_READINESS_BUNDLE.md',
+      'docs/PHASE_137M_COPILOT_GOVERNANCE_CHECKPOINT.md',
+    ];
+    for (const d of DOCS) {
+      expect(existsSync(resolve(REPO_ROOT, d)), d).toBe(true);
+    }
+  });
+
+  const doc = readDoc(rel);
+
+  it('pins Copilot readiness complete / live not enabled / default not_configured', () => {
+    expect(doc).toMatch(/Copilot readiness is complete/i);
+    expect(doc).toMatch(/live enablement is intentionally NOT active/i);
+    expect(doc).toMatch(/Runtime default remains `?not_configured`?/i);
+  });
+
+  it('pins no live/runtime behavior + the remaining external gates', () => {
+    expect(doc).toMatch(/No live enablement in 138A/i);
+    expect(doc).toMatch(/No runtime UI change\./i);
+    expect(doc).toMatch(/BLOCKED ?\/ ?EXTERNAL/i);
+    expect(doc).toMatch(/Definition of done/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 137F Ã¢â‚¬â€ Copilot Custom API registration runbook (docs/spec only)
+// ---------------------------------------------------------------------------
+
+describe('Phase 137F Ã¢â‚¬â€ Copilot Custom API registration runbook is spec-only, no runtime change', () => {
+  const rel = 'docs/PHASE_137F_COPILOT_CUSTOM_API_REGISTRATION_RUNBOOK.md';
+
+  it('the Phase 137F runbook doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('pins the doc as registration/runbook/spec only Ã¢â‚¬â€ nothing is created', () => {
+    expect(doc).toMatch(/registration ?\/ ?runbook ?\/ ?spec only/i);
+    expect(doc).toMatch(/No Custom API is created in this phase/i);
+    expect(doc).toMatch(/No client runtime behavior change\./i);
+  });
+
+  it('pins the cr664_RunLosCopilotAssist target and runtime staying not_configured', () => {
+    expect(doc).toMatch(/cr664_RunLosCopilotAssist/);
+    expect(doc).toMatch(/Runtime remains `?not_configured`?/i);
+  });
+
+  it('pins server-side Azure OpenAI only + audit-before-enable + future phases', () => {
+    expect(doc).toMatch(/Call Azure OpenAI server-side only/i);
+    expect(doc).toMatch(/before live\s+enablement/i);
+    expect(doc).toMatch(/137G/);
+    expect(doc).toMatch(/137K/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 140A Ã¢â‚¬â€ FDIC Remediation Lending OS Mega Foundation (model/docs/tests)
+// ---------------------------------------------------------------------------
+
+describe('Phase 140A Ã¢â‚¬â€ FDIC remediation foundation docs + model files exist', () => {
+  const REQUIRED_FDIC_DOCS: readonly string[] = [
+    'docs/PHASE_140A_FDIC_REMEDIATION_OPERATING_MODEL.md',
+    'docs/FDIC_REMEDIATION_PLATFORM_BLUEPRINT.md',
+  ];
+  for (const rel of REQUIRED_FDIC_DOCS) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  const REQUIRED_FDIC_MODEL_FILES: readonly string[] = [
+    'src/shared/fdic/fdicRemediationOperatingModel.ts',
+    'src/shared/fdic/fdicWorkspaceResponsibilityMap.ts',
+    'src/shared/fdic/fdicEvidenceArchitecture.ts',
+    'src/shared/fdic/fdicRemediationArchitectureSnapshot.ts',
+    'src/shared/fdic/fdicRemediationRoadmap.ts',
+    // The governance pin that holds the no-fake-compliance discipline.
+    'src/shared/governance/fdicRemediationOperatingModelGovernance.test.ts',
+  ];
+  for (const rel of REQUIRED_FDIC_MODEL_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+});
+
+describe('Phase 140A Ã¢â‚¬â€ FDIC foundation pins the no-fake-compliance rule and is model/docs/tests only', () => {
+  const opModel = readDoc('docs/PHASE_140A_FDIC_REMEDIATION_OPERATING_MODEL.md');
+  const blueprint = readDoc('docs/FDIC_REMEDIATION_PLATFORM_BLUEPRINT.md');
+
+  it('declares itself domain model + docs + tests with no visible UI / schema / writes', () => {
+    expect(opModel).toMatch(/domain model \+ docs \+ tests only/i);
+    expect(opModel).toMatch(/No visible UI change/i);
+    expect(opModel).toMatch(/No Dataverse schema/i);
+  });
+
+  it('pins the no-fake-compliance rule in both FDIC docs', () => {
+    expect(opModel).toMatch(/No fake compliance/i);
+    expect(opModel).toMatch(/Evidence is not automatically compliance/i);
+    expect(blueprint).toMatch(/No fake compliance/i);
+    expect(blueprint).toMatch(/does not equal remediation/i);
+  });
+
+  it('pins portfolio as the control tower, not the sole remediation owner', () => {
+    expect(opModel).toMatch(/control tower/i);
+    expect(opModel).toMatch(/not the sole/i);
+  });
+
+  it('pins the future roadmap covering 140B through 140K', () => {
+    expect(opModel).toMatch(/140B/);
+    expect(opModel).toMatch(/140K/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 140B Ã¢â‚¬â€ Portfolio Loan Boarding System of Record (model/tests/docs)
+// ---------------------------------------------------------------------------
+
+describe('Phase 140B Ã¢â‚¬â€ portfolio loan boarding system of record exists', () => {
+  const REQUIRED_BOARDING_FILES: readonly string[] = [
+    'src/shared/portfolioBoarding/portfolioLoanBoardingTypes.ts',
+    'src/shared/portfolioBoarding/portfolioLoanBoardingCatalog.ts',
+    'src/shared/portfolioBoarding/portfolioLoanDocumentCatalog.ts',
+    'src/shared/portfolioBoarding/derivePortfolioLoanBoardingCompleteness.ts',
+    'src/shared/portfolioBoarding/portfolioLoanBoardingSnapshot.ts',
+    // Tests that hold the foundation's discipline.
+    'src/shared/portfolioBoarding/portfolioLoanBoardingCatalog.test.ts',
+    'src/shared/portfolioBoarding/portfolioLoanDocumentCatalog.test.ts',
+    'src/shared/portfolioBoarding/derivePortfolioLoanBoardingCompleteness.test.ts',
+    'src/shared/portfolioBoarding/portfolioLoanBoardingSnapshot.test.ts',
+    'src/shared/portfolioBoarding/portfolioLoanBoardingGovernance.test.ts',
+  ];
+  for (const rel of REQUIRED_BOARDING_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  it('docs/PHASE_140B_PORTFOLIO_LOAN_BOARDING_SYSTEM_OF_RECORD.md exists on disk', () => {
+    expect(
+      existsSync(
+        resolve(
+          REPO_ROOT,
+          'docs/PHASE_140B_PORTFOLIO_LOAN_BOARDING_SYSTEM_OF_RECORD.md',
+        ),
+      ),
+    ).toBe(true);
+  });
+});
+
+describe('Phase 140B Ã¢â‚¬â€ boarding doc pins foundation-only scope', () => {
+  const doc = readDoc(
+    'docs/PHASE_140B_PORTFOLIO_LOAN_BOARDING_SYSTEM_OF_RECORD.md',
+  );
+
+  it('declares the manual closed-loan boarding path and foundation-first scope', () => {
+    expect(doc).toMatch(/system of record/i);
+    expect(doc).toMatch(/manual/i);
+    expect(doc).toMatch(/foundation-first|foundation first/i);
+  });
+
+  it('pins the no-live-write / no-React-UI / no-fake-data constraints', () => {
+    expect(doc).toMatch(/No live Dataverse writes/i);
+    expect(doc).toMatch(/No React UI/i);
+    expect(doc).toMatch(/No fake (portfolio|borrower)/i);
+  });
+
+  it('pins fail-closed readiness for FDIC / board / portfolio monitoring', () => {
+    expect(doc).toMatch(/fail-closed/i);
+    expect(doc).toMatch(/FDIC/);
+    expect(doc).toMatch(/board/i);
+    expect(doc).toMatch(/portfolio monitoring/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 140B-H Ã¢â‚¬â€ Portfolio Loan Boarding mega phase files
+// ---------------------------------------------------------------------------
+
+describe('Phase 140B-H Ã¢â‚¬â€ all mega-phase files exist on disk', () => {
+  const REQUIRED_140BH_FILES: readonly string[] = [
+    'docs/PHASE_140B_H_PORTFOLIO_LOAN_BOARDING_SYSTEM_OF_RECORD.md',
+    'src/shared/portfolioBoarding/portfolioLoanBoardingTypes.ts',
+    'src/shared/portfolioBoarding/portfolioLoanBoardingCatalog.ts',
+    'src/shared/portfolioBoarding/portfolioLoanDocumentCatalog.ts',
+    'src/shared/portfolioBoarding/derivePortfolioLoanBoardingCompleteness.ts',
+    'src/shared/portfolioBoarding/portfolioLoanBoardingSnapshot.ts',
+    'src/shared/portfolioBoarding/portfolioLoanDocumentClassifier.ts',
+    'src/shared/portfolioBoarding/portfolioLoanEvidenceBinder.ts',
+    'src/shared/portfolioBoarding/portfolioLoanDocumentReadiness.ts',
+    'src/shared/portfolioBoarding/fdicExaminerPackage.ts',
+    'src/portfolioBoarding/PortfolioLoanBoardingPreview.tsx',
+    'src/portfolioBoarding/PortfolioLoanBoardingEditor.tsx',
+    'src/portfolioBoarding/PortfolioLoanBoardingDocumentUploadPanel.tsx',
+    'src/portfolioBoarding/portfolioLoanBoardingWriteAdapter.ts',
+    'src/portfolioBoarding/portfolioLoanDocumentUploadAdapter.ts',
+    'src/portfolioBoarding/portfolioLoanBoardingPersistenceTypes.ts',
+    'src/portfolioBoarding/portfolioLoanBoardingDataverseMapper.ts',
+    'src/portfolioBoarding/portfolioLoanBoardingDataverseAdapter.ts',
+    'src/portfolioBoarding/portfolioBoardingCommandCenterAdapter.ts',
+    'src/shared/portfolioBoarding/portfolioLoanBoardingGovernance.test.ts',
+  ];
+  for (const rel of REQUIRED_140BH_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+});
+
+// ---------------------------------------------------------------------------
+// Phase 140I Ã¢â‚¬â€ Portfolio Boarding Dataverse schema inspection + plan
+// ---------------------------------------------------------------------------
+
+describe('Phase 140I Ã¢â‚¬â€ portfolio boarding Dataverse schema inspection foundation exists', () => {
+  const REQUIRED_140I_FILES: readonly string[] = [
+    'docs/PHASE_140I_PORTFOLIO_BOARDING_DATAVERSE_SCHEMA_INSPECTION.md',
+    'src/portfolioBoarding/portfolioLoanBoardingDataverseSchemaPlan.ts',
+    'src/portfolioBoarding/portfolioLoanBoardingDataverseSchemaPlan.test.ts',
+    'src/portfolioBoarding/derivePortfolioBoardingSchemaInspectionReport.ts',
+    'src/portfolioBoarding/derivePortfolioBoardingSchemaInspectionReport.test.ts',
+    // The Phase 140B-H doc must remain pinned alongside the new schema work.
+    'docs/PHASE_140B_H_PORTFOLIO_LOAN_BOARDING_SYSTEM_OF_RECORD.md',
+  ];
+  for (const rel of REQUIRED_140I_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  const doc = readDoc(
+    'docs/PHASE_140I_PORTFOLIO_BOARDING_DATAVERSE_SCHEMA_INSPECTION.md',
+  );
+
+  it('the doc pins read-only inspect/plan modes with no schema creation', () => {
+    expect(doc).toMatch(/--inspect-portfolio-boarding-schema/);
+    expect(doc).toMatch(/--plan-portfolio-boarding-schema/);
+    expect(doc).toMatch(/no (actual )?Dataverse (table|schema) creation/i);
+    expect(doc).toMatch(/dry-run only/i);
+  });
+
+  it('the script still exposes both read-only inspect/plan modes', () => {
+    const script = readFileSync(
+      resolve(REPO_ROOT, 'scripts/phase122-lookup-repair.mjs'),
+      'utf8',
+    );
+    expect(script).toMatch(/'--inspect-portfolio-boarding-schema'/);
+    expect(script).toMatch(/'--plan-portfolio-boarding-schema'/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 140J Ã¢â‚¬â€ Guarded portfolio boarding schema seed mode
+// ---------------------------------------------------------------------------
+
+describe('Phase 140J Ã¢â‚¬â€ guarded portfolio boarding schema seed foundation exists', () => {
+  const REQUIRED_140J_FILES: readonly string[] = [
+    'docs/PHASE_140J_PORTFOLIO_BOARDING_DATAVERSE_SCHEMA_SEED_MODE.md',
+    'src/portfolioBoarding/derivePortfolioBoardingSchemaSeedPlan.ts',
+    'src/portfolioBoarding/derivePortfolioBoardingSchemaSeedPlan.test.ts',
+    // Phase 140I + 140B-H artifacts must remain pinned.
+    'src/portfolioBoarding/portfolioLoanBoardingDataverseSchemaPlan.ts',
+    'src/portfolioBoarding/derivePortfolioBoardingSchemaInspectionReport.ts',
+    'docs/PHASE_140I_PORTFOLIO_BOARDING_DATAVERSE_SCHEMA_INSPECTION.md',
+    'docs/PHASE_140B_H_PORTFOLIO_LOAN_BOARDING_SYSTEM_OF_RECORD.md',
+  ];
+  for (const rel of REQUIRED_140J_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  const doc = readDoc(
+    'docs/PHASE_140J_PORTFOLIO_BOARDING_DATAVERSE_SCHEMA_SEED_MODE.md',
+  );
+
+  it('the doc pins dry-run-default + explicit commit flag + no runtime persistence', () => {
+    expect(doc).toMatch(/--seed-portfolio-boarding-schema/);
+    expect(doc).toMatch(/--commit-seed-portfolio-boarding-schema/);
+    expect(doc).toMatch(/dry-run/i);
+    expect(doc).toMatch(/does not enable app runtime portfolio boarding writes/i);
+  });
+
+  it('the script gates the commit flag behind the seed mode and creates no loan records', () => {
+    const script = readFileSync(
+      resolve(REPO_ROOT, 'scripts/phase122-lookup-repair.mjs'),
+      'utf8',
+    );
+    expect(script).toMatch(/'--seed-portfolio-boarding-schema'/);
+    expect(script).toMatch(/'--commit-seed-portfolio-boarding-schema'/);
+    expect(script).toMatch(
+      /--commit-seed-portfolio-boarding-schema has no effect without --seed-portfolio-boarding-schema/,
+    );
+    expect(script).toMatch(/never loan records/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 140K Ã¢â‚¬â€ schema verification + optional-relationship repair
+// ---------------------------------------------------------------------------
+
+describe('Phase 140K Ã¢â‚¬â€ schema verification + optional-relationship repair foundation exists', () => {
+  const REQUIRED_140K_FILES: readonly string[] = [
+    'docs/PHASE_140K_PORTFOLIO_BOARDING_SCHEMA_VERIFICATION_AND_OPTIONAL_RELATIONSHIP_REPAIR.md',
+    'src/portfolioBoarding/derivePortfolioBoardingSchemaVerificationReport.ts',
+    'src/portfolioBoarding/derivePortfolioBoardingSchemaVerificationReport.test.ts',
+    // Earlier-phase artifacts must remain pinned.
+    'src/portfolioBoarding/derivePortfolioBoardingSchemaSeedPlan.ts',
+    'src/portfolioBoarding/derivePortfolioBoardingSchemaInspectionReport.ts',
+    'docs/PHASE_140J_PORTFOLIO_BOARDING_DATAVERSE_SCHEMA_SEED_MODE.md',
+    'docs/PHASE_140B_H_PORTFOLIO_LOAN_BOARDING_SYSTEM_OF_RECORD.md',
+  ];
+  for (const rel of REQUIRED_140K_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  const doc = readDoc(
+    'docs/PHASE_140K_PORTFOLIO_BOARDING_SCHEMA_VERIFICATION_AND_OPTIONAL_RELATIONSHIP_REPAIR.md',
+  );
+
+  it('the doc pins the repair mode (dry-run default), verification, and no runtime persistence', () => {
+    expect(doc).toMatch(/--repair-portfolio-boarding-optional-relationships/);
+    expect(doc).toMatch(/--commit-repair-portfolio-boarding-optional-relationships/);
+    expect(doc).toMatch(/evidence.{0,3}document/i);
+    expect(doc).toMatch(/no live app persistence/i);
+  });
+
+  it('the script exposes the repair mode, gates its commit flag, and adds the verification section', () => {
+    const script = readFileSync(
+      resolve(REPO_ROOT, 'scripts/phase122-lookup-repair.mjs'),
+      'utf8',
+    );
+    expect(script).toMatch(/'--repair-portfolio-boarding-optional-relationships'/);
+    expect(script).toMatch(/'--commit-repair-portfolio-boarding-optional-relationships'/);
+    expect(script).toMatch(
+      /--commit-repair-portfolio-boarding-optional-relationships has no effect without --repair-portfolio-boarding-optional-relationships/,
+    );
+    expect(script).toMatch(/PORTFOLIO_BOARDING_SCHEMA_VERIFICATION/);
+    expect(script).toMatch(/safeForRuntimePersistenceCandidate/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 140L Ã¢â‚¬â€ live persistence adapter (disabled by default)
+// ---------------------------------------------------------------------------
+
+describe('Phase 140L Ã¢â‚¬â€ portfolio boarding live persistence adapter foundation exists', () => {
+  const REQUIRED_140L_FILES: readonly string[] = [
+    'docs/PHASE_140L_PORTFOLIO_BOARDING_LIVE_PERSISTENCE_ADAPTER.md',
+    'src/portfolioBoarding/portfolioLoanBoardingFeatureFlags.ts',
+    'src/portfolioBoarding/portfolioLoanBoardingLivePersistence.ts',
+    'src/portfolioBoarding/portfolioLoanBoardingLivePersistence.test.ts',
+    'src/portfolioBoarding/resolvePortfolioLoanBoardingAdapter.ts',
+    'src/shared/governance/portfolioBoardingLivePersistenceGovernance.test.ts',
+    // Earlier-phase artifacts must remain pinned.
+    'src/portfolioBoarding/derivePortfolioBoardingSchemaVerificationReport.ts',
+    'docs/PHASE_140K_PORTFOLIO_BOARDING_SCHEMA_VERIFICATION_AND_OPTIONAL_RELATIONSHIP_REPAIR.md',
+  ];
+  for (const rel of REQUIRED_140L_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  const doc = readDoc('docs/PHASE_140L_PORTFOLIO_BOARDING_LIVE_PERSISTENCE_ADAPTER.md');
+
+  it('the doc pins disabled-by-default, schema-scoped, no-delete, no-route', () => {
+    expect(doc).toMatch(/disabled by default/i);
+    expect(doc).toMatch(/PORTFOLIO_BOARDING_LIVE_PERSISTENCE_ENABLED/);
+    expect(doc).toMatch(/no UI route/i);
+    expect(doc).toMatch(/no delete/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 140M-P Ã¢â‚¬â€ operator UI, document/evidence persistence, FDIC package
+// ---------------------------------------------------------------------------
+
+describe('Phase 140M-P Ã¢â‚¬â€ portfolio boarding operator workflow + FDIC package exist', () => {
+  const REQUIRED_140MP_FILES: readonly string[] = [
+    'docs/PHASE_140M_P_PORTFOLIO_BOARDING_OPERATOR_UI_AND_FDIC_PACKAGE.md',
+    // Pure logic + hooks
+    'src/portfolioBoarding/portfolioBoardingAccess.ts',
+    'src/portfolioBoarding/portfolioLoanBoardingAuditTrail.ts',
+    'src/portfolioBoarding/PortfolioBoardingPackageExportModel.ts',
+    'src/portfolioBoarding/loadPortfolioBoardedLoansForWorkspace.ts',
+    'src/portfolioBoarding/portfolioBoardedLoanCommandCenterRows.ts',
+    'src/portfolioBoarding/portfolioBoardingListRows.ts',
+    'src/portfolioBoarding/usePortfolioLoanBoardingPersistence.ts',
+    'src/portfolioBoarding/usePortfolioLoanDocumentPersistence.ts',
+    // Operator UI
+    'src/portfolioBoarding/PortfolioLoanBoardingWorkspace.tsx',
+    'src/portfolioBoarding/PortfolioLoanBoardingList.tsx',
+    'src/portfolioBoarding/PortfolioLoanBoardingSearchPanel.tsx',
+    'src/portfolioBoarding/PortfolioLoanBoardingStatusBanner.tsx',
+    'src/portfolioBoarding/PortfolioLoanBoardingDetail.tsx',
+    'src/portfolioBoarding/PortfolioLoanBoardingCreateFlow.tsx',
+    'src/portfolioBoarding/PortfolioLoanBoardingSaveBar.tsx',
+    'src/portfolioBoarding/PortfolioLoanBoardingValidationSummary.tsx',
+    // Document / evidence / examiner / audit
+    'src/portfolioBoarding/PortfolioLoanBoardingDocumentManager.tsx',
+    'src/portfolioBoarding/PortfolioLoanBoardingEvidenceManager.tsx',
+    'src/portfolioBoarding/PortfolioLoanBoardingExaminerNotes.tsx',
+    'src/portfolioBoarding/PortfolioLoanBoardingAuditPanel.tsx',
+    // FDIC / board / portfolio package UI
+    'src/portfolioBoarding/FdicBoardPackageWorkspace.tsx',
+    'src/portfolioBoarding/FdicPackageSectionList.tsx',
+    'src/portfolioBoarding/FdicEvidenceIndex.tsx',
+    'src/portfolioBoarding/BoardLoanReviewPackagePreview.tsx',
+    'src/portfolioBoarding/PortfolioManagerReviewPackagePreview.tsx',
+    // Governance
+    'src/shared/governance/portfolioBoardingRuntimeGovernance.test.ts',
+    'src/shared/governance/portfolioBoardingPermissionGovernance.test.ts',
+  ];
+  for (const rel of REQUIRED_140MP_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  const doc = readDoc(
+    'docs/PHASE_140M_P_PORTFOLIO_BOARDING_OPERATOR_UI_AND_FDIC_PACKAGE.md',
+  );
+
+  it('the doc pins the safety model: feature-flagged, adapter-gated, fail-closed, no fake data', () => {
+    expect(doc).toMatch(/feature[- ]flag/i);
+    expect(doc).toMatch(/adapter[- ]gated/i);
+    expect(doc).toMatch(/fail[- ]closed/i);
+    expect(doc).toMatch(/no fake data/i);
+    expect(doc).toMatch(/no permission widening/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 140Q Ã¢â‚¬â€ final certification + release readiness
+// ---------------------------------------------------------------------------
+
+describe('Phase 140Q Ã¢â‚¬â€ portfolio boarding final certification + runtime gate exist', () => {
+  const REQUIRED_140Q_FILES: readonly string[] = [
+    'docs/PHASE_140Q_PORTFOLIO_BOARDING_FINAL_CERTIFICATION_AND_RELEASE_READINESS.md',
+    'src/portfolioBoarding/portfolioBoardingRuntimeSchemaGate.ts',
+    'src/portfolioBoarding/portfolioLoanBoardingLiveDataverseTransport.ts',
+    'src/portfolioBoarding/resolvePortfolioLoanBoardingPersistenceAdapter.ts',
+    'src/portfolioBoarding/portfolioBoardingFeatureFlags.ts',
+    'src/portfolioBoarding/portfolioLoanBoardingEndToEndSmoke.test.tsx',
+    'src/shared/governance/portfolioBoardingFinalCertification.test.ts',
+    // Earlier-phase artifacts must remain pinned.
+    'docs/PHASE_140M_P_PORTFOLIO_BOARDING_OPERATOR_UI_AND_FDIC_PACKAGE.md',
+    'docs/PHASE_140L_PORTFOLIO_BOARDING_LIVE_PERSISTENCE_ADAPTER.md',
+  ];
+  for (const rel of REQUIRED_140Q_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  const cert = readDoc(
+    'docs/PHASE_140Q_PORTFOLIO_BOARDING_FINAL_CERTIFICATION_AND_RELEASE_READINESS.md',
+  );
+
+  it('the cert doc pins disabled-by-default writes, schema scoping, no delete, rollback', () => {
+    expect(cert).toMatch(/disabled by default/i);
+    expect(cert).toMatch(/cr664_portfolioboardedloan/);
+    expect(cert).toMatch(/no delete/i);
+    expect(cert).toMatch(/Rollback plan/i);
+    expect(cert).toMatch(/does NOT enable runtime writes/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 141A Ã¢â‚¬â€ annual portfolio review + financial collection
+// ---------------------------------------------------------------------------
+
+describe('Phase 141A Ã¢â‚¬â€ annual portfolio review command center exists', () => {
+  const REQUIRED_141A_FILES: readonly string[] = [
+    'docs/PHASE_141A_ANNUAL_PORTFOLIO_REVIEW_AND_FINANCIAL_COLLECTION.md',
+    'src/shared/annualReview/annualReviewTypes.ts',
+    'src/shared/annualReview/annualReviewRequirementCatalog.ts',
+    'src/shared/annualReview/deriveAnnualReviewCollectionPlan.ts',
+    'src/shared/annualReview/deriveAnnualReviewReadiness.ts',
+    'src/shared/annualReview/deriveBorrowerSoundnessAssessment.ts',
+    'src/shared/annualReview/deriveBorrowerFinancialRequestPackage.ts',
+    'src/shared/annualReview/annualReviewTaskEngine.ts',
+    'src/portfolioAnnualReview/AnnualPortfolioReviewCommandCenter.tsx',
+    'src/portfolioAnnualReview/BorrowerFinancialRequestPreview.tsx',
+    'src/portfolioAnnualReview/AnnualReviewTaskBoard.tsx',
+    'src/shared/governance/annualReviewGovernance.test.ts',
+  ];
+  for (const rel of REQUIRED_141A_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  const doc = readDoc(
+    'docs/PHASE_141A_ANNUAL_PORTFOLIO_REVIEW_AND_FINANCIAL_COLLECTION.md',
+  );
+
+  it('the doc pins fail-closed readiness, no outreach, preview-only, no fake data', () => {
+    expect(doc).toMatch(/fail[- ]closed/i);
+    expect(doc).toMatch(/no (automatic )?borrower (email|outreach)/i);
+    expect(doc).toMatch(/preview/i);
+    expect(doc).toMatch(/no fake data/i);
+    expect(doc).toMatch(/insufficient_information/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 141B-H Ã¢â‚¬â€ CRM relationship master
+// ---------------------------------------------------------------------------
+
+describe('Phase 141B-H Ã¢â‚¬â€ CRM relationship master exists', () => {
+  const REQUIRED_141BH_FILES: readonly string[] = [
+    'docs/PHASE_141B_H_CRM_RELATIONSHIP_MASTER.md',
+    'src/shared/crm/crmTypes.ts',
+    'src/shared/crm/deriveCrmReadiness.ts',
+    'src/shared/crm/deriveCrmRelationshipNetworkSnapshot.ts',
+    'src/shared/crm/deriveCrmContactTasks.ts',
+    'src/shared/crm/resolveBorrowerRequestRecipient.ts',
+    'src/shared/crm/crmIntegrationSeams.ts',
+    'src/shared/crm/crmDataverseSchemaPlan.ts',
+    'src/crm/crmPersistenceTypes.ts',
+    'src/crm/crmPersistenceAdapter.ts',
+    'src/crm/CrmRelationshipCommandCenter.tsx',
+    'src/crm/CrmRelationshipNetworkPanel.tsx',
+    'src/crm/CrmContactTaskBoard.tsx',
+    'src/shared/governance/crmGovernance.test.ts',
+  ];
+  for (const rel of REQUIRED_141BH_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  const doc = readDoc('docs/PHASE_141B_H_CRM_RELATIONSHIP_MASTER.md');
+
+  it('the doc pins the safety model: no outreach, fail-closed, no live writes, no fake data', () => {
+    expect(doc).toMatch(/no (automatic )?borrower outreach/i);
+    expect(doc).toMatch(/do-not-contact/i);
+    expect(doc).toMatch(/fail[- ]closed/i);
+    expect(doc).toMatch(/no live CRM writes/i);
+    expect(doc).toMatch(/no fake (customer|data)/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 141J-K Ã¢â‚¬â€ CRM Dataverse schema inspection + guarded seed
+// ---------------------------------------------------------------------------
+
+describe('Phase 141J-K Ã¢â‚¬â€ CRM Dataverse schema inspection + seed foundation exists', () => {
+  const REQUIRED_141JK_FILES: readonly string[] = [
+    'docs/PHASE_141J_K_CRM_DATAVERSE_SCHEMA_INSPECTION_AND_SEED.md',
+    'src/crm/crmDataverseSchemaPlan.ts',
+    'src/crm/crmDataverseSchemaPlan.test.ts',
+    'src/crm/deriveCrmSchemaInspectionReport.ts',
+    'src/crm/deriveCrmSchemaInspectionReport.test.ts',
+    'src/crm/deriveCrmSchemaSeedPlan.ts',
+    'src/crm/deriveCrmSchemaSeedPlan.test.ts',
+  ];
+  for (const rel of REQUIRED_141JK_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  const doc = readDoc('docs/PHASE_141J_K_CRM_DATAVERSE_SCHEMA_INSPECTION_AND_SEED.md');
+
+  it('the doc pins the inspect Ã¢â€ â€™ plan Ã¢â€ â€™ dry-run Ã¢â€ â€™ commit Ã¢â€ â€™ verify workflow', () => {
+    expect(doc).toMatch(/--inspect-crm-schema/);
+    expect(doc).toMatch(/--plan-crm-schema/);
+    expect(doc).toMatch(/--seed-crm-schema/);
+    expect(doc).toMatch(/--commit-seed-crm-schema/);
+  });
+
+  it('the doc pins the safety model: no app-runtime CRM writes, no outreach, dry-run default', () => {
+    expect(doc).toMatch(/no app[- ]runtime CRM writes/i);
+    expect(doc).toMatch(/dry[- ]run/i);
+    expect(doc).toMatch(/no borrower outreach/i);
+    expect(doc).toMatch(/no fake (customer|data|CRM data)/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 141L Ã¢â‚¬â€ CRM live persistence adapter (disabled by default)
+// ---------------------------------------------------------------------------
+
+describe('Phase 141L Ã¢â‚¬â€ CRM live persistence adapter foundation exists', () => {
+  const REQUIRED_141L_FILES: readonly string[] = [
+    'docs/PHASE_141L_CRM_LIVE_PERSISTENCE_ADAPTER.md',
+    'src/crm/crmFeatureFlags.ts',
+    'src/crm/crmDataverseMapper.ts',
+    'src/crm/crmLiveDataverseTransport.ts',
+    'src/crm/crmLiveDataverseAdapter.ts',
+    'src/crm/resolveCrmPersistenceAdapter.ts',
+    'src/crm/crmRuntimeSchemaGate.ts',
+    'src/crm/crmPersistenceTypes.ts',
+    'src/crm/crmPersistenceAdapter.ts',
+    'src/shared/governance/crmPersistenceGovernance.test.ts',
+  ];
+  for (const rel of REQUIRED_141L_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  const doc = readDoc('docs/PHASE_141L_CRM_LIVE_PERSISTENCE_ADAPTER.md');
+
+  it('the doc pins disabled-by-default, no deletes, no outreach, table allow-list', () => {
+    expect(doc).toMatch(/disabled by default/i);
+    expect(doc).toMatch(/No deletes/i);
+    expect(doc).toMatch(/no borrower outreach/i);
+    expect(doc).toMatch(/allow-list/i);
+    expect(doc).toMatch(/No app-runtime CRM writes/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 141M Ã¢â‚¬â€ annual review borrower request workflow (human-approved)
+// ---------------------------------------------------------------------------
+
+describe('Phase 141M Ã¢â‚¬â€ annual review borrower request workflow exists', () => {
+  const REQUIRED_141M_FILES: readonly string[] = [
+    'docs/PHASE_141M_ANNUAL_REVIEW_BORROWER_REQUEST_WORKFLOW.md',
+    'src/annualReview/annualReviewBorrowerRequestTypes.ts',
+    'src/annualReview/resolveAnnualReviewBorrowerRequestRecipients.ts',
+    'src/annualReview/buildAnnualReviewBorrowerRequestPackage.ts',
+    'src/annualReview/buildAnnualReviewBorrowerRequestDraft.ts',
+    'src/annualReview/deriveAnnualReviewBorrowerRequestWorkflow.ts',
+    'src/annualReview/AnnualReviewBorrowerRequestPanel.tsx',
+    'src/annualReview/annualReviewRequestFeatureFlags.ts',
+    'src/shared/governance/annualReviewBorrowerRequestGovernance.test.ts',
+  ];
+  for (const rel of REQUIRED_141M_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  const doc = readDoc('docs/PHASE_141M_ANNUAL_REVIEW_BORROWER_REQUEST_WORKFLOW.md');
+
+  it('the doc pins human-approval, no sending, do-not-contact, no fake data', () => {
+    expect(doc).toMatch(/human[- ]approved|human approval/i);
+    expect(doc).toMatch(/sends nothing|no send path|Sending[\s\S]{0,40}disabled|safeForSend/i);
+    expect(doc).toMatch(/do-not-contact/i);
+    expect(doc).toMatch(/never invented|no fake|masked/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 141N Ã¢â‚¬â€ borrower delivery adapter seams (disabled by default)
+// ---------------------------------------------------------------------------
+
+describe('Phase 141N Ã¢â‚¬â€ borrower delivery adapter seams exist', () => {
+  const REQUIRED_141N_FILES: readonly string[] = [
+    'docs/PHASE_141N_BORROWER_DELIVERY_ADAPTER_SEAMS.md',
+    'src/annualReview/annualReviewDeliveryFeatureFlags.ts',
+    'src/annualReview/annualReviewDeliveryTypes.ts',
+    'src/annualReview/validateAnnualReviewDeliveryRequest.ts',
+    'src/annualReview/annualReviewUploadLinkAdapter.ts',
+    'src/annualReview/annualReviewEmailDeliveryAdapter.ts',
+    'src/annualReview/annualReviewSmsDeliveryAdapter.ts',
+    'src/annualReview/resolveAnnualReviewDeliveryAdapters.ts',
+    'src/annualReview/buildAnnualReviewDeliveryAuditSummary.ts',
+    'src/shared/governance/annualReviewDeliveryGovernance.test.ts',
+  ];
+  for (const rel of REQUIRED_141N_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  const doc = readDoc('docs/PHASE_141N_BORROWER_DELIVERY_ADAPTER_SEAMS.md');
+
+  it('the doc pins disabled-by-default, no sending, no live URL/token, masked contacts', () => {
+    expect(doc).toMatch(/disabled by default/i);
+    expect(doc).toMatch(/no live upload link|no token|no live URL/i);
+    expect(doc).toMatch(/no email|email sending|sendEmail/i);
+    expect(doc).toMatch(/masked/i);
+    expect(doc).toMatch(/approval[- ]gated|human approval/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 141O Ã¢â‚¬â€ annual review financial spreading + covenant testing
+// ---------------------------------------------------------------------------
+
+describe('Phase 141O Ã¢â‚¬â€ annual review financial spreading + covenants exist', () => {
+  const REQUIRED_141O_FILES: readonly string[] = [
+    'docs/PHASE_141O_ANNUAL_REVIEW_FINANCIAL_SPREADING_AND_COVENANTS.md',
+    'src/annualReview/annualReviewFinancialTypes.ts',
+    'src/annualReview/deriveAnnualReviewFinancialReadiness.ts',
+    'src/annualReview/deriveAnnualReviewFinancialSpreadSnapshot.ts',
+    'src/annualReview/resolveAnnualReviewCovenantDefinitions.ts',
+    'src/annualReview/testAnnualReviewCovenants.ts',
+    'src/annualReview/deriveAnnualReviewFinancialAnalysisSnapshot.ts',
+    'src/annualReview/AnnualReviewFinancialCovenantPanel.tsx',
+    'src/annualReview/buildAnnualReviewFinancialMemoSections.ts',
+    'src/shared/governance/annualReviewFinancialGovernance.test.ts',
+  ];
+  for (const rel of REQUIRED_141O_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  const doc = readDoc('docs/PHASE_141O_ANNUAL_REVIEW_FINANCIAL_SPREADING_AND_COVENANTS.md');
+
+  it('the doc pins evidence-backed, no credit decision, no automatic waiver, fact exclusions', () => {
+    expect(doc).toMatch(/evidence-backed/i);
+    expect(doc).toMatch(/no final credit|no credit decision/i);
+    expect(doc).toMatch(/no automatic waiver|never applied automatically/i);
+    expect(doc).toMatch(/superseded/i);
+    expect(doc).toMatch(/ambiguous/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 141P Ã¢â‚¬â€ annual review memo / board / FDIC packages
+// ---------------------------------------------------------------------------
+
+describe('Phase 141P Ã¢â‚¬â€ annual review memo / board / FDIC packages exist', () => {
+  const REQUIRED_141P_FILES: readonly string[] = [
+    'docs/PHASE_141P_ANNUAL_REVIEW_MEMO_BOARD_FDIC_PACKAGES.md',
+    'src/annualReview/annualReviewPackageTypes.ts',
+    'src/annualReview/deriveAnnualReviewPackageReadiness.ts',
+    'src/annualReview/buildAnnualReviewEvidenceIndex.ts',
+    'src/annualReview/buildAnnualReviewMemoPackage.ts',
+    'src/annualReview/buildAnnualReviewBoardPackage.ts',
+    'src/annualReview/buildAnnualReviewFdicPackage.ts',
+    'src/annualReview/AnnualReviewPackagePreviewPanel.tsx',
+    'src/annualReview/annualReviewPackageExportAdapter.ts',
+    'src/annualReview/deriveAnnualReviewPackageWorkflow.ts',
+    'src/shared/governance/annualReviewPackageGovernance.test.ts',
+  ];
+  for (const rel of REQUIRED_141P_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  const doc = readDoc('docs/PHASE_141P_ANNUAL_REVIEW_MEMO_BOARD_FDIC_PACKAGES.md');
+
+  it('the doc pins draft-only, evidence-backed, no approval/waiver/export', () => {
+    expect(doc).toMatch(/draft[- ]only/i);
+    expect(doc).toMatch(/evidence-backed/i);
+    expect(doc).toMatch(/no final credit|final approval/i);
+    expect(doc).toMatch(/covenant waiver/i);
+    expect(doc).toMatch(/export/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 142A Ã¢â‚¬â€ competitive platform convergence
+// ---------------------------------------------------------------------------
+
+describe('Phase 142A Ã¢â‚¬â€ competitive platform convergence exists', () => {
+  const REQUIRED_142A_FILES: readonly string[] = [
+    'docs/PHASE_142A_COMPETITIVE_PLATFORM_CONVERGENCE.md',
+    'src/competitive/competitiveCapabilityTypes.ts',
+    'src/competitive/competitiveCapabilityMatrix.ts',
+    'src/competitive/deriveCompetitiveReferenceLessons.ts',
+    'src/competitive/deriveCompetitiveImplementationBacklog.ts',
+    'src/competitive/CompetitiveCapabilityDashboard.tsx',
+    'src/platform/platformObjectModelTypes.ts',
+    'src/platform/platformObjectRegistry.ts',
+    'src/platform/derivePlatformObjectModel.ts',
+    'src/platform/platformViewRegistry.ts',
+    'src/platform/derivePlatformViews.ts',
+    'src/platform/productProcessMetadataTypes.ts',
+    'src/platform/productProcessRegistry.ts',
+    'src/platform/deriveProductProcessProfile.ts',
+    'src/workflow/workflowRoutingTypes.ts',
+    'src/workflow/deriveWorkflowRoute.ts',
+    'src/workflow/workflowRouteRegistry.ts',
+    'src/shared/governance/competitivePlatformGovernance.test.ts',
+  ];
+  for (const rel of REQUIRED_142A_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  const doc = readDoc('docs/PHASE_142A_COMPETITIVE_PLATFORM_CONVERGENCE.md');
+
+  it('the doc pins read-only strategy, no replacement, no final decision / schema mutation', () => {
+    expect(doc).toMatch(/read-only|metadata-only/i);
+    expect(doc).toMatch(/no final credit/i);
+    expect(doc).toMatch(/no (dynamic )?schema mutation/i);
+    expect(doc).toMatch(/Phase 142B/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 142B Ã¢â‚¬â€ governed platform object/view metadata surfaces
+// ---------------------------------------------------------------------------
+
+describe('Phase 142B Ã¢â‚¬â€ governed platform metadata surfaces exist', () => {
+  const REQUIRED_142B_FILES: readonly string[] = [
+    'docs/PHASE_142B_GOVERNED_PLATFORM_OBJECT_VIEW_SURFACES.md',
+    'src/platform/platformSurfaceTypes.ts',
+    'src/platform/derivePlatformObjectCatalog.ts',
+    'src/platform/derivePlatformViewCatalog.ts',
+    'src/platform/derivePlatformObjectRelationshipMap.ts',
+    'src/platform/deriveWorkspaceCapabilityGroups.ts',
+    'src/platform/PlatformObjectCatalogPanel.tsx',
+    'src/platform/PlatformViewCatalogPanel.tsx',
+    'src/platform/PlatformRelationshipMapPanel.tsx',
+    'src/platform/PlatformMetadataDashboard.tsx',
+    'src/shared/governance/platformMetadataSurfaceGovernance.test.ts',
+  ];
+  for (const rel of REQUIRED_142B_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  const doc = readDoc('docs/PHASE_142B_GOVERNED_PLATFORM_OBJECT_VIEW_SURFACES.md');
+
+  it('the doc pins read-only, no schema mutation, no low-code builder, no route registration', () => {
+    expect(doc).toMatch(/read-only/i);
+    expect(doc).toMatch(/no schema mutation|no .* custom field/i);
+    expect(doc).toMatch(/not a low-code builder/i);
+    expect(doc).toMatch(/no route registration/i);
+    expect(doc).toMatch(/Phase 142C/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 142C Ã¢â‚¬â€ configurable workflow routing + credit committee
+// ---------------------------------------------------------------------------
+
+describe('Phase 142C Ã¢â‚¬â€ configurable workflow routing exists', () => {
+  const REQUIRED_142C_FILES: readonly string[] = [
+    'docs/PHASE_142C_CONFIGURABLE_WORKFLOW_ROUTING_AND_CREDIT_COMMITTEE.md',
+    'src/workflow/workflowRoutingConfigTypes.ts',
+    'src/workflow/workflowRouteRuleRegistry.ts',
+    'src/workflow/deriveConfigurableWorkflowRoute.ts',
+    'src/workflow/deriveCreditCommitteeRoute.ts',
+    'src/workflow/deriveWorkflowStageSequence.ts',
+    'src/workflow/deriveWorkflowRoutingReadiness.ts',
+    'src/workflow/WorkflowRoutingPanel.tsx',
+    'src/shared/governance/workflowRoutingGovernance.test.ts',
+  ];
+  for (const rel of REQUIRED_142C_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  const doc = readDoc('docs/PHASE_142C_CONFIGURABLE_WORKFLOW_ROUTING_AND_CREDIT_COMMITTEE.md');
+
+  it('the doc pins read-only decision support, no approval/vote/stage mutation', () => {
+    expect(doc).toMatch(/read-only/i);
+    expect(doc).toMatch(/decision support/i);
+    expect(doc).toMatch(/approves no credit|no credit/i);
+    expect(doc).toMatch(/voting|vote/i);
+    expect(doc).toMatch(/Phase 142D/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 142D Ã¢â‚¬â€ product / process template registry
+// ---------------------------------------------------------------------------
+
+describe('Phase 142D Ã¢â‚¬â€ product / process template registry exists', () => {
+  const REQUIRED_142D_FILES: readonly string[] = [
+    'docs/PHASE_142D_PRODUCT_PROCESS_TEMPLATE_REGISTRY.md',
+    'src/platform/productProcessTemplateTypes.ts',
+    'src/platform/productProcessTemplateRegistry.ts',
+    'src/platform/deriveProductProcessTemplateSelection.ts',
+    'src/platform/deriveProductProcessRequirements.ts',
+    'src/platform/deriveProductProcessTemplateReadiness.ts',
+    'src/platform/ProductProcessTemplateCatalogPanel.tsx',
+    'src/platform/ProductProcessTemplateSelectionPanel.tsx',
+    'src/shared/governance/productProcessTemplateGovernance.test.ts',
+  ];
+  for (const rel of REQUIRED_142D_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  const doc = readDoc('docs/PHASE_142D_PRODUCT_PROCESS_TEMPLATE_REGISTRY.md');
+
+  it('the doc pins metadata-only templates, no live product creation, no approval', () => {
+    expect(doc).toMatch(/metadata-only|read-only/i);
+    expect(doc).toMatch(/no live product creation|live product creation/i);
+    expect(doc).toMatch(/no .* template editing|no user-created templates/i);
+    expect(doc).toMatch(/Phase 142E/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 142E Ã¢â‚¬â€ servicing / lifecycle model
+// ---------------------------------------------------------------------------
+
+describe('Phase 142E Ã¢â‚¬â€ servicing / lifecycle model exists', () => {
+  const REQUIRED_142E_FILES: readonly string[] = [
+    'docs/PHASE_142E_SERVICING_LIFECYCLE_MODEL.md',
+    'src/servicing/servicingLifecycleTypes.ts',
+    'src/servicing/deriveServicingLifecycleStage.ts',
+    'src/servicing/deriveServicingObligations.ts',
+    'src/servicing/deriveServicingCollateralSecurityStatus.ts',
+    'src/servicing/deriveServicingInsuranceTicklerStatus.ts',
+    'src/servicing/deriveServicingCovenantReportingStatus.ts',
+    'src/servicing/deriveServicingMaturityRenewalStatus.ts',
+    'src/servicing/deriveServicingLifecycleSnapshot.ts',
+    'src/servicing/ServicingLifecyclePanel.tsx',
+    'src/shared/governance/servicingLifecycleGovernance.test.ts',
+  ];
+  for (const rel of REQUIRED_142E_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  const doc = readDoc('docs/PHASE_142E_SERVICING_LIFECYCLE_MODEL.md');
+
+  it('the doc pins read-only servicing, no money movement, no waiver / approval', () => {
+    expect(doc).toMatch(/read-only|decision support only/i);
+    expect(doc).toMatch(/no payment posting|never posts payments|no money movement/i);
+    expect(doc).toMatch(/waive|covenant waiver/i);
+    expect(doc).toMatch(/Phase 142F/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 142F Ã¢â‚¬â€ integration adapter registry
+// ---------------------------------------------------------------------------
+
+describe('Phase 142F Ã¢â‚¬â€ integration adapter registry exists', () => {
+  const REQUIRED_142F_FILES: readonly string[] = [
+    'docs/PHASE_142F_INTEGRATION_ADAPTER_REGISTRY.md',
+    'src/integrations/integrationAdapterTypes.ts',
+    'src/integrations/integrationProviderRegistry.ts',
+    'src/integrations/integrationAdapterContracts.ts',
+    'src/integrations/validateIntegrationRequest.ts',
+    'src/integrations/createDisabledIntegrationAdapters.ts',
+    'src/integrations/resolveIntegrationAdapter.ts',
+    'src/integrations/deriveIntegrationReadiness.ts',
+    'src/integrations/IntegrationAdapterRegistryPanel.tsx',
+    'src/integrations/IntegrationRequestPreviewPanel.tsx',
+    'src/shared/governance/integrationAdapterGovernance.test.ts',
+  ];
+  for (const rel of REQUIRED_142F_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  const doc = readDoc('docs/PHASE_142F_INTEGRATION_ADAPTER_REGISTRY.md');
+
+  it('the doc pins disabled-by-default, no external call, no credit pull / AML / core write', () => {
+    expect(doc).toMatch(/disabled by default|no external integration is live/i);
+    expect(doc).toMatch(/no external call|makes no external call/i);
+    expect(doc).toMatch(/credit pull|pulls no credit/i);
+    expect(doc).toMatch(/Phase 142G/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 142G Ã¢â‚¬â€ admin configuration review queue
+// ---------------------------------------------------------------------------
+
+describe('Phase 142G Ã¢â‚¬â€ admin configuration review queue exists', () => {
+  const REQUIRED_142G_FILES: readonly string[] = [
+    'docs/PHASE_142G_ADMIN_CONFIGURATION_REVIEW_QUEUE.md',
+    'src/adminConfig/adminConfigurationTypes.ts',
+    'src/adminConfig/buildAdminConfigurationProposal.ts',
+    'src/adminConfig/validateAdminConfigurationProposal.ts',
+    'src/adminConfig/deriveAdminConfigurationReviewQueue.ts',
+    'src/adminConfig/deriveAdminConfigurationReviewDecision.ts',
+    'src/adminConfig/AdminConfigurationReviewQueuePanel.tsx',
+    'src/adminConfig/AdminConfigurationSummaryPanel.tsx',
+    'src/shared/governance/adminConfigurationGovernance.test.ts',
+  ];
+  for (const rel of REQUIRED_142G_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  const doc = readDoc('docs/PHASE_142G_ADMIN_CONFIGURATION_REVIEW_QUEUE.md');
+
+  it('the doc pins review-only, validForApply false, no schema mutation', () => {
+    expect(doc).toMatch(/review-only|cannot apply them/i);
+    expect(doc).toMatch(/validForApply.*false|never apply/i);
+    expect(doc).toMatch(/schema mutation|no Dataverse schema change/i);
+    expect(doc).toMatch(/Phase 142H/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 142H Ã¢â‚¬â€ executive product strategy surface
+// ---------------------------------------------------------------------------
+
+describe('Phase 142H Ã¢â‚¬â€ executive product strategy surface exists', () => {
+  const REQUIRED_142H_FILES: readonly string[] = [
+    'docs/PHASE_142H_EXECUTIVE_PRODUCT_STRATEGY_SURFACE.md',
+    'src/competitive/executiveStrategyTypes.ts',
+    'src/competitive/deriveExecutiveProductStrategyDashboard.ts',
+    'src/competitive/deriveCompetitiveDifferentiators.ts',
+    'src/competitive/deriveCompetitiveGaps.ts',
+    'src/competitive/deriveCompetitiveRoadmap.ts',
+    'src/competitive/ExecutiveProductStrategyPanel.tsx',
+    'src/competitive/CompetitiveReferencePlatformPanel.tsx',
+    'src/competitive/CompetitiveSafetyPosturePanel.tsx',
+    'src/shared/governance/executiveProductStrategyGovernance.test.ts',
+  ];
+  for (const rel of REQUIRED_142H_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  const doc = readDoc('docs/PHASE_142H_EXECUTIVE_PRODUCT_STRATEGY_SURFACE.md');
+
+  it('the doc pins read-only strategy, no operational execution, intentionally disabled', () => {
+    expect(doc).toMatch(/read-only|product intelligence, not operational execution/i);
+    expect(doc).toMatch(/intentionally disabled/i);
+    expect(doc).toMatch(/final credit approval/i);
+    expect(doc).toMatch(/Phase 142I/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 142I Ã¢â‚¬â€ executive-safe product strategy route mounting
+// ---------------------------------------------------------------------------
+
+describe('Phase 142I Ã¢â‚¬â€ executive-safe product strategy route exists', () => {
+  const REQUIRED_142I_FILES: readonly string[] = [
+    'docs/PHASE_142I_EXECUTIVE_SAFE_PRODUCT_STRATEGY_ROUTE.md',
+    'src/workspaces/ExecutiveProductStrategyWorkspace.tsx',
+    'src/competitive/buildExecutiveProductStrategySurfaceState.ts',
+    'src/competitive/ProductStrategyNavigationCard.tsx',
+    'src/shared/governance/executiveProductStrategyRouteGovernance.test.ts',
+  ];
+  for (const rel of REQUIRED_142I_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  const doc = readDoc('docs/PHASE_142I_EXECUTIVE_SAFE_PRODUCT_STRATEGY_ROUTE.md');
+
+  it('the doc pins executive-gated, fail-closed, no permission widening', () => {
+    expect(doc).toMatch(/executive entitlement required|subordinate to executive access/i);
+    expect(doc).toMatch(/fail-closed|fail closed/i);
+    expect(doc).toMatch(/no permission widening|no .* proxy/i);
+    expect(doc).toMatch(/Phase 142J/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 142J Ã¢â‚¬â€ admin configuration persistence adapter
+// ---------------------------------------------------------------------------
+
+describe('Phase 142J Ã¢â‚¬â€ admin configuration persistence adapter exists', () => {
+  const REQUIRED_142J_FILES: readonly string[] = [
+    'docs/PHASE_142J_ADMIN_CONFIGURATION_PERSISTENCE_ADAPTER.md',
+    'src/adminConfig/adminConfigurationPersistenceTypes.ts',
+    'src/adminConfig/adminConfigurationDataverseSchemaPlan.ts',
+    'src/adminConfig/deriveAdminConfigurationSchemaReadiness.ts',
+    'src/adminConfig/adminConfigurationPersistenceMapper.ts',
+    'src/adminConfig/adminConfigurationPersistenceAdapter.ts',
+    'src/adminConfig/createDisabledAdminConfigurationPersistenceAdapter.ts',
+    'src/adminConfig/createAdminConfigurationDataversePersistenceAdapter.ts',
+    'src/adminConfig/adminConfigurationPersistenceFeatureFlags.ts',
+    'src/adminConfig/resolveAdminConfigurationPersistenceAdapter.ts',
+    'src/adminConfig/AdminConfigurationPersistenceReadinessPanel.tsx',
+    'src/shared/governance/adminConfigurationPersistenceGovernance.test.ts',
+  ];
+  for (const rel of REQUIRED_142J_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  const doc = readDoc('docs/PHASE_142J_ADMIN_CONFIGURATION_PERSISTENCE_ADAPTER.md');
+
+  it('the doc pins disabled-by-default persistence, no schema creation, write/apply disabled', () => {
+    expect(doc).toMatch(/disabled by default/i);
+    expect(doc).toMatch(/no .* schema|schema creation/i);
+    expect(doc).toMatch(/apply nothing now|write.*disabled|apply.*disabled/i);
+    expect(doc).toMatch(/Phase 142K/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 142K Ã¢â‚¬â€ admin configuration controlled apply workflow
+// ---------------------------------------------------------------------------
+
+describe('Phase 142K Ã¢â‚¬â€ admin configuration controlled apply workflow exists', () => {
+  const REQUIRED_142K_FILES: readonly string[] = [
+    'docs/PHASE_142K_ADMIN_CONFIGURATION_CONTROLLED_APPLY_WORKFLOW.md',
+    'src/adminConfig/adminConfigurationApplyTypes.ts',
+    'src/adminConfig/deriveAdminConfigurationApplyReadiness.ts',
+    'src/adminConfig/buildAdminConfigurationApplyPlan.ts',
+    'src/adminConfig/createAdminConfigurationControlledApplyEngine.ts',
+    'src/adminConfig/adminConfigurationApplyFeatureFlags.ts',
+    'src/adminConfig/deriveAdminConfigurationApplyWorkflow.ts',
+    'src/adminConfig/AdminConfigurationApplyPreviewPanel.tsx',
+    'src/shared/governance/adminConfigurationApplyGovernance.test.ts',
+  ];
+  for (const rel of REQUIRED_142K_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  const doc = readDoc('docs/PHASE_142K_ADMIN_CONFIGURATION_CONTROLLED_APPLY_WORKFLOW.md');
+
+  it('the doc pins generate-plans-not-apply, no schema mutation, execution disabled', () => {
+    expect(doc).toMatch(/generate apply plans.*do not apply|do not apply them/i);
+    expect(doc).toMatch(/no schema mutation|schema mutation/i);
+    expect(doc).toMatch(/attemptApply always blocked|actual apply.*none|execution/i);
+    expect(doc).toMatch(/Phase 142L/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 142L Ã¢â‚¬â€ integration transport proof-of-concept harness (fake only)
+// ---------------------------------------------------------------------------
+
+describe('Phase 142L Ã¢â‚¬â€ integration transport proof harness exists', () => {
+  const REQUIRED_142L_FILES: readonly string[] = [
+    'docs/PHASE_142L_INTEGRATION_TRANSPORT_PROOF_HARNESS.md',
+    'src/adminConfig/adminConfigurationTransport.ts',
+    'src/shared/governance/adminConfigurationTransportGovernance.test.ts',
+  ];
+  for (const rel of REQUIRED_142L_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  const doc = readDoc('docs/PHASE_142L_INTEGRATION_TRANSPORT_PROOF_HARNESS.md');
+
+  it('the doc pins fake-only transport, no live write, no fetch', () => {
+    expect(doc).toMatch(/fake .* only|fake_transport_only|fake \/ offline/i);
+    expect(doc).toMatch(/liveWritePerformed.*false|never applies anything to a live system|no live write/i);
+    expect(doc).toMatch(/no .* fetch|no live transport/i);
+    expect(doc).toMatch(/Phase 142M/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 142M Ã¢â‚¬â€ credit committee package review queue (no voting)
+// ---------------------------------------------------------------------------
+
+describe('Phase 142M Ã¢â‚¬â€ credit committee package review queue exists', () => {
+  const REQUIRED_142M_FILES: readonly string[] = [
+    'docs/PHASE_142M_CREDIT_COMMITTEE_PACKAGE_REVIEW_QUEUE.md',
+    'src/committee/creditCommitteePackageQueue.ts',
+    'src/committee/CreditCommitteePackageReviewQueuePanel.tsx',
+    'src/shared/governance/creditCommitteePackageQueueGovernance.test.ts',
+  ];
+  for (const rel of REQUIRED_142M_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  const doc = readDoc('docs/PHASE_142M_CREDIT_COMMITTEE_PACKAGE_REVIEW_QUEUE.md');
+
+  it('the doc pins read-only, no voting, honest unavailable, no fake evidence', () => {
+    expect(doc).toMatch(/read-only|review only/i);
+    expect(doc).toMatch(/no voting|no .* vote/i);
+    expect(doc).toMatch(/no fake|honest when data is unavailable|not mounted/i);
+    expect(doc).toMatch(/Phase 142N/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 142N Ã¢â‚¬â€ live package export adapter seam (disabled by default)
+// ---------------------------------------------------------------------------
+
+describe('Phase 142N Ã¢â‚¬â€ live package export adapter seam exists', () => {
+  const REQUIRED_142N_FILES: readonly string[] = [
+    'docs/PHASE_142N_LIVE_PACKAGE_EXPORT_ADAPTER_SEAM.md',
+    'src/committee/creditPackageExportAdapter.ts',
+    'src/committee/CreditPackageExportPanel.tsx',
+    'src/shared/governance/creditPackageExportGovernance.test.ts',
+  ];
+  for (const rel of REQUIRED_142N_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  const doc = readDoc('docs/PHASE_142N_LIVE_PACKAGE_EXPORT_ADAPTER_SEAM.md');
+
+  it('the doc pins disabled-by-default export, no live effect, no fake delivery', () => {
+    expect(doc).toMatch(/disabled by default/i);
+    expect(doc).toMatch(/liveExportPerformed.*false|exports nothing live|no live export/i);
+    expect(doc).toMatch(/no fake|no .* delivery confirmation/i);
+    expect(doc).toMatch(/Phase 142O/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 142O Ã¢â‚¬â€ e-sign envelope adapter seam (PandaDoc, disabled by default)
+// ---------------------------------------------------------------------------
+
+describe('Phase 142O Ã¢â‚¬â€ e-sign envelope adapter seam exists', () => {
+  const REQUIRED_142O_FILES: readonly string[] = [
+    'docs/PHASE_142O_ESIGN_ENVELOPE_ADAPTER_SEAM.md',
+    'src/committee/eSignEnvelopeAdapter.ts',
+    'src/committee/ESignEnvelopePanel.tsx',
+    'src/shared/governance/eSignEnvelopeGovernance.test.ts',
+  ];
+  for (const rel of REQUIRED_142O_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  const doc = readDoc('docs/PHASE_142O_ESIGN_ENVELOPE_ADAPTER_SEAM.md');
+
+  it('the doc pins PandaDoc disabled-by-default, no live envelope/upload/email/webhook', () => {
+    expect(doc).toMatch(/pandadoc/i);
+    expect(doc).toMatch(/disabled by default/i);
+    expect(doc).toMatch(/no live pandadoc|no envelope creation|no webhook|liveEnvelopeCreated/i);
+    expect(doc).toMatch(/Phase 142P/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 142P Ã¢â‚¬â€ core banking read-only lookup adapter seam (disabled by default)
+// ---------------------------------------------------------------------------
+
+describe('Phase 142P Ã¢â‚¬â€ core banking read-only lookup adapter seam exists', () => {
+  const REQUIRED_142P_FILES: readonly string[] = [
+    'docs/PHASE_142P_CORE_BANKING_READ_ONLY_LOOKUP_ADAPTER.md',
+    'src/integrations/coreBanking/coreBankingLookupAdapter.ts',
+    'src/integrations/coreBanking/CoreBankingLookupPanel.tsx',
+    'src/shared/governance/coreBankingLookupGovernance.test.ts',
+  ];
+  for (const rel of REQUIRED_142P_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  const doc = readDoc('docs/PHASE_142P_CORE_BANKING_READ_ONLY_LOOKUP_ADAPTER.md');
+
+  it('the doc pins disabled-by-default core lookup, no retrieval, no money movement, no sensitive ids', () => {
+    expect(doc).toMatch(/disabled by default/i);
+    expect(doc).toMatch(/no live core|no customer.*lookup|liveLookupPerformed|no .* retrieved/i);
+    expect(doc).toMatch(/no money movement|no transfer/i);
+    expect(doc).toMatch(/sensitive identifier/i);
+    expect(doc).toMatch(/Phase 142Q/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 142Q Ã¢â‚¬â€ AML/KYC and credit bureau policy gate (no live pull)
+// ---------------------------------------------------------------------------
+
+describe('Phase 142Q Ã¢â‚¬â€ AML/KYC and credit bureau policy gate exists', () => {
+  const REQUIRED_142Q_FILES: readonly string[] = [
+    'docs/PHASE_142Q_AML_KYC_CREDIT_BUREAU_POLICY_GATE.md',
+    'src/integrations/policyGates/amlKycCreditBureauPolicyGate.ts',
+    'src/integrations/policyGates/AmlKycCreditBureauPolicyGatePanel.tsx',
+    'src/shared/governance/amlKycCreditBureauPolicyGateGovernance.test.ts',
+  ];
+  for (const rel of REQUIRED_142Q_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  const doc = readDoc('docs/PHASE_142Q_AML_KYC_CREDIT_BUREAU_POLICY_GATE.md');
+
+  it('the doc pins no-live-pull, no provider call, no decisioning, no sensitive ids', () => {
+    expect(doc).toMatch(/no live pull/i);
+    expect(doc).toMatch(/no .* provider call|providerCalled|no report or score retrieval/i);
+    expect(doc).toMatch(/no credit decisioning|no .* decisioning|adverse action/i);
+    expect(doc).toMatch(/sensitive identifier/i);
+    expect(doc).toMatch(/Phase 142R/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 142R Ã¢â‚¬â€ servicing lifecycle read-only Dataverse mapper
+// ---------------------------------------------------------------------------
+
+describe('Phase 142R Ã¢â‚¬â€ servicing lifecycle read-only mapper exists', () => {
+  const REQUIRED_142R_FILES: readonly string[] = [
+    'docs/PHASE_142R_SERVICING_LIFECYCLE_READ_ONLY_DATAVERSE_MAPPER.md',
+    'src/servicing/servicingLifecycleMapper.ts',
+    'src/servicing/ServicingLifecycleMapperPanel.tsx',
+    'src/shared/governance/servicingLifecycleMapperGovernance.test.ts',
+  ];
+  for (const rel of REQUIRED_142R_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  const doc = readDoc('docs/PHASE_142R_SERVICING_LIFECYCLE_READ_ONLY_DATAVERSE_MAPPER.md');
+
+  it('the doc pins read-only mapper, no boarding, no core sync, no schedule generation', () => {
+    expect(doc).toMatch(/read-only mapper/i);
+    expect(doc).toMatch(/no .* boarding|boards no loan|loanBoarded/i);
+    expect(doc).toMatch(/no core banking|coreBankingSyncPerformed|no .* sync/i);
+    expect(doc).toMatch(/no payment.?schedule|paymentScheduleGenerated/i);
+    expect(doc).toMatch(/Phase 142S/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 142S Ã¢â‚¬â€ executive product profitability / ROE availability model
+// ---------------------------------------------------------------------------
+
+describe('Phase 142S Ã¢â‚¬â€ product profitability / ROE availability model exists', () => {
+  const REQUIRED_142S_FILES: readonly string[] = [
+    'docs/PHASE_142S_EXECUTIVE_PRODUCT_PROFITABILITY_ROE_AVAILABILITY_MODEL.md',
+    'src/executive/productProfitabilityAvailabilityModel.ts',
+    'src/executive/ProductProfitabilityAvailabilityPanel.tsx',
+    'src/shared/governance/productProfitabilityAvailabilityGovernance.test.ts',
+  ];
+  for (const rel of REQUIRED_142S_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  const doc = readDoc('docs/PHASE_142S_EXECUTIVE_PRODUCT_PROFITABILITY_ROE_AVAILABILITY_MODEL.md');
+
+  it('the doc pins availability-only, no metric calculation, no fake figures', () => {
+    expect(doc).toMatch(/availability .* model only|availability \/ readiness model only/i);
+    expect(doc).toMatch(/no .* calculation|no metric is calculated|calculates no/i);
+    expect(doc).toMatch(/no fake .* figures|no numeric output/i);
+    expect(doc).toMatch(/Phase 142T/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 142T Ã¢â‚¬â€ platform convergence release readiness certification
+// ---------------------------------------------------------------------------
+
+describe('Phase 142T Ã¢â‚¬â€ platform convergence release readiness certification exists', () => {
+  const REQUIRED_142T_FILES: readonly string[] = [
+    'docs/PHASE_142T_PLATFORM_CONVERGENCE_RELEASE_READINESS_CERTIFICATION.md',
+    'src/shared/governance/platformConvergenceReleaseReadiness.test.ts',
+  ];
+  for (const rel of REQUIRED_142T_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  const doc = readDoc('docs/PHASE_142T_PLATFORM_CONVERGENCE_RELEASE_READINESS_CERTIFICATION.md');
+
+  it('the doc certifies a no-live-action, no-write, disabled/read-only stack with explicit non-certifications', () => {
+    expect(doc).toMatch(/no-live-action/i);
+    expect(doc).toMatch(/disabled\s*\/\s*read-only/i);
+    expect(doc).toMatch(/no Dataverse\s*\/\s*CRM writes|no .* writes/i);
+    expect(doc).toMatch(/explicit non-certifications/i);
+    expect(doc).toMatch(/live.?activation prerequisites/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 143A-143J Ã¢â‚¬â€ controlled CRM activation stack
+// ---------------------------------------------------------------------------
+
+describe('Phase 143 Ã¢â‚¬â€ controlled CRM activation stack exists', () => {
+  const REQUIRED_143_FILES: readonly string[] = [
+    'docs/PHASE_143A_CRM_ACTIVATION_INVENTORY_SOURCE_OF_TRUTH.md',
+    'docs/PHASE_143B_SALESFORCE_NCINO_CONNECTOR_READINESS_AUDIT.md',
+    'docs/PHASE_143C_CRM_IDENTITY_ENTITY_MATCHING_MODEL.md',
+    'docs/PHASE_143D_CRM_SYNC_PREVIEW_NO_WRITES.md',
+    'docs/PHASE_143E_CRM_WRITEBACK_POLICY_GATE_DISABLED.md',
+    'docs/PHASE_143F_CRM_CONTROLLED_WRITEBACK_DRY_RUN_ADAPTER.md',
+    'docs/PHASE_143G_CRM_ACTIVITY_TIMELINE_ENRICHMENT_READ_ONLY.md',
+    'docs/PHASE_143H_CRM_RELATIONSHIP_INTELLIGENCE_COCKPIT.md',
+    'docs/PHASE_143I_CRM_ALLOWLISTED_LIVE_WRITE_PILOT_SCAFFOLD.md',
+    'docs/PHASE_143J_CRM_ACTIVATION_CERTIFICATION_AND_ROLLBACK.md',
+    'src/crm/sourceOfTruth/crmSourceOfTruthMap.ts',
+    'src/crm/connectors/crmConnectorReadiness.ts',
+    'src/crm/matching/crmEntityMatchingModel.ts',
+    'src/crm/syncPreview/crmSyncPreviewPlan.ts',
+    'src/crm/writeback/crmWritebackPolicyGate.ts',
+    'src/crm/writeback/crmControlledWritebackAdapter.ts',
+    'src/crm/writeback/crmAllowlistedLiveWritePilot.ts',
+    'src/crm/activityTimeline/crmActivityTimelineModel.ts',
+    'src/crm/relationshipIntelligence/crmRelationshipIntelligenceViewModel.ts',
+    'src/shared/governance/crmActivationGovernance.test.ts',
+    'src/shared/governance/crmActivationCertification.test.ts',
+  ];
+  for (const rel of REQUIRED_143_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  const doc = readDoc('docs/PHASE_143J_CRM_ACTIVATION_CERTIFICATION_AND_ROLLBACK.md');
+
+  it('the certification doc pins no-uncontrolled-live-writes, dry-run/read-only, rollback, non-certifications', () => {
+    expect(doc).toMatch(/no uncontrolled live writes/i);
+    expect(doc).toMatch(/disabled\s*\/\s*dry-run\s*\/\s*read-only/i);
+    expect(doc).toMatch(/rollback\s*\/\s*kill[- ]?switch/i);
+    expect(doc).toMatch(/explicit non-certifications/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 144A Ã¢â‚¬â€ system-wide drill-through contract
+// ---------------------------------------------------------------------------
+
+describe('Phase 144A Ã¢â‚¬â€ system-wide drill-through contract exists', () => {
+  const REQUIRED_144A_FILES: readonly string[] = [
+    'docs/PHASE_144A_SYSTEM_WIDE_DRILL_THROUGH_CONTRACT.md',
+    'src/shared/drillthrough/drillThroughTypes.ts',
+    'src/shared/drillthrough/drillThroughRegistry.ts',
+    'src/shared/drillthrough/DrillThroughPanel.tsx',
+    'src/shared/drillthrough/DrillThroughCard.tsx',
+    'src/shared/governance/systemWideDrillThroughContract.test.ts',
+  ];
+  for (const rel of REQUIRED_144A_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  const doc = readDoc('docs/PHASE_144A_SYSTEM_WIDE_DRILL_THROUGH_CONTRACT.md');
+
+  it('the doc pins no-dead-cards, read-only, three-way resolution, and accessibility', () => {
+    expect(doc).toMatch(/no dead summary cards/i);
+    expect(doc).toMatch(/read-only/i);
+    expect(doc).toMatch(/unavailable state/i);
+    expect(doc).toMatch(/Enter\/Space/i);
+  });
+
+  it('the doc pins no new write / route / permission widening', () => {
+    expect(doc).toMatch(/no new permissions, routes, live calls, or writes/i);
+    expect(doc).toMatch(/WorkspaceGate/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 144B Ã¢â‚¬â€ legacy cockpit drill-through retrofit
+// ---------------------------------------------------------------------------
+
+describe('Phase 144B Ã¢â‚¬â€ legacy cockpit drill-through retrofit exists', () => {
+  const REQUIRED_144B_FILES: readonly string[] = [
+    'docs/PHASE_144B_LEGACY_COCKPIT_DRILL_THROUGH_RETROFIT.md',
+    'src/manager/managerDrillThrough.ts',
+    'src/portfolio/portfolioDrillThrough.ts',
+    'src/team/teamOpsQueueDrillThrough.ts',
+    'src/deals/dealCockpitDrillThrough.ts',
+    'src/executive/executiveDrillThrough.ts',
+    'src/shared/governance/legacyCockpitDrillThroughRetrofit.test.ts',
+  ];
+  for (const rel of REQUIRED_144B_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  const doc = readDoc('docs/PHASE_144B_LEGACY_COCKPIT_DRILL_THROUGH_RETROFIT.md');
+
+  it('the doc pins the five retrofitted workspaces and read-only posture', () => {
+    expect(doc).toMatch(/Manager/);
+    expect(doc).toMatch(/Portfolio/);
+    expect(doc).toMatch(/Team/);
+    expect(doc).toMatch(/Banker\/Deal/);
+    expect(doc).toMatch(/Executive/);
+    expect(doc).toMatch(/read-only/i);
+  });
+
+  it('the doc pins no new route / permission widening and honest unavailable reasons', () => {
+    expect(doc).toMatch(/No permission, role, or scope widening/i);
+    expect(doc).toMatch(/unavailable/i);
+    expect(doc).toMatch(/WorkspaceGate/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 144C Ã¢â‚¬â€ chart segment drill-through
+// ---------------------------------------------------------------------------
+
+describe('Phase 144C Ã¢â‚¬â€ chart segment drill-through exists', () => {
+  const REQUIRED_144C_FILES: readonly string[] = [
+    'docs/PHASE_144C_CHART_SEGMENT_DRILL_THROUGH.md',
+    'src/shared/drillthrough/chartDrillThrough.ts',
+    'src/shared/drillthrough/chartDrillThrough.test.tsx',
+    'src/shared/governance/chartSegmentDrillThrough.test.ts',
+  ];
+  for (const rel of REQUIRED_144C_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  const doc = readDoc('docs/PHASE_144C_CHART_SEGMENT_DRILL_THROUGH.md');
+
+  it('the doc pins chart-level vs segment-level, the four workspaces, and read-only posture', () => {
+    expect(doc).toMatch(/Chart-level/i);
+    expect(doc).toMatch(/segment-level/i);
+    expect(doc).toMatch(/Manager/);
+    expect(doc).toMatch(/Portfolio/);
+    expect(doc).toMatch(/Team/);
+    expect(doc).toMatch(/Executive/);
+    expect(doc).toMatch(/read-only/i);
+  });
+
+  it('the doc pins no fake data, honest unavailable reasons, and Enter/Space activation', () => {
+    expect(doc).toMatch(/no.*fake/i);
+    expect(doc).toMatch(/unavailable reason/i);
+    expect(doc).toMatch(/Enter\/Space/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 144D Ã¢â‚¬â€ drill-through deep-link support
+// ---------------------------------------------------------------------------
+
+describe('Phase 144D Ã¢â‚¬â€ drill-through deep-link support exists', () => {
+  const REQUIRED_144D_FILES: readonly string[] = [
+    'docs/PHASE_144D_DRILL_THROUGH_ROUTE_DEEP_LINK_SUPPORT.md',
+    'src/shared/drillthrough/drillThroughDeepLink.ts',
+    'src/shared/drillthrough/drillThroughDeepLink.test.ts',
+    'src/shared/drillthrough/useDrillThroughDeepLink.ts',
+    'src/shared/drillthrough/useDrillThroughDeepLink.test.tsx',
+    'src/shared/governance/drillThroughDeepLinkGovernance.test.ts',
+  ];
+  for (const rel of REQUIRED_144D_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  const doc = readDoc('docs/PHASE_144D_DRILL_THROUGH_ROUTE_DEEP_LINK_SUPPORT.md');
+
+  it('the doc pins the ?drill= contract, validation rules, and fail-closed availability', () => {
+    expect(doc).toMatch(/\?drill=/);
+    expect(doc).toMatch(/validation rules/i);
+    expect(doc).toMatch(/fails? closed/i);
+    expect(doc).toMatch(/never fetch/i);
+  });
+
+  it('the doc pins no new route / auth bypass / permission widening and read-only posture', () => {
+    expect(doc).toMatch(/no new route/i);
+    expect(doc).toMatch(/WorkspaceGate/);
+    expect(doc).toMatch(/permission widening/i);
+    expect(doc).toMatch(/read-only/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 144E Ã¢â‚¬â€ extend drill-through deep-links across cockpits
+// ---------------------------------------------------------------------------
+
+describe('Phase 144E Ã¢â‚¬â€ drill-through deep-link expansion exists', () => {
+  const REQUIRED_144E_FILES: readonly string[] = [
+    'docs/PHASE_144E_EXTEND_DRILL_THROUGH_DEEP_LINKS.md',
+    'src/crm/relationshipIntelligence/crmRelationshipDrillThrough.ts',
+    'src/shared/governance/drillThroughDeepLinkExpansion.test.ts',
+  ];
+  for (const rel of REQUIRED_144E_FILES) {
+    it(`${rel} exists on disk`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+
+  const doc = readDoc('docs/PHASE_144E_EXTEND_DRILL_THROUGH_DEEP_LINKS.md');
+
+  it('the doc pins the four extended cockpits and fail-closed/read-only posture', () => {
+    expect(doc).toMatch(/Manager/);
+    expect(doc).toMatch(/Team/);
+    expect(doc).toMatch(/Executive/);
+    expect(doc).toMatch(/CRM Relationship Intelligence/);
+    expect(doc).toMatch(/fail-?closed/i);
+    expect(doc).toMatch(/read-only/i);
+  });
+
+  it('the doc pins no new route / no cross-workspace lookup / payload-from-local-registry', () => {
+    expect(doc).toMatch(/no new route/i);
+    expect(doc).toMatch(/cross-workspace/i);
+    expect(doc).toMatch(/never the URL|not the URL|never from the URL/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 164 Ã¢â‚¬â€ V1.0 controlled pilot release package
+// ---------------------------------------------------------------------------
+
+describe('Phase 164 Ã¢â‚¬â€ V1.0 controlled pilot release package exists and is honest', () => {
+  it('docs/PHASE_164_V1_CONTROLLED_PILOT_RELEASE_PACKAGE.md exists on disk', () => {
+    expect(
+      existsSync(
+        resolve(
+          REPO_ROOT,
+          'docs/PHASE_164_V1_CONTROLLED_PILOT_RELEASE_PACKAGE.md',
+        ),
+      ),
+    ).toBe(true);
+  });
+
+  const doc = readDoc('docs/PHASE_164_V1_CONTROLLED_PILOT_RELEASE_PACKAGE.md');
+
+  it('pins the exact release baseline commit 4937b42', () => {
+    expect(doc).toMatch(/4937b42/);
+  });
+
+  it('pins the included scope (CRM drill-through, Log Activity governed write)', () => {
+    expect(doc).toMatch(/CRM Command Center/);
+    expect(doc).toMatch(/drill-through/i);
+    expect(doc).toMatch(/Log Activity governed write/i);
+  });
+
+  it('pins + New Deal disabled as a known blocker with the Stage/Status reason', () => {
+    expect(doc).toMatch(/New Deal/);
+    expect(doc).toMatch(/StageReference@odata\.bind/);
+    expect(doc).toMatch(/StatusReference@odata\.bind/);
+    expect(doc).toMatch(/disabled/i);
+  });
+
+  it('pins the live smoke checklist and the no-fake-data / no-unconfigured-connector guardrails', () => {
+    expect(doc).toMatch(/Live Power Apps Smoke Checklist/i);
+    expect(doc).toMatch(/No fake data is visible/i);
+    expect(doc).toMatch(/Copilot/);
+  });
+
+  it('pins the rollback plan and a binary go/no-go on + New Deal', () => {
+    expect(doc).toMatch(/Rollback Plan/i);
+    expect(doc).toMatch(/GO for controlled pilot/i);
+    expect(doc).toMatch(/NO-GO/);
+  });
+
+  it('pins the Phase 168 final-status addendum (Phase 166 fix, Phase 167 redeploy, smoke passed, tag pushed)', () => {
+    expect(doc).toMatch(/Final Status Addendum/i);
+    expect(doc).toMatch(/Phase 166/);
+    expect(doc).toMatch(/Phase 167 redeployed/i);
+    expect(doc).toMatch(/v1\.0\.0-controlled-pilot/);
+    expect(doc).toMatch(/faf26d6/);
+    expect(doc).toMatch(/smoke[- ]passed/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 168 Ã¢â‚¬â€ V1.0 release notes carry the pushed controlled-pilot tag
+// ---------------------------------------------------------------------------
+
+describe('Phase 168 Ã¢â‚¬â€ V1.0 release notes pin the final controlled-pilot tag', () => {
+  const doc = readDoc('docs/V1_0_RELEASE_NOTES.md');
+
+  it('pins the release tag and tagged commit', () => {
+    expect(doc).toMatch(/v1\.0\.0-controlled-pilot/);
+    expect(doc).toMatch(/faf26d6/);
+  });
+
+  it('pins the Phase 167 deployment and a passed operator live smoke', () => {
+    expect(doc).toMatch(/Phase 167/);
+    expect(doc).toMatch(/pac code push/i);
+    expect(doc).toMatch(/operator live smoke passed/i);
+  });
+
+  it('pins + New Deal as the accepted disabled-for-V1.0 limitation due to the Stage/Status reference blocker', () => {
+    expect(doc).toMatch(/New Deal/);
+    expect(doc).toMatch(/disabled for V1\.0/i);
+    expect(doc).toMatch(/Stage\/Status reference blocker/i);
+  });
+
+  it('pins the post-V1 unblock path (register data sources, SDK refresh, fail-closed resolver, governed create)', () => {
+    expect(doc).toMatch(/register the Stage Reference \/ Status Reference\s+data sources/i);
+    expect(doc).toMatch(/refresh the generated SDK/i);
+    expect(doc).toMatch(/fail-closed default\s+resolver/i);
+    expect(doc).toMatch(/governed \+ New Deal create/i);
+  });
+
+  it('pins the final release status line', () => {
+    expect(doc).toMatch(/V1\.0 controlled pilot tagged and smoke-passed/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 169A -- Admin Operations Console (read-only shell)
+// ---------------------------------------------------------------------------
+
+describe('Phase 169A -- Admin Operations Console doc exists and is read-only/honest', () => {
+  const rel = 'docs/PHASE_169A_ADMIN_OPERATIONS_CONSOLE.md';
+
+  it('the Phase 169A doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('pins the read-only shell scope and the five modules', () => {
+    expect(doc).toMatch(/read-only shell/i);
+    expect(doc).toMatch(/User & Access Management/);
+    expect(doc).toMatch(/New Deal Intake/);
+    expect(doc).toMatch(/Portfolio Boarding/);
+    expect(doc).toMatch(/CRM Onboarding/);
+    expect(doc).toMatch(/Security \/ Dataverse Roles/);
+  });
+
+  it('pins app-level-vs-platform-security distinction and no writes enabled', () => {
+    expect(doc).toMatch(/app-level entitlements/i);
+    expect(doc).toMatch(/Power Platform admin center/i);
+    expect(doc).toMatch(/No live write path is enabled by this phase/i);
+  });
+
+  it('pins New Deal still blocked, route delta 0, and tag not moved', () => {
+    expect(doc).toMatch(/New Deal Intake \| blocked/i);
+    expect(doc).toMatch(/Route Delta/i);
+    expect(doc).toMatch(/v1\.0\.0-controlled-pilot/);
+    expect(doc).toMatch(/it is not moved|remains `?v1\.0\.0-controlled-pilot`? at `?faf26d6`?/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 169B -- Admin User & Access Management (Case B, preview-only)
+// ---------------------------------------------------------------------------
+
+describe('Phase 169B -- Admin User & Access Management doc exists and is Case B', () => {
+  const rel = 'docs/PHASE_169B_ADMIN_USER_ACCESS_MANAGEMENT.md';
+
+  it('the Phase 169B doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('pins the Case B outcome (read path, no safe governed write)', () => {
+    expect(doc).toMatch(/CASE B/i);
+    expect(doc).toMatch(/no safe governed write/i);
+  });
+
+  it('pins the access-is-PrimaryWorkspace finding and the misleading-entitlement-write reason', () => {
+    expect(doc).toMatch(/cr664_platformuser\.cr664_PrimaryWorkspace/);
+    expect(doc).toMatch(/would (?:therefore )?NOT grant a user access/i);
+  });
+
+  it('pins no live write enabled and the Dataverse-security-role / Power Platform handoff', () => {
+    expect(doc).toMatch(/Nothing\.|USER_ACCESS_LIVE_WRITE_ENABLED = false/);
+    expect(doc).toMatch(/Power Platform admin center/i);
+    expect(doc).toMatch(/Dataverse\s+security roles?/i);
+  });
+
+  it('pins route delta 0 and tag not moved', () => {
+    expect(doc).toMatch(/Route Delta/i);
+    expect(doc).toMatch(/v1\.0\.0-controlled-pilot/);
+    expect(doc).toMatch(/stays at `?faf26d6`?|not created or moved/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 169C -- Admin New Deal Intake blocker (Case B, preview-only)
+// ---------------------------------------------------------------------------
+
+describe('Phase 169C -- Admin New Deal Intake doc exists and is Case B blocker', () => {
+  const rel = 'docs/PHASE_169C_ADMIN_NEW_DEAL_INTAKE_BLOCKER.md';
+
+  it('the Phase 169C doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('pins the Case B outcome and the Stage/Status reference blocker', () => {
+    expect(doc).toMatch(/CASE B/i);
+    expect(doc).toMatch(/Stage\/Status (?:reference )?source missing|Stage\/Status reference data source registration is missing/i);
+    expect(doc).toMatch(/Phase 163/);
+  });
+
+  it('pins no create enabled and the + New Deal button staying disabled', () => {
+    expect(doc).toMatch(/NEW_DEAL_INTAKE_LIVE_CREATE_ENABLED = false/);
+    expect(doc).toMatch(/\+ New Deal button remains disabled/i);
+  });
+
+  it('pins the five-step registration checklist (incl. fail-closed resolver, no GUIDs)', () => {
+    expect(doc).toMatch(/Registration Checklist/i);
+    expect(doc).toMatch(/fail-closed default resolver/i);
+    expect(doc).toMatch(/no hardcoded GUIDs/i);
+  });
+
+  it('pins route delta 0 and tag not moved', () => {
+    expect(doc).toMatch(/Route Delta/i);
+    expect(doc).toMatch(/v1\.0\.0-controlled-pilot/);
+    expect(doc).toMatch(/stays\s+at\s+`?faf26d6`?/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 170C -- Stage/Status reference resolver foundation
+// ---------------------------------------------------------------------------
+
+describe('Phase 170C -- Stage/Status reference resolver doc exists and keeps New Deal disabled', () => {
+  const rel = 'docs/PHASE_170C_STAGE_STATUS_REFERENCE_RESOLVER.md';
+
+  it('the Phase 170C doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('pins the Case B outcome and missing generated registration', () => {
+    expect(doc).toMatch(/Case Outcome: CASE B/i);
+    expect(doc).toMatch(/no generated .*Stage.*Status.*service/i);
+    expect(doc).toMatch(/not registered in `?power\.config\.json`?/i);
+  });
+
+  it('pins the exact required cr664_loandeal bind fields', () => {
+    expect(doc).toMatch(/cr664_StageReference@odata\.bind/);
+    expect(doc).toMatch(/cr664_StatusReference@odata\.bind/);
+  });
+
+  it('pins the inspect-only operator mode and no runtime resolver', () => {
+    expect(doc).toMatch(/--inspect-new-deal-references/);
+    expect(doc).toMatch(/inspect-only/i);
+    expect(doc).toMatch(/Resolver added: No/i);
+  });
+
+  it('pins no create, no GUID defaults, no deploy, and + New Deal disabled', () => {
+    expect(doc).toMatch(/New Deal create remains disabled/i);
+    expect(doc).toMatch(/No hardcoded GUID/i);
+    expect(doc).toMatch(/No deploy/i);
+    expect(doc).toMatch(/No schema/i);
+    expect(doc).toMatch(/No record write/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 169E -- Admin CRM Onboarding (Case B, disabled-by-default)
+// ---------------------------------------------------------------------------
+
+describe('Phase 169E -- Admin CRM Onboarding doc exists and is Case B', () => {
+  const rel = 'docs/PHASE_169E_ADMIN_CRM_ONBOARDING.md';
+
+  it('the Phase 169E doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('pins Case B (stack present; runtime CRM persistence disabled by default)', () => {
+    expect(doc).toMatch(/CASE B/i);
+    expect(doc).toMatch(/runtime CRM persistence disabled by default/i);
+    expect(doc).toMatch(/CRM_LIVE_PERSISTENCE_ENABLED/);
+  });
+
+  it('pins no live create/import/sync enabled, fail-closed resolver, and external connector off', () => {
+    expect(doc).toMatch(/CRM_ADMIN_LIVE_WRITE_ENABLED = false/);
+    expect(doc).toMatch(/fails closed/i);
+    expect(doc).toMatch(/disabled_by_default/);
+  });
+
+  it('pins the ten required data groups and the five safe next steps', () => {
+    expect(doc).toMatch(/organizations/i);
+    expect(doc).toMatch(/contact authorizations/i);
+    expect(doc).toMatch(/timeline events/i);
+    expect(doc).toMatch(/test-tenant write/i);
+  });
+
+  it('pins route delta 0 and tag not moved', () => {
+    expect(doc).toMatch(/Route Delta/i);
+    expect(doc).toMatch(/v1\.0\.0-controlled-pilot/);
+    expect(doc).toMatch(/stays\s+at\s+`?faf26d6`?/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 169F -- Admin Operations Console certification & deploy
+// ---------------------------------------------------------------------------
+
+describe('Phase 169F -- Admin console certification doc exists and is honest', () => {
+  const rel = 'docs/PHASE_169F_ADMIN_CONSOLE_CERTIFICATION_AND_DEPLOY.md';
+
+  it('the Phase 169F doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('pins the included 169A-E commits and the bugfix', () => {
+    for (const sha of ['c18b587', '6a3be00', '5a3c8ab', 'b279de5', '4a7bed1', '912982f']) {
+      expect(doc).toMatch(new RegExp(sha));
+    }
+  });
+
+  it('pins the five required modules in the certification checklist', () => {
+    expect(doc).toMatch(/User & Access Management/);
+    expect(doc).toMatch(/New Deal Intake/);
+    expect(doc).toMatch(/Portfolio Boarding/);
+    expect(doc).toMatch(/CRM Onboarding/);
+    expect(doc).toMatch(/Security \/ Dataverse Roles/);
+  });
+
+  it('pins no live writes / no schema / no tag movement at faf26d6', () => {
+    expect(doc).toMatch(/No live admin writes/i);
+    expect(doc).toMatch(/No schema, migration, or Dataverse record changes/i);
+    expect(doc).toMatch(/stays\s+at\s+`?faf26d6`?/i);
+  });
+
+  it('pins the deploy target and the rollback via the controlled-pilot tag', () => {
+    expect(doc).toMatch(/5f2d77a5-de50-edeb-9d74-5b2400a2320d/);
+    expect(doc).toMatch(/63858e09-3d0b-47c9-b1d2-65cef742fda4/);
+    expect(doc).toMatch(/git checkout v1\.0\.0-controlled-pilot/);
+  });
+
+  it('pins the ten admin live smoke steps', () => {
+    expect(doc).toMatch(/Live Smoke Checklist/i);
+    expect(doc).toMatch(/Navigate to the Admin workspace/i);
+    expect(doc).toMatch(/Banker workspace still renders/i);
+    expect(doc).toMatch(/CRM Command Center still renders/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 169D -- Admin Portfolio Boarding onboarding (Case B, disabled-by-default)
+// ---------------------------------------------------------------------------
+
+describe('Phase 169D -- Admin Portfolio Boarding doc exists and is Case B', () => {
+  const rel = 'docs/PHASE_169D_ADMIN_PORTFOLIO_BOARDING_ONBOARDING.md';
+
+  it('the Phase 169D doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('pins Case B (stack present; runtime persistence disabled by default)', () => {
+    expect(doc).toMatch(/CASE B/i);
+    expect(doc).toMatch(/runtime persistence disabled by default/i);
+    expect(doc).toMatch(/PORTFOLIO_BOARDING_LIVE_PERSISTENCE_ENABLED/);
+  });
+
+  it('pins no live create/import/upload enabled and the resolver fails closed', () => {
+    expect(doc).toMatch(/PORTFOLIO_BOARDING_ADMIN_LIVE_WRITE_ENABLED = false/);
+    expect(doc).toMatch(/fails closed/i);
+    expect(doc).toMatch(/no document upload wired|Document upload disabled/i);
+  });
+
+  it('pins the nine required data groups and the five safe next steps', () => {
+    expect(doc).toMatch(/loan master/i);
+    expect(doc).toMatch(/guarantors/i);
+    expect(doc).toMatch(/exceptions\/reviews/i);
+    expect(doc).toMatch(/test-tenant write/i);
+  });
+
+  it('pins route delta 0 and tag not moved', () => {
+    expect(doc).toMatch(/Route Delta/i);
+    expect(doc).toMatch(/v1\.0\.0-controlled-pilot/);
+    expect(doc).toMatch(/stays\s+at\s+`?faf26d6`?/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 170A -- Governed platform user / primary workspace provisioning design
+// ---------------------------------------------------------------------------
+
+describe('Phase 170A -- platform user provisioning design doc exists and is governed', () => {
+  const rel = 'docs/PHASE_170A_PLATFORM_USER_PRIMARY_WORKSPACE_PROVISIONING_DESIGN.md';
+
+  it('the Phase 170A doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('pins that access is driven by the platform user primary workspace, not entitlements alone', () => {
+    expect(doc).toMatch(/cr664_platformuser\.cr664_PrimaryWorkspace/);
+    expect(doc).toMatch(/PrimaryWorkspace@odata\.bind/);
+    expect(doc).toMatch(/does NOT grant access/i);
+  });
+
+  it('warns that Dataverse security roles are outside in-app provisioning', () => {
+    expect(doc).toMatch(/SECURITY ROLES remain OUTSIDE the app/i);
+    expect(doc).toMatch(/Power Platform admin center/i);
+  });
+
+  it('requires dry-run default and an explicit commit flag', () => {
+    expect(doc).toMatch(/Dry-run by default/i);
+    expect(doc).toMatch(/--commit/);
+  });
+
+  it('includes an idempotency matrix with bail-on-duplicate states', () => {
+    expect(doc).toMatch(/Idempotency Matrix/i);
+    expect(doc).toMatch(/duplicate user/i);
+    expect(doc).toMatch(/duplicate workspace/i);
+    expect(doc).toMatch(/no-op/i);
+  });
+
+  it('asserts no Graph / no external HTTP / no hardcoded GUID / no live provisioning', () => {
+    expect(doc).toMatch(/No Microsoft Graph/i);
+    expect(doc).toMatch(/No\s+external HTTP\/fetch/i);
+    expect(doc).toMatch(/No hardcoded GUIDs/i);
+    expect(doc).toMatch(/No live in-app user provisioning/i);
+  });
+
+  it('pins that the existing operator script can be extended safely (no new script needed)', () => {
+    expect(doc).toMatch(/phase122-lookup-repair\.mjs/);
+    expect(doc).toMatch(/runSeedExecutivePrimaryWorkspace/);
+    expect(doc).toMatch(/brand-new script is NOT needed/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 170B -- Operator primary workspace provisioning
+// ---------------------------------------------------------------------------
+
+describe('Phase 170B -- operator primary-workspace provisioning doc exists and is governed', () => {
+  const rel = 'docs/PHASE_170B_OPERATOR_PRIMARY_WORKSPACE_PROVISIONING.md';
+
+  it('the Phase 170B doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('pins the new mode, its args, dry-run default, and explicit commit flag', () => {
+    expect(doc).toMatch(/--seed-primary-workspace/);
+    expect(doc).toMatch(/--upn/);
+    expect(doc).toMatch(/--workspace-name/);
+    expect(doc).toMatch(/--commit-seed-primary-workspace/);
+    expect(doc).toMatch(/Default: dry-run/i);
+  });
+
+  it('pins existing-user-only and never-creates-workspace behavior', () => {
+    expect(doc).toMatch(/NEVER creates a platform user|existing-user only/i);
+    expect(doc).toMatch(/NEVER creates a workspace|does NOT create a workspace/i);
+  });
+
+  it('pins the no-op / bail matrix', () => {
+    expect(doc).toMatch(/No-op \/ Bail Matrix/i);
+    expect(doc).toMatch(/duplicate user/i);
+    expect(doc).toMatch(/duplicate workspace/i);
+  });
+
+  it('pins what it does NOT do (no roles, no entitlements, no Graph, no in-app, no GUID)', () => {
+    expect(doc).toMatch(/Does NOT grant Dataverse \/ Microsoft tenant security roles/i);
+    expect(doc).toMatch(/Does NOT write `?cr664_workspaceentitlements`? rows/i);
+    expect(doc).toMatch(/Does NOT expose in-app provisioning/i);
+    expect(doc).toMatch(/Does NOT call Microsoft Graph/i);
+    expect(doc).toMatch(/Does NOT hardcode any GUID/i);
+  });
+
+  it('pins PATCH-only-PrimaryWorkspace and no tag movement', () => {
+    expect(doc).toMatch(/cr664_PrimaryWorkspace@odata\.bind/);
+    expect(doc).toMatch(/No tag created or moved/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 170D -- Stage/Status reference registration + resolver foundation
+// ---------------------------------------------------------------------------
+
+describe('Phase 170D -- Stage/Status reference resolver doc exists and is governed', () => {
+  const rel = 'docs/PHASE_170D_STAGE_STATUS_REFERENCE_REGISTRATION_RESOLVER.md';
+
+  it('the Phase 170D doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('pins the discovered Stage/Status target tables + entity sets + primary fields', () => {
+    expect(doc).toMatch(/cr664_dealstagereference\b/);
+    expect(doc).toMatch(/cr664_dealstagereferences\b/);
+    expect(doc).toMatch(/cr664_dealstagereferenceid/);
+    expect(doc).toMatch(/cr664_dealstatusreference\b/);
+    expect(doc).toMatch(/cr664_dealstatusreferences\b/);
+    expect(doc).toMatch(/cr664_dealstatusreferenceid/);
+    expect(doc).toMatch(/cr664_activeflag/);
+    expect(doc).toMatch(/cr664_code/);
+  });
+
+  it('pins Case B: data sources NOT registered (toolchain step) but resolver added', () => {
+    expect(doc).toMatch(/CASE B/i);
+    expect(doc).toMatch(/auto-generated|autogenerated/i);
+    expect(doc).toMatch(/newDealReferenceResolver\.ts/);
+  });
+
+  it('pins the fail-closed resolver union and bind-only-from-verified-id rule', () => {
+    expect(doc).toMatch(/notConfigured/);
+    expect(doc).toMatch(/duplicateStage/);
+    expect(doc).toMatch(/inactiveStatus/);
+    expect(doc).toMatch(/serviceError/);
+    expect(doc).toMatch(/\/cr664_dealstagereferences\(<id>\)/);
+  });
+
+  it('pins New Deal still disabled and no GUID hardcoding / no registration done', () => {
+    expect(doc).toMatch(/New Deal Remains Disabled|New Deal stays disabled/i);
+    expect(doc).toMatch(/No hardcoded Stage\/Status GUIDs/i);
+    expect(doc).toMatch(/No data source registered|data sources are not registered/i);
+  });
+
+  it('pins the read-only inspection mode and no tag movement', () => {
+    expect(doc).toMatch(/--inspect-stage-status-values/);
+    expect(doc).toMatch(/No tag created or moved/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 170D-R -- reconcile Stage/Status reference metadata to one source
+// ---------------------------------------------------------------------------
+
+describe('Phase 170D-R -- canonical reference metadata + companion doc', () => {
+  it('the companion targets-confirmed doc exists on disk', () => {
+    expect(
+      existsSync(
+        resolve(REPO_ROOT, 'docs/PHASE_170D_NEW_DEAL_REFERENCE_TARGETS_CONFIRMED.md'),
+      ),
+    ).toBe(true);
+  });
+
+  it('the companion doc pins the canonical single-source relocation to src/deals', () => {
+    const doc = readDoc('docs/PHASE_170D_NEW_DEAL_REFERENCE_TARGETS_CONFIRMED.md');
+    expect(doc).toMatch(/src\/deals\/newDealReferenceTargets\.ts/);
+    expect(doc).toMatch(/single source of truth/i);
+  });
+
+  it('the canonical metadata module exists and the duplicate admin copy is gone', () => {
+    expect(existsSync(resolve(REPO_ROOT, 'src/deals/newDealReferenceTargets.ts'))).toBe(true);
+    expect(existsSync(resolve(REPO_ROOT, 'src/admin/newDealReferenceTargets.ts'))).toBe(false);
+  });
+
+  it('the canonical module declares the exact Stage/Status target values once', () => {
+    const src = readFileSync(
+      resolve(REPO_ROOT, 'src/deals/newDealReferenceTargets.ts'),
+      'utf8',
+    );
+    expect(src).toMatch(/cr664_dealstagereferences/);
+    expect(src).toMatch(/cr664_dealstatusreferences/);
+    expect(src).toMatch(/cr664_activeflag/);
+    // No record GUIDs in the metadata-only manifest.
+    expect(src).not.toMatch(/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/);
+  });
+
+  it('the resolver consumes the canonical module (does not redeclare entity sets)', () => {
+    const src = readFileSync(
+      resolve(REPO_ROOT, 'src/deals/newDealReferenceResolver.ts'),
+      'utf8',
+    );
+    expect(src).toMatch(/from '\.\/newDealReferenceTargets'/);
+    // The literal entity-set strings live ONLY in the canonical module now.
+    expect(src).not.toMatch(/'cr664_dealstagereferences'/);
+    expect(src).not.toMatch(/'cr664_dealstatusreferences'/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 170E -- Stage/Status data source registration + resolver reader
+// ---------------------------------------------------------------------------
+
+describe('Phase 170E -- data source / resolver reader doc exists and is governed', () => {
+  const rel = 'docs/PHASE_170E_STAGE_STATUS_DATASOURCE_RESOLVER_READER.md';
+
+  it('the Phase 170E doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('records the live inspection values explicitly as evidence only', () => {
+    expect(doc).toMatch(/EVIDENCE ONLY/i);
+    expect(doc).toMatch(/PHASE121_STAGE/);
+    expect(doc).toMatch(/PHASE121_STATUS/);
+    expect(doc).toMatch(/NOT stored in source|never hardcoded/i);
+  });
+
+  it('pins that data sources were NOT registered (connector attempt reverted)', () => {
+    expect(doc).toMatch(/Were Data Sources \/ Generated Services Added\?/i);
+    expect(doc).toMatch(/No\./);
+    expect(doc).toMatch(/reverted/i);
+    expect(doc).toMatch(/pac code add-data-source/);
+  });
+
+  it('pins selection by code/name (not GUID) and the registration runbook', () => {
+    expect(doc).toMatch(/STAGE_REFERENCE_SELECTION/);
+    expect(doc).toMatch(/Registration Runbook/i);
+    expect(doc).toMatch(/notConfigured/);
+  });
+
+  it('pins New Deal still disabled, TEST-env labels, and no tag movement', () => {
+    expect(doc).toMatch(/New Deal Remains Disabled|New Deal stays disabled/i);
+    expect(doc).toMatch(/REFERENCE_SELECTION_PRODUCTION_APPROVED = false/);
+    expect(doc).toMatch(/No tag created or moved/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 170F -- typed Stage/Status data-source registration runbook
+// ---------------------------------------------------------------------------
+
+describe('Phase 170F -- typed data-source registration runbook exists and is governed', () => {
+  const rel = 'docs/PHASE_170F_TYPED_DATASOURCE_REGISTRATION_RUNBOOK.md';
+
+  it('the Phase 170F doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('names the two reference entity sets the runbook registers', () => {
+    expect(doc).toMatch(/cr664_dealstagereferences/);
+    expect(doc).toMatch(/cr664_dealstatusreferences/);
+  });
+
+  it('rejects the generic MicrosoftDataverseService connector artifact', () => {
+    expect(doc).toMatch(/MicrosoftDataverseService/);
+    expect(doc).toMatch(/Rejected diff shape/i);
+  });
+
+  it('rejects the shared_commondataserviceforapps connector reference', () => {
+    expect(doc).toMatch(/shared_commondataserviceforapps/);
+  });
+
+  it('pins the accepted native typed pattern and verification commands', () => {
+    expect(doc).toMatch(/databaseReferences\.default\.cds|databaseReferences\."default\.cds"/);
+    expect(doc).toMatch(/Accepted diff shape/i);
+    expect(doc).toMatch(/Verification Commands/i);
+  });
+
+  it('states + New Deal remains disabled and no tag movement', () => {
+    expect(doc).toMatch(/New Deal Remains Disabled|New Deal stays disabled/i);
+    expect(doc).toMatch(/No tag created or moved/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 170F2 -- Stage/Status typed data-source code proof
+// ---------------------------------------------------------------------------
+
+describe('Phase 170F2 -- typed data-source code proof doc + artifacts', () => {
+  const rel = 'docs/PHASE_170F2_STAGE_STATUS_DATASOURCE_CODE_PROOF.md';
+
+  it('the Phase 170F2 doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('records ACCEPTED outcome and the two typed reference tables', () => {
+    expect(doc).toMatch(/ACCEPTED/i);
+    expect(doc).toMatch(/cr664_dealstagereferences/);
+    expect(doc).toMatch(/cr664_dealstatusreferences/);
+  });
+
+  it('rejects the generic connector artifact and pins .power gitignore fact', () => {
+    expect(doc).toMatch(/MicrosoftDataverseService/);
+    expect(doc).toMatch(/shared_commondataserviceforapps/);
+    expect(doc).toMatch(/\.power\/ Is Git-Ignored|\.power\/` is gitignored/i);
+  });
+
+  it('states + New Deal remains disabled and no tag movement', () => {
+    expect(doc).toMatch(/New Deal Remains Disabled|New Deal stays disabled/i);
+    expect(doc).toMatch(/No tag created or moved/i);
+  });
+
+  it('the typed generated services exist and no committed connector artifact does', () => {
+    expect(existsSync(resolve(REPO_ROOT, 'src/generated/services/Cr664_dealstagereferencesService.ts'))).toBe(true);
+    expect(existsSync(resolve(REPO_ROOT, 'src/generated/services/Cr664_dealstatusreferencesService.ts'))).toBe(true);
+    expect(existsSync(resolve(REPO_ROOT, 'src/generated/services/MicrosoftDataverseService.ts'))).toBe(false);
+    const powerConfig = readFileSync(resolve(REPO_ROOT, 'power.config.json'), 'utf8');
+    expect(powerConfig).not.toMatch(/shared_commondataserviceforapps/);
+    expect(powerConfig).toMatch(/cr664_dealstagereferences/);
+    expect(powerConfig).toMatch(/cr664_dealstatusreferences/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 170G -- Stage/Status runtime binding proof
+// ---------------------------------------------------------------------------
+
+describe('Phase 170G -- runtime binding proof doc exists and is governed', () => {
+  const rel = 'docs/PHASE_170G_STAGE_STATUS_RUNTIME_BINDING_PROOF.md';
+
+  it('the Phase 170G doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('states generic connector artifacts are absent (committed + deployed + local .power)', () => {
+    expect(doc).toMatch(/Generic Connector Artifacts: Absent/i);
+    expect(doc).toMatch(/MicrosoftDataverseService/);
+    expect(doc).toMatch(/shared_commondataserviceforapps/);
+  });
+
+  it('pins that .power is local/gitignored and not committed', () => {
+    expect(doc).toMatch(/\.power\/? is gitignored|gitignored \(never committed\)/i);
+    expect(doc).toMatch(/NOT committed|was NOT committed/i);
+  });
+
+  it('states + New Deal remains disabled and no records/writes', () => {
+    expect(doc).toMatch(/New Deal Remains Disabled|New Deal stays disabled/i);
+    expect(doc).toMatch(/No Dataverse record created or patched|No Dataverse write/i);
+  });
+
+  it('pins the rollback command and no tag movement', () => {
+    expect(doc).toMatch(/git checkout v1\.0\.1-admin-console-rollout/);
+    expect(doc).toMatch(/No tag created or moved/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 170H -- Admin New Deal resolver readiness surface
+// ---------------------------------------------------------------------------
+
+describe('Phase 170H -- resolver readiness surface doc exists and is governed', () => {
+  const rel = 'docs/PHASE_170H_ADMIN_NEW_DEAL_RESOLVER_READINESS.md';
+
+  it('the Phase 170H doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('pins the read-only readiness states (ready + fail-closed) and no GUID display', () => {
+    expect(doc).toMatch(/Readiness UI States/i);
+    expect(doc).toMatch(/ready/);
+    expect(doc).toMatch(/serviceError/);
+    expect(doc).toMatch(/never displays a record GUID|No GUID is shown/i);
+  });
+
+  it('pins the TEST not-production-approved warning', () => {
+    expect(doc).toMatch(/TEST reference rows Ã¢â‚¬â€ not production-approved|TEST-environment labels/i);
+    expect(doc).toMatch(/REFERENCE_SELECTION_PRODUCTION_APPROVED = false/);
+  });
+
+  it('pins + New Deal disabled, read-only (no write), and no tag movement', () => {
+    expect(doc).toMatch(/New Deal Remains Disabled|Create remains disabled|New Deal stays disabled/i);
+    expect(doc).toMatch(/NEW_DEAL_INTAKE_LIVE_CREATE_ENABLED = false/);
+    expect(doc).toMatch(/No Dataverse record created/i);
+    expect(doc).toMatch(/No tag\s+created or moved/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 170H-A -- Admin workspace reachability + provisioning repair
+// ---------------------------------------------------------------------------
+
+describe('Phase 170H-A -- admin workspace provisioning repair doc', () => {
+  const rel = 'docs/PHASE_170H_A_ADMIN_WORKSPACE_REACHABILITY_REPAIR.md';
+
+  it('the Phase 170H-A doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('documents the three new commands', () => {
+    expect(doc).toMatch(/--list-platform-workspaces/);
+    expect(doc).toMatch(/--seed-platform-workspace/);
+    expect(doc).toMatch(/--commit-seed-platform-workspace/);
+  });
+
+  it('pins POST-only cr664_workspacename, no auto-routing, no security roles', () => {
+    expect(doc).toMatch(/cr664_workspacename/);
+    expect(doc).toMatch(/No automated routing of Matt|not automated/i);
+    expect(doc).toMatch(/No Dataverse security roles granted/i);
+  });
+
+  it('pins + New Deal disabled, no deploy/tag/record', () => {
+    expect(doc).toMatch(/New Deal stays disabled|new-deal-create/);
+    expect(doc).toMatch(/No deploy/i);
+    expect(doc).toMatch(/No tag\s+created or moved/i);
+    expect(doc).toMatch(/No Dataverse\s+record created or\s+patched/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 170I -- runtime dataSourcesInfo binding repair
+// ---------------------------------------------------------------------------
+
+describe('Phase 170I -- runtime dataSourcesInfo binding repair doc + script', () => {
+  const rel = 'docs/PHASE_170I_RUNTIME_DATASOURCESINFO_BINDING_REPAIR.md';
+
+  it('the Phase 170I doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('documents the live failure text and the root cause', () => {
+    expect(doc).toMatch(/Unable to find data source:[\s\S]*?cr664_dealstagereferences in data sources info/);
+    expect(doc).toMatch(/\.power\/? is gitignored|gitignored/i);
+    expect(doc).toMatch(/dataSourcesInfo/);
+  });
+
+  it('pins no generic connector artifact and no hardcoded inspected GUIDs', () => {
+    expect(doc).toMatch(/MicrosoftDataverse/);
+    expect(doc).toMatch(/shared_commondataserviceforapps/);
+    const docLower = doc;
+    for (const id of ['128de457-3059-f111-bec7-70a8a59be491', '8029c312-3159-f111-bec7-70a8a59be491']) {
+      expect(docLower).not.toContain(id);
+    }
+  });
+
+  it('pins .power local-only (not committed) and + New Deal disabled', () => {
+    expect(doc).toMatch(/MUST NOT be committed|not committed/i);
+    expect(doc).toMatch(/New Deal Remains Disabled|new-deal-create/i);
+    expect(doc).toMatch(/NEW_DEAL_INTAKE_LIVE_CREATE_ENABLED = false/);
+  });
+
+  it('pins the tracked repair script and no records/writes/tags', () => {
+    expect(doc).toMatch(/sync-datasourcesinfo\.mjs/);
+    expect(doc).toMatch(/No Dataverse record created, patched, or deleted/i);
+    expect(doc).toMatch(/No tag created or moved/i);
+  });
+
+  it('the tracked repair script writes only native Dataverse entries (no connector) and no GUID', () => {
+    const script = readFileSync(resolve(REPO_ROOT, 'scripts/sync-datasourcesinfo.mjs'), 'utf8');
+    // It emits native Dataverse entries...
+    expect(script).toMatch(/"dataSourceType": "Dataverse"/);
+    // ...and never EMITS a Connector-typed entry (the connector names may
+    // appear only in the explanatory comment, never as a written value).
+    expect(script).not.toMatch(/"dataSourceType": "Connector"/);
+    expect(script).not.toMatch(/[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/);
+    // additive: never deletes/rewrites existing entries.
+    expect(script).toMatch(/ADDITIVE/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 170J -- reconcile New Deal readiness truth (and Admin shell parity)
+// ---------------------------------------------------------------------------
+
+describe('Phase 170J -- New Deal readiness truth reconciliation doc exists and is honest', () => {
+  const rel = 'docs/PHASE_170J_NEW_DEAL_READINESS_TRUTH_RECONCILIATION.md';
+
+  it('the Phase 170J doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('pins the live smoke Ready(TEST) result and the stale-copy root cause', () => {
+    expect(doc).toMatch(/READY \(TEST\)/i);
+    expect(doc).toMatch(/PHASE121_STAGE/);
+    expect(doc).toMatch(/PHASE121_STATUS/);
+    expect(doc).toMatch(/data source registration is missing/i);
+  });
+
+  it('pins the reconciled truth model (Ready/Pending/Not wired/Disabled)', () => {
+    expect(doc).toMatch(/Production reference approval/i);
+    expect(doc).toMatch(/Governed create adapter/i);
+    expect(doc).toMatch(/NEW_DEAL_RESOLVER_READY_IN_TEST = true/);
+    expect(doc).toMatch(/NEW_DEAL_INTAKE_LIVE_CREATE_ENABLED = false/);
+  });
+
+  it('pins the New-Deal-create vs Advance-Stage distinction explicitly', () => {
+    expect(doc).toMatch(/cr664_dealstagereferences/);
+    expect(doc).toMatch(/cr664_stagereferences/);
+    expect(doc).toMatch(/Advance Stage|stage-progression/i);
+  });
+
+  it('pins the Admin shell / LendingOSLayout parity as deferred', () => {
+    expect(doc).toMatch(/LendingOSLayout/);
+    expect(doc).toMatch(/deferred/i);
+  });
+
+  it('pins no enablement, no record write, no production approval, and tag not moved', () => {
+    expect(doc).toMatch(/New Deal NOT enabled|\+ New Deal NOT enabled/i);
+    expect(doc).toMatch(/No Dataverse record created/i);
+    expect(doc).toMatch(/No TEST reference rows approved for production/i);
+    expect(doc).toMatch(/No tag created or moved/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 170K -- controlled New Deal create smoke (operator/admin-gated)
+// ---------------------------------------------------------------------------
+
+describe('Phase 170K -- controlled New Deal create smoke doc exists and is honest', () => {
+  const rel = 'docs/PHASE_170K_CONTROLLED_NEW_DEAL_CREATE_SMOKE.md';
+
+  it('the Phase 170K doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('pins the exact dry-run and commit commands', () => {
+    expect(doc).toMatch(/--smoke-create-new-deal/);
+    expect(doc).toMatch(/--commit-smoke-create-new-deal/);
+    expect(doc).toMatch(/--assigned-banker-upn/);
+    expect(doc).toMatch(/Dry-run \(default/i);
+  });
+
+  it('pins fail-closed resolve-by-code (no GUID) and allow-listed payload', () => {
+    expect(doc).toMatch(/PHASE121_STAGE/);
+    expect(doc).toMatch(/PHASE121_STATUS/);
+    expect(doc).toMatch(/fails? closed/i);
+    expect(doc).toMatch(/allow-list/i);
+    expect(doc).toMatch(/No Dataverse record GUID is hardcoded/i);
+  });
+
+  it('pins the TEST-only marker and the audit gap (no faked audit row)', () => {
+    expect(doc).toMatch(/SMOKE TEST - PHASE 170K/);
+    expect(doc).toMatch(/writes \*\*no\*\*|writes no `?cr664_auditevent/i);
+    expect(doc).toMatch(/audit gap/i);
+  });
+
+  it('pins the New-Deal-create vs Advance-Stage distinction', () => {
+    expect(doc).toMatch(/cr664_dealstagereferences/);
+    expect(doc).toMatch(/cr664_stagereferences/);
+    expect(doc).toMatch(/Advance Stage|stage-progression/i);
+  });
+
+  it('pins + New Deal still disabled, NOT_WIRED unchanged, and no deploy/tag/permission change', () => {
+    expect(doc).toMatch(/\+ New Deal\b[\s\S]{0,80}disabled|stays disabled/i);
+    expect(doc).toMatch(/new-deal-create.{0,40}NOT_WIRED|stays in `?NOT_WIRED/i);
+    expect(doc).toMatch(/no `?pac code push`? deploy/i);
+    expect(doc).toMatch(/No git tag was created or\s+moved/i);
+    expect(doc).toMatch(/No permission was widened or\s+bypassed/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 170L -- New Deal smoke read-model hydration parity
+// ---------------------------------------------------------------------------
+
+describe('Phase 170L -- New Deal smoke read-model hydration parity doc exists and is honest', () => {
+  const rel = 'docs/PHASE_170L_NEW_DEAL_SMOKE_READ_MODEL_HYDRATION_PARITY.md';
+
+  it('the Phase 170L doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('pins the 170K smoke result and the live "Stage not set" symptom', () => {
+    expect(doc).toMatch(/ca41e0df-9869-f111-ab0c-70a8a59be491/);
+    expect(doc).toMatch(/Stage not set/);
+    expect(doc).toMatch(/Morning catch-up/i);
+  });
+
+  it('pins the root cause and the formatted-value-first fix', () => {
+    expect(doc).toMatch(/cr664_stagereferencename/);
+    expect(doc).toMatch(/_cr664_stagereference_value@OData\.Community\.Display\.V1\.FormattedValue/);
+    expect(doc).toMatch(/formatted-value-first/i);
+    expect(doc).toMatch(/toPipelineDeal/);
+  });
+
+  it('pins read-only discipline: create path untouched, no fake labels, no GUID', () => {
+    expect(doc).toMatch(/create path is unchanged|create path was not changed/i);
+    expect(doc).toMatch(/no fake fallback label|honest missing-stage/i);
+    expect(doc).toMatch(/No raw `?_value`? GUID|never surfaced as a label/i);
+  });
+
+  it('pins + New Deal still disabled and stage-progression kept separate', () => {
+    expect(doc).toMatch(/NEW_DEAL_INTAKE_LIVE_CREATE_ENABLED[\s\S]{0,20}false/);
+    expect(doc).toMatch(/Advance Stage|stage-progression/i);
+  });
+
+  it('pins no record write / schema / tag change', () => {
+    expect(doc).toMatch(/No\s+Dataverse\s+record was created, patched, or\s+deleted/i);
+    expect(doc).toMatch(/no schema\s+changed/i);
+    expect(doc).toMatch(/no git\s+tag was created or\s+moved/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 170M -- governed in-app New Deal create adapter (disabled by default)
+// ---------------------------------------------------------------------------
+
+describe('Phase 170M -- governed New Deal create adapter doc exists and is honest', () => {
+  const rel = 'docs/PHASE_170M_GOVERNED_NEW_DEAL_CREATE_ADAPTER_DISABLED.md';
+
+  it('the Phase 170M doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('pins the 170K/170L proof chain and the disabled-by-default flag', () => {
+    expect(doc).toMatch(/Phase 170K/);
+    expect(doc).toMatch(/Phase 170L/);
+    expect(doc).toMatch(/NEW_DEAL_CREATE_ADAPTER_ENABLED = false/);
+    expect(doc).toMatch(/disabled by default/i);
+  });
+
+  it('pins the typed outcome union and the payload allow-list', () => {
+    for (const k of [
+      'success',
+      'validation_error',
+      'unauthorized',
+      'resolver_not_ready',
+      'create_failed',
+      'audit_failed_partial',
+    ]) {
+      expect(doc).toMatch(new RegExp(k));
+    }
+    expect(doc).toMatch(/NEW_DEAL_CREATE_ALLOWED_FIELDS/);
+    expect(doc).toMatch(/No Stage\/Status\s+GUID is hardcoded/i);
+  });
+
+  it('pins the resolver dependency and the WIRED audit (no faked audit)', () => {
+    expect(doc).toMatch(/fail-closed resolver|by stable\s+code\/name/i);
+    expect(doc).toMatch(/Audit status.*WIRED/i);
+    expect(doc).toMatch(/AssignmentChange \(788190002\)/);
+    expect(doc).toMatch(/no audit is faked|audit_failed_partial/);
+  });
+
+  it('pins + New Deal disabled, NOT_WIRED unchanged, and stage-progression separate', () => {
+    expect(doc).toMatch(/NEW_DEAL_INTAKE_LIVE_CREATE_ENABLED[\s\S]{0,20}false/);
+    expect(doc).toMatch(/new-deal-create[\s\S]{0,40}NOT_WIRED|stays in\s+`?NOT_WIRED/i);
+    expect(doc).toMatch(/Advance Stage|stage-progression/i);
+  });
+
+  it('pins no record write / schema / tag / permission change', () => {
+    expect(doc).toMatch(/No Dataverse record was created, patched, or\s+deleted/i);
+    expect(doc).toMatch(/no schema\s+changed/i);
+    expect(doc).toMatch(/no git\s+tag was\s+created or\s+moved/i);
+    expect(doc).toMatch(/no permission was\s+widened/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 170Q -- New Deal create production-enablement certification
+// ---------------------------------------------------------------------------
+
+describe('Phase 170Q -- New Deal create production enablement certification doc exists', () => {
+  const rel = 'docs/PHASE_170Q_NEW_DEAL_CREATE_PRODUCTION_ENABLEMENT_CERTIFICATION.md';
+
+  it('the Phase 170Q certification doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('pins the current gate values (both hard false) and WIRED_DISABLED', () => {
+    expect(doc).toMatch(/NEW_DEAL_CREATE_ADAPTER_ENABLED = false/);
+    expect(doc).toMatch(/NEW_DEAL_INTAKE_LIVE_CREATE_ENABLED = false/);
+    expect(doc).toMatch(/WIRED_DISABLED/);
+  });
+
+  it('pins resolver labels, no hardcoded GUIDs, and verified audit values', () => {
+    expect(doc).toMatch(/PHASE121_STAGE/);
+    expect(doc).toMatch(/PHASE121_STATUS/);
+    expect(doc).toMatch(/no Dataverse record GUID is hardcoded/i);
+    expect(doc).toMatch(/AssignmentChange \(788190002\)/);
+    expect(doc).toMatch(/cr664_ChangedBy@odata\.bind = \/cr664_users/);
+  });
+
+  it('pins the production blockers and the disabled / pilot-only recommendation', () => {
+    expect(doc).toMatch(/Production blockers/i);
+    expect(doc).toMatch(/Certified disabled/i);
+    expect(doc).toMatch(/not ready\s+for broad production/i);
+  });
+
+  it('pins rollback instructions and the no record/schema/tag change statement', () => {
+    expect(doc).toMatch(/Rollback instructions/i);
+    expect(doc).toMatch(/No Dataverse\s+write, schema change, or permission change/i);
+    expect(doc).toMatch(/No git tag was created or\s+moved/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 171-180 -- deal origination operating arc
+// ---------------------------------------------------------------------------
+
+describe('Phase 171-180 -- deal origination arc docs exist', () => {
+  const ARC_DOCS = [
+    'docs/PHASE_171A_NEW_DEAL_CREATE_REFERENCE_APPROVAL.md',
+    'docs/PHASE_172A_CRM_AUTOMATION_ADAPTER_DISABLED.md',
+    'docs/PHASE_173A_BORROWER_INVITE_AUTOMATION_DISABLED.md',
+    'docs/PHASE_174A_AUTO_STAGE_ADVANCE_DISABLED.md',
+    'docs/PHASE_175A_TASK_GENERATION_DISABLED.md',
+    'docs/PHASE_176A_DOCUMENT_CHECKLIST_GENERATION_DISABLED.md',
+    'docs/PHASE_177A_PORTFOLIO_SIDE_EFFECTS_DISABLED.md',
+    'docs/PHASE_178A_BORROWER_MESSAGING_DISABLED.md',
+    'docs/PHASE_179A_DUPLICATE_DETECTION_NO_MERGE.md',
+    'docs/PHASE_180A_DEAL_ORIGINATION_OS_V1_CERTIFICATION.md',
+  ];
+  for (const rel of ARC_DOCS) {
+    it(`${rel} exists`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+});
+
+describe('Phase 180A -- origination arc certification classifications', () => {
+  const doc = readDoc('docs/PHASE_180A_DEAL_ORIGINATION_OS_V1_CERTIFICATION.md');
+
+  it('classifies banker create as controlled and public create as DISABLED', () => {
+    expect(doc).toMatch(/Banker New Deal Create[\s\S]{0,80}(WIRED_CONTROLLED_DISABLED|LIVE_CONTROLLED|controlled)/i);
+    expect(doc).toMatch(/Public New Deal Create[\s\S]{0,40}DISABLED/i);
+  });
+
+  it('classifies each downstream domain and duplicate merge as detect-and-prepare-only', () => {
+    expect(doc).toMatch(/CRM Automation[\s\S]{0,60}DISABLED/i);
+    expect(doc).toMatch(/Borrower Invite[\s\S]{0,80}DISABLED/i);
+    expect(doc).toMatch(/Auto-stage Advancement[\s\S]{0,40}DISABLED/i);
+    expect(doc).toMatch(/Task Generation[\s\S]{0,40}DISABLED/i);
+    expect(doc).toMatch(/Document Checklist[\s\S]{0,40}DISABLED/i);
+    expect(doc).toMatch(/Portfolio Side Effects[\s\S]{0,60}(SKIPPED_NOT_NEEDED|DISABLED)/i);
+    expect(doc).toMatch(/Borrower Messaging[\s\S]{0,80}DISABLED/i);
+    expect(doc).toMatch(/Duplicate Merge[\s\S]{0,40}DETECT_AND_PREPARE_ONLY/i);
+  });
+
+  it('pins no hardcoded GUIDs, no TEST refs for production, and no fake success / external send', () => {
+    expect(doc).toMatch(/No Stage\/Status GUID is hardcoded/i);
+    expect(doc).toMatch(/No TEST\s+references are approved for production/i);
+    expect(doc).toMatch(/fake success/i);
+    expect(doc).toMatch(/external HTTP send/i);
+  });
+
+  it('pins the disabled / not-broad-production recommendation and no deploy/tag', () => {
+    expect(doc).toMatch(/Certified disabled/i);
+    expect(doc).toMatch(/not ready\s+for broad production/i);
+    expect(doc).toMatch(/No git tag was created or\s+moved/i);
+    expect(doc).toMatch(/No `?pac code push`? deploy/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 181 -- banker New Deal create production unblock
+// ---------------------------------------------------------------------------
+
+describe('Phase 181 -- banker create unblock docs exist', () => {
+  for (const rel of [
+    'docs/PHASE_181A_NEW_DEAL_CREATE_PRODUCTION_REFERENCE_APPROVAL.md',
+    'docs/PHASE_181E_BANKER_NEW_DEAL_CREATE_LIVE_PROOF.md',
+    'docs/PHASE_181F_BANKER_NEW_DEAL_CREATE_V1_CERTIFICATION.md',
+  ]) {
+    it(`${rel} exists`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+});
+
+describe('Phase 181F -- banker create certification is honest (still blocked)', () => {
+  const doc = readDoc('docs/PHASE_181F_BANKER_NEW_DEAL_CREATE_V1_CERTIFICATION.md');
+
+  it('certifies STILL_BLOCKED with gates hard-false and public create disabled', () => {
+    expect(doc).toMatch(/STILL_BLOCKED/);
+    expect(doc).toMatch(/BANKER_NEW_DEAL_CREATE_ENABLED = false/);
+    expect(doc).toMatch(/Public create status[\s\S]{0,40}DISABLED/i);
+  });
+
+  it('pins approved selection by code/name (INTAKE/OPEN), TEST rejected, no GUID', () => {
+    expect(doc).toMatch(/INTAKE/);
+    expect(doc).toMatch(/OPEN/);
+    expect(doc).toMatch(/rejected for production/i);
+    expect(doc).toMatch(/no GUID/i);
+  });
+
+  it('pins the exact operator action to unblock and no deploy/tag/write', () => {
+    expect(doc).toMatch(/Seed\/approve production Stage/i);
+    expect(doc).toMatch(/No git tag was created or\s+moved/i);
+    expect(doc).toMatch(/No `?pac code push`? deploy/i);
+    expect(doc).toMatch(/No Dataverse\s+write, schema change, or permission change/i);
+  });
+
+  it('181A documents the read-only inspection tool + seed runbook; gates stay disabled', () => {
+    const a = readDoc('docs/PHASE_181A_NEW_DEAL_CREATE_PRODUCTION_REFERENCE_APPROVAL.md');
+    expect(a).toMatch(/--inspect-new-deal-create-references/);
+    expect(a).toMatch(/Seed runbook/i);
+    expect(a).toMatch(/Create gates remain DISABLED/i);
+    expect(a).toMatch(/No hardcoded Stage\/Status GUIDs/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 182 -- banker New Deal create pilot live
+// ---------------------------------------------------------------------------
+
+describe('Phase 182 -- banker create pilot docs exist', () => {
+  for (const rel of [
+    'docs/PHASE_182D_BANKER_NEW_DEAL_CREATE_PILOT_PROOF.md',
+    'docs/PHASE_182E_BANKER_NEW_DEAL_CREATE_V1_CERTIFICATION.md',
+  ]) {
+    it(`${rel} exists`, () => {
+      expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    });
+  }
+});
+
+describe('Phase 182E -- banker create certification (pilot live, public disabled)', () => {
+  const doc = readDoc('docs/PHASE_182E_BANKER_NEW_DEAL_CREATE_V1_CERTIFICATION.md');
+
+  it('certifies PILOT_LIVE_CONTROLLED for banker, public DISABLED', () => {
+    expect(doc).toMatch(/PILOT_LIVE_CONTROLLED/);
+    expect(doc).toMatch(/Public create status[\s\S]{0,40}DISABLED/i);
+  });
+
+  it('pins single-switch enablement + one-line rollback, downstream disabled', () => {
+    expect(doc).toMatch(/BANKER_CREATE_PILOT_ENABLED = true/);
+    expect(doc).toMatch(/Rollback is one line/i);
+    expect(doc).toMatch(/downstream automations? .*disabled|downstream stays disabled/i);
+  });
+
+  it('pins Intake/Open references (no GUID), audit_failed_partial distinct, no fake id', () => {
+    expect(doc).toMatch(/INTAKE/);
+    expect(doc).toMatch(/OPEN/);
+    expect(doc).toMatch(/No Stage\/Status\s+GUID is hardcoded/i);
+    expect(doc).toMatch(/audit_failed_partial\s+is distinct from\s+success/i);
+    expect(doc).toMatch(/never faked/i);
+  });
+
+  it('182D proof is operator-run (one proof) with downstream confirmed off', () => {
+    const d = readDoc('docs/PHASE_182D_BANKER_NEW_DEAL_CREATE_PILOT_PROOF.md');
+    expect(d).toMatch(/run exactly one proof|one proof/i);
+    expect(d).toMatch(/Stage = \*\*Intake\*\*/);
+    expect(d).toMatch(/Status = \*\*Open\*\*/);
+    expect(d).toMatch(/NO downstream/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 187I Ã¢â‚¬â€ V1 systems-integrity certification (PILOT_LIVE_CONTROLLED)
+// ---------------------------------------------------------------------------
+
+describe('Phase 187I Ã¢â‚¬â€ banker New Deal create certification', () => {
+  const rel = 'docs/PHASE_187I_V1_SYSTEMS_INTEGRITY_CERTIFICATION.md';
+
+  it('the certification doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('certifies PILOT_LIVE_CONTROLLED with a READY identity graph', () => {
+    expect(doc).toMatch(/PILOT_LIVE_CONTROLLED/);
+    expect(doc).toMatch(/GRAPH STATUS: READY/);
+  });
+
+  it('pins the final proof name + deal id', () => {
+    expect(doc).toMatch(/V1 Banker Create Proof - 2026-06-16 8/);
+    expect(doc).toMatch(/1a10a165-756a-f111-ab0c-70a8a59be491/);
+  });
+
+  it('records that no audit_failed_partial was observed', () => {
+    expect(doc).toMatch(/no `?audit_failed_partial`? (?:was )?observed/i);
+  });
+
+  it('pins that public create + downstream automation remain disabled', () => {
+    expect(doc).toMatch(/Public create remains disabled/);
+    expect(doc).toMatch(/Downstream automation remains disabled/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 188F Ã¢â‚¬â€ document checklist generation pilot certification
+// ---------------------------------------------------------------------------
+
+describe('Phase 188F Ã¢â‚¬â€ document checklist pilot certification', () => {
+  const rel = 'docs/PHASE_188F_DOCUMENT_CHECKLIST_PILOT_CERTIFICATION.md';
+
+  it('the certification doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('certifies PILOT_LIVE_CONTROLLED with the proof deal id + created rows', () => {
+    expect(doc).toMatch(/PILOT_LIVE_CONTROLLED/);
+    expect(doc).toMatch(/1a10a165-756a-f111-ab0c-70a8a59be491/);
+    expect(doc).toMatch(/7a674efc-a36a-f111-ab0c-70a8a59be491/);
+  });
+
+  it('records PROOF_CREATED, ALREADY_GENERATED, and the /cr664_users actor bind', () => {
+    expect(doc).toMatch(/PROOF_CREATED/);
+    expect(doc).toMatch(/ALREADY_GENERATED/);
+    expect(doc).toMatch(/\/cr664_users\(940a202e/);
+  });
+
+  it('pins no borrower comms, audit-only correlation id, and the gate stays false', () => {
+    expect(doc).toMatch(/No borrower communication/i);
+    expect(doc).toMatch(/[Cc]orrelation id was audit-only/);
+    expect(doc).toMatch(/DOCUMENT_CHECKLIST_GENERATION_ENABLED/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 188I Ã¢â‚¬â€ document checklist controlled UI-enable readiness plan
+// ---------------------------------------------------------------------------
+
+describe('Phase 188I Ã¢â‚¬â€ document checklist UI-enable readiness plan', () => {
+  const rel = 'docs/PHASE_188I_DOCUMENT_CHECKLIST_UI_ENABLE_READINESS.md';
+
+  it('the readiness plan doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('records the plan enables nothing: no live writes, no UI enablement, both gates false', () => {
+    expect(doc).toMatch(/no live writes/i);
+    expect(doc).toMatch(/No UI enablement/i);
+    expect(doc).toMatch(/DOCUMENT_CHECKLIST_GENERATION_ENABLED = false/);
+    expect(doc).toMatch(/DOCUMENT_CHECKLIST_UI_GENERATE_ACTION_ENABLED = false/);
+  });
+
+  it('documents the two-gate 188J enable condition and required identities', () => {
+    expect(doc).toMatch(/DOCUMENT_CHECKLIST_UI_GENERATE_ACTION_ENABLED/);
+    expect(doc).toMatch(/\/cr664_users\(<CoreUser>\)/);
+    expect(doc).toMatch(/exact deal id/i);
+    expect(doc).toMatch(/DOCUMENT_CHECKLIST_PILOT_APPROVED_NAMES/);
+  });
+
+  it('pins forbidden borrower comms, forbidden New Deal auto-run, and the rollback switch', () => {
+    expect(doc).toMatch(/No borrower communication/i);
+    expect(doc).toMatch(/No New Deal auto-run/i);
+    expect(doc).toMatch(/[Rr]ollback/);
+  });
+
+  it('the future-state UI-action flag is shipped as a disabled constant', () => {
+    const config = readFileSync(
+      resolve(REPO_ROOT, 'src/deals/documentChecklistPilotConfig.ts'),
+      'utf8',
+    );
+    expect(config).toMatch(/DOCUMENT_CHECKLIST_UI_GENERATE_ACTION_ENABLED = false as const/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 191 Ã¢â‚¬â€ Banker V1 release-candidate hardening (go/no-go snapshot)
+// ---------------------------------------------------------------------------
+
+describe('Phase 191 Ã¢â‚¬â€ banker V1 release-candidate hardening', () => {
+  const rel = 'docs/PHASE_191_BANKER_V1_RELEASE_CANDIDATE_HARDENING.md';
+
+  it('the Phase 191 release-candidate doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('records a go/no-go recommendation with P0/P1/P2 blocker tiers', () => {
+    expect(doc).toMatch(/CONDITIONAL GO|NO-GO|\bGO\b/);
+    expect(doc).toMatch(/P0/);
+    expect(doc).toMatch(/P1/);
+    expect(doc).toMatch(/P2/);
+  });
+
+  it('pins the no-fake-data + no-borrower-comms release statements', () => {
+    expect(doc).toMatch(/no fake.*data|no sample.*data|no fabricated/i);
+    expect(doc).toMatch(/no borrower comms|no borrower communication/i);
+  });
+
+  it('keeps all three checklist gates documented false', () => {
+    expect(doc).toMatch(/DOCUMENT_CHECKLIST_PILOT_UI_ENABLED\s*=\s*false/);
+    expect(doc).toMatch(/DOCUMENT_CHECKLIST_UI_GENERATE_ACTION_ENABLED\s*=\s*false/);
+    expect(doc).toMatch(/DOCUMENT_CHECKLIST_GENERATION_ENABLED\s*=\s*false/);
+  });
+
+  it('records the build-from-no-.power (Phase 190A) verification', () => {
+    expect(doc).toMatch(/\.power/);
+    expect(doc).toMatch(/pnpm build/);
+  });
+
+  it('the Phase 191 governance contract test exists on disk', () => {
+    expect(
+      existsSync(
+        resolve(REPO_ROOT, 'src/shared/governance/phase191BankerV1ReleaseCandidateContract.test.ts'),
+      ),
+    ).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 192 Ã¢â‚¬â€ credit / committee / compliance V1 readiness (go/no-go snapshot)
+// ---------------------------------------------------------------------------
+
+describe('Phase 192 Ã¢â‚¬â€ credit / committee / compliance V1 readiness', () => {
+  const rel = 'docs/PHASE_192_CREDIT_COMMITTEE_COMPLIANCE_V1_READINESS.md';
+
+  it('the Phase 192 readiness doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('records a go/no-go recommendation with P0/P1/P2 blocker tiers', () => {
+    expect(doc).toMatch(/CONDITIONAL GO|NO-GO|\bGO\b/);
+    expect(doc).toMatch(/P0/);
+    expect(doc).toMatch(/P1/);
+    expect(doc).toMatch(/P2/);
+  });
+
+  it('pins the no-fake-approval + no-fake-source-facts + no-borrower-comms statements', () => {
+    expect(doc).toMatch(/no fake approval|no fabricated approval|no false.*approv/i);
+    expect(doc).toMatch(/no fake.*source|no fabricated source|sourced or.*missing/i);
+    expect(doc).toMatch(/no borrower comms|no borrower communication/i);
+  });
+
+  it('keeps all three checklist gates documented false', () => {
+    expect(doc).toMatch(/DOCUMENT_CHECKLIST_PILOT_UI_ENABLED\s*=\s*false/);
+    expect(doc).toMatch(/DOCUMENT_CHECKLIST_UI_GENERATE_ACTION_ENABLED\s*=\s*false/);
+    expect(doc).toMatch(/DOCUMENT_CHECKLIST_GENERATION_ENABLED\s*=\s*false/);
+  });
+
+  it('records the build-from-no-.power + no-schema posture and preserves Phase 191', () => {
+    expect(doc).toMatch(/\.power/);
+    expect(doc).toMatch(/pnpm build/);
+    expect(doc).toMatch(/no schema|no migration/i);
+    expect(doc).toMatch(/191/);
+  });
+
+  it('the Phase 192 governance contract test exists on disk', () => {
+    expect(
+      existsSync(
+        resolve(REPO_ROOT, 'src/shared/governance/phase192CreditCommitteeComplianceReadinessContract.test.ts'),
+      ),
+    ).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 194 Ã¢â‚¬â€ controlled live New Deal create enablement (launch-unlock snapshot)
+// ---------------------------------------------------------------------------
+
+describe('Phase 194 Ã¢â‚¬â€ controlled live New Deal create enablement', () => {
+  const rel = 'docs/PHASE_194_CONTROLLED_LIVE_NEW_DEAL_CREATE_ENABLEMENT.md';
+
+  it('the Phase 194 enablement doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('names all three create gates and a controlled-enablement recommendation', () => {
+    expect(doc).toMatch(/BANKER_NEW_DEAL_CREATE_ENABLED/);
+    expect(doc).toMatch(/NEW_DEAL_CREATE_ADAPTER_ENABLED/);
+    expect(doc).toMatch(/NEW_DEAL_INTAKE_LIVE_CREATE_ENABLED/);
+    expect(doc).toMatch(/READY FOR CONTROLLED ENABLEMENT|NOT READY FOR CONTROLLED ENABLEMENT/);
+  });
+
+  it('documents rollback + pre-enable + smoke checklists', () => {
+    expect(doc).toMatch(/rollback|kill[- ]switch/i);
+    expect(doc).toMatch(/pre-enable/i);
+    expect(doc).toMatch(/smoke/i);
+  });
+
+  it('pins no-borrower-comms, no-schema, no-checklist-generation, and gates false', () => {
+    expect(doc).toMatch(/no borrower comms|no borrower communication/i);
+    expect(doc).toMatch(/no schema|no migration/i);
+    expect(doc).toMatch(/no checklist generation/i);
+    expect(doc).toMatch(/DOCUMENT_CHECKLIST_GENERATION_ENABLED\s*=\s*false/);
+  });
+
+  it('the Phase 194 governance contract test exists on disk', () => {
+    expect(
+      existsSync(
+        resolve(REPO_ROOT, 'src/shared/governance/phase194ControlledLiveNewDealCreateEnablementContract.test.ts'),
+      ),
+    ).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 195 Ã¢â‚¬â€ V1 controlled production pilot cutover (cutover runbook snapshot)
+// ---------------------------------------------------------------------------
+
+describe('Phase 195 Ã¢â‚¬â€ V1 controlled production pilot cutover', () => {
+  const rel = 'docs/PHASE_195_V1_CONTROLLED_PRODUCTION_PILOT_CUTOVER.md';
+
+  it('the Phase 195 cutover doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('documents the preflight / smoke / evidence / rollback / stop-condition checklists', () => {
+    expect(doc).toMatch(/preflight checklist/i);
+    expect(doc).toMatch(/smoke checklist/i);
+    expect(doc).toMatch(/evidence checklist/i);
+    expect(doc).toMatch(/rollback checklist/i);
+    expect(doc).toMatch(/stop conditions/i);
+  });
+
+  it('pins the no-code-change posture (gates not flipped) and a GO/NO-GO recommendation', () => {
+    expect(doc).toMatch(/BANKER_NEW_DEAL_CREATE_ENABLED/);
+    expect(doc).toMatch(/NEW_DEAL_CREATE_ADAPTER_ENABLED/);
+    expect(doc).toMatch(/NEW_DEAL_INTAKE_LIVE_CREATE_ENABLED/);
+    expect(doc).toMatch(/READY FOR CONTROLLED PILOT CUTOVER/i);
+    expect(doc).toMatch(/NO-GO/);
+  });
+
+  it('pins no-borrower-comms, no-checklist-generation, no-CRM-write, and gates false', () => {
+    expect(doc).toMatch(/no borrower comms|no borrower communication/i);
+    expect(doc).toMatch(/checklist generation/i);
+    expect(doc).toMatch(/CRM write/i);
+    expect(doc).toMatch(/DOCUMENT_CHECKLIST_GENERATION_ENABLED/);
+  });
+
+  it('the Phase 195 governance contract test exists on disk', () => {
+    expect(
+      existsSync(
+        resolve(REPO_ROOT, 'src/shared/governance/phase195V1ControlledProductionPilotCutoverContract.test.ts'),
+      ),
+    ).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 196 Ã¢â‚¬â€ V1 pilot enablement evidence certification (evidence-gate snapshot)
+// ---------------------------------------------------------------------------
+
+describe('Phase 196 Ã¢â‚¬â€ V1 pilot enablement evidence certification', () => {
+  const rel = 'docs/PHASE_196_V1_PILOT_ENABLEMENT_EVIDENCE_CERTIFICATION.md';
+
+  it('the Phase 196 evidence-certification doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('declares pilot evidence certification (not the live pilot, not a feature build)', () => {
+    expect(doc).toMatch(/evidence-certification only/i);
+    expect(doc).toMatch(/not the live pilot/i);
+    expect(doc).toMatch(/not a feature build/i);
+  });
+
+  it('pins the outside-repo / evidence-vault / redaction posture', () => {
+    expect(doc).toMatch(/outside the repository|outside repo/i);
+    expect(doc).toMatch(/evidence vault|release record/i);
+    expect(doc).toMatch(/<system-user-id-redacted>/);
+    expect(doc).toMatch(/<created-deal-id-redacted>/);
+  });
+
+  it('pins the no-code / no-schema / no-migration / no-gate-flip posture', () => {
+    expect(doc).toMatch(/no production code change/i);
+    expect(doc).toMatch(/no schema change/i);
+    expect(doc).toMatch(/no migration/i);
+    expect(doc).toMatch(/no feature-flag flip|flips no gate/i);
+  });
+
+  it('pins no borrower comms / no checklist generation / no CRM writeback', () => {
+    expect(doc).toMatch(/no borrower communication|no borrower comms/i);
+    expect(doc).toMatch(/no checklist generation/i);
+    expect(doc).toMatch(/no CRM writeback/i);
+  });
+
+  it('records V1.0 GO / NO-GO criteria', () => {
+    expect(doc).toMatch(/Final V1\.0 GO criteria/i);
+    expect(doc).toMatch(/Final V1\.0 NO-GO criteria/i);
+  });
+
+  it('the Phase 196 governance contract test exists on disk', () => {
+    expect(
+      existsSync(
+        resolve(REPO_ROOT, 'src/shared/governance/phase196V1PilotEnablementEvidenceCertificationContract.test.ts'),
+      ),
+    ).toBe(true);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 197 Ã¢â‚¬â€ full system launch readiness (CONDITIONAL GO snapshot)
+// ---------------------------------------------------------------------------
+
+describe('Phase 197 Ã¢â‚¬â€ full system launch readiness', () => {
+  const rel = 'docs/PHASE_197_FULL_SYSTEM_LAUNCH_READINESS.md';
+
+  it('the Phase 197 doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  it('the Phase 197 model / console / contract / component-test files exist', () => {
+    for (const f of [
+      // Factory Arc Phase 5 renamed src/admin/fullSystemLaunchReadinessModel.ts to
+      // src/admin/releaseGovernanceSnapshot.ts (deriveFullSystemLaunchReadiness ->
+      // deriveReleaseGovernanceSnapshot) to reframe it as an Admin Platform
+      // Operations release-governance report rather than a live "launch console"
+      // concept. This snapshot tracks the current file layout, so it follows the
+      // rename rather than pinning a path that no longer exists.
+      'src/admin/releaseGovernanceSnapshot.ts',
+      'src/admin/FullSystemLaunchReadinessConsole.tsx',
+      'src/admin/FullSystemLaunchReadinessConsole.test.tsx',
+      'src/shared/governance/phase197FullSystemLaunchReadinessContract.test.ts',
+    ]) {
+      expect(existsSync(resolve(REPO_ROOT, f)), f).toBe(true);
+    }
+  });
+
+  const doc = readDoc(rel);
+
+  it('records the CONDITIONAL GO recommendation', () => {
+    expect(doc).toMatch(/CONDITIONAL GO/);
+  });
+
+  it('records Salesforce/nCino CRM readiness built but writeback gated', () => {
+    expect(doc).toMatch(/Salesforce \/ nCino|Salesforce\/nCino/i);
+    expect(doc).toMatch(/built, mounted, and certified/i);
+    expect(doc).toMatch(/CRM writeback remains gated/i);
+  });
+
+  it('records controlled New Deal create with global gates false + operator enablement', () => {
+    expect(doc).toMatch(/controlled live New Deal create path exists/i);
+    expect(doc).toMatch(/global create gates remain false/i);
+    expect(doc).toMatch(/operator enablement is required/i);
+  });
+
+  it('records workflow writes/generation gated', () => {
+    expect(doc).toMatch(/Workflow writes \/ generation remain gated|workflow writes\/generation remain gated/i);
+  });
+
+  it('records no borrower comms / no checklist generation / no CRM writeback', () => {
+    expect(doc).toMatch(/no borrower comms|no borrower communication/i);
+    expect(doc).toMatch(/no checklist generation/i);
+    expect(doc).toMatch(/no CRM writeback/i);
+  });
+
+  it('records no schema / no migration / no gate flip / no uncontrolled writes', () => {
+    expect(doc).toMatch(/no schema/i);
+    expect(doc).toMatch(/no migration/i);
+    expect(doc).toMatch(/no live gate flip|flips no gate/i);
+    expect(doc).toMatch(/no uncontrolled writes/i);
+  });
+
+  it('records the required operator actions to move to GO', () => {
+    expect(doc).toMatch(/required operator actions to move from CONDITIONAL GO to GO/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 198 Ã¢â‚¬â€ safe launch readiness exposure (admin-only mount)
+// ---------------------------------------------------------------------------
+
+describe('Phase 198 Ã¢â‚¬â€ safe full-system launch readiness exposure', () => {
+  const rel = 'docs/PHASE_198_SAFE_LAUNCH_READINESS_EXPOSURE.md';
+
+  it('the Phase 198 doc + contract test exist on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    expect(
+      existsSync(resolve(REPO_ROOT, 'src/shared/governance/phase198SafeLaunchReadinessExposureContract.test.ts')),
+    ).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('records the admin-only, read-only, no-new-route exposure decision', () => {
+    expect(doc).toMatch(/admin workspace/i);
+    expect(doc).toMatch(/No new route/i);
+    expect(doc).toMatch(/read-only/i);
+  });
+
+  it('records the unchanged CONDITIONAL_GO posture and gated writes', () => {
+    expect(doc).toMatch(/CONDITIONAL_GO/);
+    expect(doc).toMatch(/no live gate flip/i);
+    expect(doc).toMatch(/no CRM writeback/i);
+    expect(doc).toMatch(/no checklist generation/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 199 Ã¢â‚¬â€ certified New Deal create pilot enablement
+// ---------------------------------------------------------------------------
+
+describe('Phase 199 Ã¢â‚¬â€ certified New Deal create pilot enablement', () => {
+  const rel = 'docs/PHASE_199_CERTIFIED_NEW_DEAL_CREATE_PILOT.md';
+
+  it('the Phase 199 doc + contract test exist on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    expect(
+      existsSync(resolve(REPO_ROOT, 'src/shared/governance/phase199CertifiedNewDealCreatePilotContract.test.ts')),
+    ).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('records pilot-only enablement with the three global gates still false', () => {
+    expect(doc).toMatch(/BANKER_CREATE_PILOT_ENABLED/);
+    expect(doc).toMatch(/BANKER_NEW_DEAL_CREATE_ENABLED = false/);
+    expect(doc).toMatch(/NEW_DEAL_CREATE_ADAPTER_ENABLED = false/);
+    expect(doc).toMatch(/NEW_DEAL_INTAKE_LIVE_CREATE_ENABLED = false/);
+  });
+
+  it('records no broad write enablement and CONDITIONAL_GO unchanged', () => {
+    expect(doc).toMatch(/no broad create enablement/i);
+    expect(doc).toMatch(/no actorless create/i);
+    expect(doc).toMatch(/CONDITIONAL_GO/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 200 Ã¢â‚¬â€ V1 cutover execution evidence
+// ---------------------------------------------------------------------------
+
+describe('Phase 200 Ã¢â‚¬â€ V1 cutover execution evidence', () => {
+  const rel = 'docs/PHASE_200_V1_CUTOVER_EXECUTION_EVIDENCE.md';
+
+  it('the Phase 200 doc + contract test exist on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+    expect(
+      existsSync(resolve(REPO_ROOT, 'src/shared/governance/phase200V1CutoverExecutionEvidenceContract.test.ts')),
+    ).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('records CONDITIONAL_GO with structured evidence and the 10-domain gate table', () => {
+    expect(doc).toMatch(/CONDITIONAL_GO/);
+    expect(doc).toMatch(/Final V1\.0 Launch Decision \| conditional/);
+    expect(doc).toMatch(/Check:/);
+    expect(doc).toMatch(/Residual Risk:/);
+  });
+
+  it('records no schema / no migration / no fake data / no secrets posture', () => {
+    expect(doc).toMatch(/no schema/i);
+    expect(doc).toMatch(/no migration/i);
+    expect(doc).toMatch(/no fake data/i);
+    expect(doc).toMatch(/outside the repository/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 201 Ã¢â‚¬â€ V1.0 final release decision (required final release docs present)
+// ---------------------------------------------------------------------------
+
+describe('Phase 201 Ã¢â‚¬â€ V1.0 final release decision', () => {
+  const rel = 'docs/PHASE_201_V1_FINAL_RELEASE_DECISION.md';
+
+  it('all required final-release-sequence docs + tests exist', () => {
+    for (const f of [
+      'docs/PHASE_198_SAFE_LAUNCH_READINESS_EXPOSURE.md',
+      'docs/PHASE_199_CERTIFIED_NEW_DEAL_CREATE_PILOT.md',
+      'docs/PHASE_200_V1_CUTOVER_EXECUTION_EVIDENCE.md',
+      'docs/PHASE_201_V1_FINAL_RELEASE_DECISION.md',
+      'src/admin/finalV1ReleaseDecisionModel.ts',
+      'src/shared/governance/phase201V1FinalReleaseDecisionContract.test.ts',
+    ]) {
+      expect(existsSync(resolve(REPO_ROOT, f)), f).toBe(true);
+    }
+  });
+
+  const doc = readDoc(rel);
+
+  it('records a deterministic, evidence-driven CONDITIONAL_GO decision (no hardcoded GO)', () => {
+    expect(doc).toMatch(/release recommendation: (GO|CONDITIONAL_GO|NO_GO)/);
+    expect(doc).toMatch(/CONDITIONAL_GO/);
+    expect(doc).toMatch(/no hardcoded GO/i);
+  });
+
+  it('records the deterministic decision logic + all gate constants false', () => {
+    expect(doc).toMatch(/anyDomainBlocked/);
+    expect(doc).toMatch(/finalSignoffPresent/);
+    expect(doc).toMatch(/BANKER_NEW_DEAL_CREATE_ENABLED = false/);
+    expect(doc).toMatch(/DOCUMENT_CHECKLIST_GENERATION_ENABLED = false/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 202 Ã¢â‚¬â€ OGB-native CRM + lending workflow activation
+// ---------------------------------------------------------------------------
+
+describe('Phase 202 Ã¢â‚¬â€ OGB-native CRM + lending workflow activation', () => {
+  const rel = 'docs/PHASE_202_OGB_NATIVE_CRM_WORKFLOW_ACTIVATION.md';
+
+  it('the Phase 202 doc + activation model/panel/contract exist on disk', () => {
+    for (const f of [
+      rel,
+      'src/admin/ogbCrmWorkflowActivationModel.ts',
+      'src/admin/OgbCrmWorkflowActivationPanel.tsx',
+      'src/shared/governance/phase202OgbNativeCrmWorkflowActivationContract.test.ts',
+    ]) {
+      expect(existsSync(resolve(REPO_ROOT, f)), f).toBe(true);
+    }
+  });
+
+  const doc = readDoc(rel);
+
+  it('records OGB-native internal activation with gated writes (no external connector)', () => {
+    expect(doc).toMatch(/OGB CRM active/i);
+    expect(doc).toMatch(/Internal lending workflow active/i);
+    expect(doc).toMatch(/No external Salesforce \/ nCino connector/i);
+    expect(doc).toMatch(/writeback/i);
+  });
+
+  it('records the no-fake-data / no-broad-write / no-widening posture', () => {
+    expect(doc).toMatch(/No fake \/ sample data|no fake data/i);
+    expect(doc).toMatch(/No broad write enablement/i);
+    expect(doc).toMatch(/No permission bypass|route widening/i);
+    expect(doc).toMatch(/CONDITIONAL_GO/);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 203 Ã¢â‚¬â€ V1 activation readiness console (final conditional-GO gate)
+// ---------------------------------------------------------------------------
+
+describe('Phase 203 Ã¢â‚¬â€ V1 activation readiness console', () => {
+  const rel = 'docs/PHASE_203_V1_ACTIVATION_READINESS_CONSOLE.md';
+
+  it('the Phase 203 doc + model/panel/contract exist on disk', () => {
+    for (const f of [
+      rel,
+      'src/shared/readiness/v1ActivationReadinessModel.ts',
+      'src/admin/V1ActivationReadinessPanel.tsx',
+      'src/shared/governance/phase203V1ActivationReadinessContract.test.ts',
+    ]) {
+      expect(existsSync(resolve(REPO_ROOT, f)), f).toBe(true);
+    }
+  });
+
+  const doc = readDoc(rel);
+
+  it('records a deterministic CONDITIONAL_GO posture derived from gate constants', () => {
+    expect(doc).toMatch(/CONDITIONAL_GO/);
+    expect(doc).toMatch(/CRM_LIVE_PERSISTENCE_ENABLED/);
+    expect(doc).toMatch(/deterministic/i);
+  });
+
+  it('records the read-only, no-schema, no-widening, gated-writes posture', () => {
+    expect(doc).toMatch(/read-only/i);
+    expect(doc).toMatch(/no schema|no migration/i);
+    expect(doc).toMatch(/route ?\/ ?(entitlement|permission)|permissionRouteExpansion/i);
+    expect(doc).toMatch(/gated/i);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Phase 227 â€” V1 production release smoke and New Deal create enablement
+// ---------------------------------------------------------------------------
+
+describe('Phase 227 â€” V1 production release smoke and New Deal create enablement', () => {
+  const rel = 'docs/PHASE_227_V1_PRODUCTION_RELEASE_SMOKE.md';
+
+  it('the Phase 227 production release smoke doc exists on disk', () => {
+    expect(existsSync(resolve(REPO_ROOT, rel))).toBe(true);
+  });
+
+  const doc = readDoc(rel);
+
+  it('declares production release readiness, not pilot readiness', () => {
+    expect(doc).toMatch(/production release readiness/i);
+    expect(doc).toMatch(/not a pilot/i);
+  });
+
+  it('pins the deployed Phase 226 marker and production Stage\/Status references', () => {
+    expect(doc).toMatch(/new_productionapproved/);
+    expect(doc).toMatch(/INTAKE \/ Intake/);
+    expect(doc).toMatch(/OPEN \/ Open/);
+    expect(doc).toMatch(/TEST\/PHASE rows remain not production-approved/i);
+  });
+
+  it('requires release smoke evidence before New Deal create enablement', () => {
+    expect(doc).toMatch(/production release smoke evidence/i);
+    expect(doc).toMatch(/Created deal landed with Stage = Intake and Status = Open/i);
+    expect(doc).toMatch(/Audit marker was present in the UI as "public \+ New Deal"; named actor was not visible in the UI/i);
+    expect(doc).toMatch(/Disable\/rollback path remains available/i);
+  });
+
+  it('records post-smoke production enablement with downstream limits', () => {
+    expect(doc).toMatch(/certified for V1 production release use/i);
+    expect(doc).toMatch(/Downstream automation remains governed separately/i);
+    expect(doc).toMatch(/Borrower communication remains governed separately/i);
+  });
+});

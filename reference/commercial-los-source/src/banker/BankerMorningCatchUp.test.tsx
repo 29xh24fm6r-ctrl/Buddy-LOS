@@ -1,0 +1,1486 @@
+// @vitest-environment jsdom
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { render, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import type { BankerWorkQueueData } from './workQueueQueries';
+import {
+  CATCH_UP_LAST_SEEN_STORAGE_KEY_PREFIX,
+  setCatchUpLastSeenMs,
+} from '../shared/lastVisit/catchUpLastSeen';
+import {
+  CATCH_UP_ITEM_LEDGER_STORAGE_KEY,
+  recordCatchUpItemDismissed,
+  recordCatchUpItemSnoozed,
+} from '../shared/activity/catchUpItemLedger';
+
+/**
+ * Phase 89 — BankerMorningCatchUp card tests.
+ *
+ * Pins:
+ *   - card header + verbatim subtitle ("Derived from your current
+ *     records. Nothing happens automatically.");
+ *   - loading + failed (role=alert) + no-items empty states;
+ *   - populated state renders priority badge + deal-name button +
+ *     reason + source meta;
+ *   - clicking the deal-name navigates;
+ *   - empty + populated disclaimers include verbatim
+ *     "Not AI-generated." and "your current records";
+ *   - missing-assigned-banker NEVER fires on the banker card (the
+ *     banker IS the assigned banker on their own deals);
+ *   - rendered DOM never contains forbidden vocabulary.
+ */
+
+vi.mock('./workQueueQueries', () => ({
+  loadBankerWorkQueueData: vi.fn(),
+}));
+
+vi.mock('./BankerContext', () => ({
+  useBanker: vi.fn(),
+}));
+
+const navigateSpy = vi.fn();
+vi.mock('react-router-dom', () => ({
+  useNavigate: () => navigateSpy,
+}));
+
+import { loadBankerWorkQueueData } from './workQueueQueries';
+import { useBanker } from './BankerContext';
+import { BankerMorningCatchUp } from './BankerMorningCatchUp';
+
+const loadMock = vi.mocked(loadBankerWorkQueueData);
+const useBankerMock = vi.mocked(useBanker);
+
+const NOW = new Date();
+const MS_PER_DAY = 24 * 60 * 60 * 1000;
+
+function isoDaysAgo(d: number): string {
+  return new Date(NOW.getTime() - d * MS_PER_DAY).toISOString();
+}
+function isoDaysFromNow(d: number): string {
+  return new Date(NOW.getTime() + d * MS_PER_DAY).toISOString();
+}
+
+function emptyData(): BankerWorkQueueData {
+  return {
+    deals: [],
+    tasks: [],
+    outstandingDocuments: [],
+    pendingReviewDocuments: [],
+    memos: [],
+    memoSections: [],
+  };
+}
+
+function dataWith(over: Partial<BankerWorkQueueData> = {}): BankerWorkQueueData {
+  return {
+    ...emptyData(),
+    ...over,
+  };
+}
+
+beforeEach(() => {
+  vi.clearAllMocks();
+  localStorage.clear();
+  useBankerMock.mockReturnValue({
+    bankerId: 'banker-1',
+    fullName: 'M. Paller',
+    email: 'm@bank.test',
+    systemUserId: 'sys-1',
+    writeDisabledReason: undefined,
+    roleType: undefined,
+    creditAuthority: { approvalLimit: undefined, creditCommitteeMember: undefined, approvalOverrideAuthority: undefined },
+  });
+});
+
+describe('BankerMorningCatchUp — Phase 89', () => {
+  it('renders the card header + verbatim subtitle', () => {
+    loadMock.mockReturnValue(new Promise(() => {}));
+    render(<BankerMorningCatchUp />);
+    expect(
+      screen.getByRole('heading', { name: /morning catch-up/i }),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        /Derived from your current records\. Nothing happens automatically\./i,
+      ),
+    ).toBeInTheDocument();
+  });
+
+  it('renders the loading state initially', () => {
+    loadMock.mockReturnValue(new Promise(() => {}));
+    render(<BankerMorningCatchUp />);
+    expect(screen.getByText(/Loading catch-up/i)).toBeInTheDocument();
+  });
+
+  it('renders the failed state via role="alert" when the loader rejects', async () => {
+    loadMock.mockRejectedValue(new Error('service unavailable'));
+    render(<BankerMorningCatchUp />);
+    await waitFor(() =>
+      expect(
+        screen.getByText(/Could not load catch-up/i),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.getByRole('alert')).toBeInTheDocument();
+    expect(screen.getByText(/service unavailable/i)).toBeInTheDocument();
+  });
+
+  it('renders the empty-state copy + "Not AI-generated" disclaimer when no items fire', async () => {
+    loadMock.mockResolvedValue(emptyData());
+    render(<BankerMorningCatchUp />);
+    await waitFor(() =>
+      expect(
+        screen.getByText(/No catch-up items from current records\./i),
+      ).toBeInTheDocument(),
+    );
+    expect(screen.getByText(/Not AI-generated\./i)).toBeInTheDocument();
+  });
+
+  it('empty-state copy never says "all clear" / "no risk" / "real-time"', async () => {
+    loadMock.mockResolvedValue(emptyData());
+    render(<BankerMorningCatchUp />);
+    await waitFor(() =>
+      expect(
+        screen.getByText(/No catch-up items from current records/i),
+      ).toBeInTheDocument(),
+    );
+    const body = document.body.textContent ?? '';
+    expect(body).not.toMatch(/\ball\s+clear\b/i);
+    expect(body).not.toMatch(/\bno\s+risk\b/i);
+    expect(body).not.toMatch(/\bpipeline\s+healthy\b/i);
+    expect(body).not.toMatch(/\beverything\s+is\s+fine\b/i);
+    expect(body).not.toMatch(/\breal[- ]?time\b/i);
+  });
+
+  it('renders an overdue-task item as a high-priority row with the deal name + source meta', async () => {
+    loadMock.mockResolvedValue(
+      dataWith({
+        deals: [
+          {
+            id: 'd-1',
+            name: 'Hot Deal',
+            clientName: 'Hot Co',
+            stage: 'Underwriting',
+            status: 'Active',
+            amount: 1_000_000,
+            targetCloseDate: isoDaysFromNow(60),
+            lastActivityOn: isoDaysAgo(1),
+            stageEntryDate: isoDaysAgo(5),
+            isClosed: false,
+            collateralSummary: undefined,
+          },
+        ],
+        tasks: [
+          {
+            id: 't1',
+            dealId: 'd-1',
+            title: 'Send Q2 financials',
+            dueDate: isoDaysAgo(2),
+            modifiedOn: undefined,
+            completed: false,
+          },
+        ],
+      }),
+    );
+    render(<BankerMorningCatchUp />);
+    await waitFor(() =>
+      expect(
+        screen.getByRole('list', {
+          name: /Banker morning catch-up items/i,
+        }),
+      ).toBeInTheDocument(),
+    );
+    const list = screen.getByRole('list', {
+      name: /Banker morning catch-up items/i,
+    });
+    const items = within(list).getAllByRole('listitem');
+    expect(items.length).toBe(1);
+    expect(items[0]!.textContent).toContain('Hot Deal');
+    expect(items[0]!.textContent).toContain('Overdue task');
+    expect(items[0]!.textContent).toContain('task'); // source label
+    expect(
+      within(items[0]!).getByLabelText(/High priority/i),
+    ).toBeInTheDocument();
+  });
+
+  it('renders multiple items per deal when multiple kinds fire', async () => {
+    loadMock.mockResolvedValue(
+      dataWith({
+        deals: [
+          {
+            id: 'd-1',
+            name: 'Multi Deal',
+            clientName: 'Multi Co',
+            stage: 'Underwriting',
+            status: 'Active',
+            amount: 1_000_000,
+            targetCloseDate: isoDaysFromNow(60),
+            lastActivityOn: isoDaysAgo(1),
+            stageEntryDate: isoDaysAgo(45), // stage-aging
+            isClosed: false,
+            collateralSummary: undefined,
+          },
+        ],
+        tasks: [
+          {
+            id: 't1',
+            dealId: 'd-1',
+            title: 'Send Q2 financials',
+            dueDate: isoDaysAgo(2),
+            modifiedOn: undefined,
+            completed: false,
+          },
+        ],
+        memos: [
+          {
+            id: 'm1',
+            dealId: 'd-1',
+            name: 'Draft memo',
+            statusKey: 'draft',
+            generatedAt: isoDaysAgo(2),
+            modifiedOn: undefined,
+            textPreview: undefined,
+          },
+        ],
+      }),
+    );
+    render(<BankerMorningCatchUp />);
+    await waitFor(() =>
+      expect(
+        screen.getByRole('list', {
+          name: /Banker morning catch-up items/i,
+        }),
+      ).toBeInTheDocument(),
+    );
+    const list = screen.getByRole('list', {
+      name: /Banker morning catch-up items/i,
+    });
+    const items = within(list).getAllByRole('listitem');
+    expect(items.length).toBe(3);
+  });
+
+  it('clicking a deal-name navigates to /deals/<id>', async () => {
+    loadMock.mockResolvedValue(
+      dataWith({
+        deals: [
+          {
+            id: 'd-target',
+            name: 'Target Deal',
+            clientName: undefined,
+            stage: 'Underwriting',
+            status: 'Active',
+            amount: undefined,
+            targetCloseDate: isoDaysFromNow(60),
+            lastActivityOn: isoDaysAgo(1),
+            stageEntryDate: isoDaysAgo(5),
+            isClosed: false,
+            collateralSummary: undefined,
+          },
+        ],
+        tasks: [
+          {
+            id: 't1',
+            dealId: 'd-target',
+            title: 'X',
+            dueDate: isoDaysAgo(2),
+            modifiedOn: undefined,
+            completed: false,
+          },
+        ],
+      }),
+    );
+    render(<BankerMorningCatchUp />);
+    const user = userEvent.setup();
+    const button = await screen.findByRole('button', {
+      name: /Open deal Target Deal/i,
+    });
+    await user.click(button);
+    expect(navigateSpy).toHaveBeenCalledWith('/deals/d-target');
+  });
+
+  it("does NOT fire missing-assigned-banker on the banker workspace (the banker IS the assigned banker)", async () => {
+    // A deal that would otherwise trigger every data-quality item if
+    // the banker name weren't stamped — but the adapter ALWAYS
+    // stamps fullName, so missing-assigned-banker stays silent.
+    loadMock.mockResolvedValue(
+      dataWith({
+        deals: [
+          {
+            id: 'd-1',
+            name: 'Deal A',
+            clientName: undefined,
+            stage: 'Underwriting',
+            status: 'Active',
+            amount: undefined,
+            targetCloseDate: isoDaysFromNow(60),
+            lastActivityOn: isoDaysAgo(1),
+            stageEntryDate: isoDaysAgo(45), // surfaces stage-aging so card is populated
+            isClosed: false,
+            collateralSummary: undefined,
+          },
+        ],
+      }),
+    );
+    render(<BankerMorningCatchUp />);
+    await waitFor(() =>
+      expect(
+        screen.getByRole('list', { name: /Banker morning catch-up items/i }),
+      ).toBeInTheDocument(),
+    );
+    const body = document.body.textContent ?? '';
+    expect(body).not.toMatch(/No assigned banker/i);
+  });
+
+  it("surfaces missing-stage data-quality items when a banker deal has no stage", async () => {
+    loadMock.mockResolvedValue(
+      dataWith({
+        deals: [
+          {
+            id: 'd-1',
+            name: 'Deal A',
+            clientName: undefined,
+            stage: undefined,
+            status: 'Active',
+            amount: undefined,
+            targetCloseDate: isoDaysFromNow(60),
+            lastActivityOn: isoDaysAgo(1),
+            stageEntryDate: isoDaysAgo(5),
+            isClosed: false,
+            collateralSummary: undefined,
+          },
+        ],
+      }),
+    );
+    render(<BankerMorningCatchUp />);
+    await waitFor(() =>
+      expect(screen.getByText(/Stage not set/i)).toBeInTheDocument(),
+    );
+  });
+
+  it("Phase 170L — does NOT flag 'Stage not set' when the deal carries a hydrated StageReference label", async () => {
+    // The Phase 170K smoke deal: stage is the hydrated cr664_StageReference
+    // formatted value, not the legacy shadow field. The banker pipeline now
+    // hydrates it, so the missing-stage data-quality signal must not fire.
+    loadMock.mockResolvedValue(
+      dataWith({
+        deals: [
+          {
+            id: 'ca41e0df-9869-f111-ab0c-70a8a59be491',
+            name: '[SMOKE TEST - PHASE 170K - DO NOT USE] TEST - New Deal Smoke 170K',
+            clientName: undefined,
+            stage: 'TEST - Stage Phase 121',
+            status: 'TEST — Status Phase 121',
+            amount: 250_000,
+            targetCloseDate: isoDaysFromNow(60),
+            lastActivityOn: isoDaysAgo(1),
+            stageEntryDate: isoDaysAgo(1),
+            isClosed: false,
+            collateralSummary: undefined,
+          },
+        ],
+      }),
+    );
+    render(<BankerMorningCatchUp />);
+    // Wait until loading resolves (the disclaimer renders in both the
+    // empty and populated states).
+    await waitFor(() =>
+      expect(screen.getByText(/Not AI-generated\./i)).toBeInTheDocument(),
+    );
+    const body = document.body.textContent ?? '';
+    expect(body).not.toMatch(/Stage not set/i);
+    // And the deal id must never leak as a label.
+    expect(body).not.toMatch(/ca41e0df-9869-f111-ab0c-70a8a59be491/i);
+  });
+
+  it("populated-state disclaimer renders 'Not AI-generated.' verbatim", async () => {
+    loadMock.mockResolvedValue(
+      dataWith({
+        deals: [
+          {
+            id: 'd-1',
+            name: 'D',
+            clientName: undefined,
+            stage: 'Underwriting',
+            status: 'Active',
+            amount: undefined,
+            targetCloseDate: isoDaysFromNow(60),
+            lastActivityOn: isoDaysAgo(1),
+            stageEntryDate: isoDaysAgo(45),
+            isClosed: false,
+            collateralSummary: undefined,
+          },
+        ],
+      }),
+    );
+    render(<BankerMorningCatchUp />);
+    await waitFor(() =>
+      expect(screen.getByText(/Not AI-generated\./i)).toBeInTheDocument(),
+    );
+  });
+
+  it('rendered DOM never contains forbidden vocabulary as a positive claim', async () => {
+    loadMock.mockResolvedValue(
+      dataWith({
+        deals: [
+          {
+            id: 'd-1',
+            name: 'D',
+            clientName: undefined,
+            stage: 'Underwriting',
+            status: 'Active',
+            amount: undefined,
+            targetCloseDate: isoDaysFromNow(60),
+            lastActivityOn: isoDaysAgo(1),
+            stageEntryDate: isoDaysAgo(45),
+            isClosed: false,
+            collateralSummary: undefined,
+          },
+        ],
+      }),
+    );
+    const { container } = render(<BankerMorningCatchUp />);
+    await waitFor(() =>
+      expect(
+        screen.getByRole('list', { name: /Banker morning catch-up items/i }),
+      ).toBeInTheDocument(),
+    );
+    const text = container.textContent ?? '';
+    expect(text).not.toMatch(/\bAI[ -]?detected\b/i);
+    expect(text).not.toMatch(/\bsystem\s+decided\b/i);
+    expect(text).not.toMatch(/\bcritical\s+breach\b/i);
+    expect(text).not.toMatch(/\bguaranteed\b/i);
+    expect(text).not.toMatch(/\bnoncompliant\b/i);
+    expect(text).not.toMatch(/\bofficial\s+alert\b/i);
+    expect(text).not.toMatch(/\breal[- ]?time\b/i);
+    expect(text).not.toMatch(/\bautopilot\s+executed\b/i);
+    expect(text).not.toMatch(/\bdecisioned\b/i);
+    expect(text).not.toMatch(
+      /\b(executes|runs|completes|approves|decides)\s+automatically\b/i,
+    );
+    expect(text).not.toMatch(/\b(is|was|has been|will be)\s+failed\b/i);
+  });
+
+  // -----------------------------------------------------------------
+  // Phase 90 — local last-seen marker overlay
+  // -----------------------------------------------------------------
+
+  describe('Phase 90 — since-last-visit overlay', () => {
+    function populatedData(stageEntry: number = 45): BankerWorkQueueData {
+      return dataWith({
+        deals: [
+          {
+            id: 'd-1',
+            name: 'Deal A',
+            clientName: undefined,
+            stage: 'Underwriting',
+            status: 'Active',
+            amount: undefined,
+            targetCloseDate: isoDaysFromNow(60),
+            lastActivityOn: isoDaysAgo(1),
+            stageEntryDate: isoDaysAgo(stageEntry),
+            isClosed: false,
+            collateralSummary: undefined,
+          },
+        ],
+      });
+    }
+
+    it('first visit (no prior marker) shows "First visit on this browser" copy', async () => {
+      loadMock.mockResolvedValue(populatedData());
+      render(<BankerMorningCatchUp />);
+      await waitFor(() =>
+        expect(
+          screen.getByRole('list', { name: /Banker morning catch-up items/i }),
+        ).toBeInTheDocument(),
+      );
+      expect(
+        screen.getByText(/First visit on this browser/i),
+      ).toBeInTheDocument();
+    });
+
+    it('returning visit with no new items shows the "No new items since your last visit" line', async () => {
+      // Pre-seed the marker to a time AFTER the only item's anchor
+      // timestamp (stageEntryDate = 45 days ago). The item is older
+      // than the marker → not new → "no new" line surfaces.
+      setCatchUpLastSeenMs(
+        'banker:banker-1',
+        Date.now() - 1 * 24 * 60 * 60 * 1000, // yesterday
+      );
+      loadMock.mockResolvedValue(populatedData(45));
+      render(<BankerMorningCatchUp />);
+      await waitFor(() =>
+        expect(
+          screen.getByRole('list', { name: /Banker morning catch-up items/i }),
+        ).toBeInTheDocument(),
+      );
+      expect(
+        screen.getByText(/No new items since your last visit on this browser/i),
+      ).toBeInTheDocument();
+    });
+
+    it('returning visit with new items shows the count line + per-item "New" badge', async () => {
+      // Marker is 7d ago; item anchor is 3d ago (stageEntryDate=3
+      // makes stage-aging not fire, so use a different signal).
+      // Use an overdue task from 2 days ago — past-anchored, newer
+      // than the 7d-old marker.
+      setCatchUpLastSeenMs(
+        'banker:banker-1',
+        Date.now() - 7 * 24 * 60 * 60 * 1000,
+      );
+      loadMock.mockResolvedValue(
+        dataWith({
+          deals: [
+            {
+              id: 'd-1',
+              name: 'Deal A',
+              clientName: undefined,
+              stage: 'Underwriting',
+              status: 'Active',
+              amount: undefined,
+              targetCloseDate: isoDaysFromNow(60),
+              lastActivityOn: isoDaysAgo(1),
+              stageEntryDate: isoDaysAgo(5),
+              isClosed: false,
+              collateralSummary: undefined,
+            },
+          ],
+          tasks: [
+            {
+              id: 't1',
+              dealId: 'd-1',
+              title: 'Send Q2 financials',
+              dueDate: isoDaysAgo(2),
+              modifiedOn: undefined,
+              completed: false,
+            },
+          ],
+        }),
+      );
+      render(<BankerMorningCatchUp />);
+      await waitFor(() =>
+        expect(
+          screen.getByRole('list', { name: /Banker morning catch-up items/i }),
+        ).toBeInTheDocument(),
+      );
+      expect(
+        screen.getByText(/1 new since your last visit on this browser/i),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByLabelText(/New since your last visit on this browser/i),
+      ).toBeInTheDocument();
+    });
+
+    it('does NOT render a "New" badge on items whose occurredAt is older than the prior marker', async () => {
+      // Marker is 1 day ago; the only item's anchor is 45 days ago
+      // (stage-aging from stageEntryDate). Item is older than marker
+      // → no New badge.
+      setCatchUpLastSeenMs(
+        'banker:banker-1',
+        Date.now() - 1 * 24 * 60 * 60 * 1000,
+      );
+      loadMock.mockResolvedValue(populatedData(45));
+      render(<BankerMorningCatchUp />);
+      await waitFor(() =>
+        expect(
+          screen.getByRole('list', { name: /Banker morning catch-up items/i }),
+        ).toBeInTheDocument(),
+      );
+      expect(
+        screen.queryByLabelText(/New since your last visit on this browser/i),
+      ).toBeNull();
+    });
+
+    it('falls back to "Last-seen marker unavailable" when the banker context has no bankerId', async () => {
+      useBankerMock.mockReturnValue({
+        bankerId: '',
+        fullName: 'M. Paller',
+        email: 'm@bank.test',
+        systemUserId: 'sys-1',
+        writeDisabledReason: undefined,
+        roleType: undefined,
+        creditAuthority: { approvalLimit: undefined, creditCommitteeMember: undefined, approvalOverrideAuthority: undefined },
+      });
+      loadMock.mockResolvedValue(emptyData());
+      render(<BankerMorningCatchUp />);
+      await waitFor(() =>
+        expect(
+          screen.getByText(/No catch-up items from current records/i),
+        ).toBeInTheDocument(),
+      );
+      expect(
+        screen.getByText(/Last-seen marker unavailable for this browser/i),
+      ).toBeInTheDocument();
+    });
+
+    it("uses the banker-scoped storage key (cc:lastVisit:catchUp:banker:<bankerId>)", async () => {
+      loadMock.mockResolvedValue(populatedData());
+      render(<BankerMorningCatchUp />);
+      await waitFor(() =>
+        expect(
+          screen.getByRole('list', { name: /Banker morning catch-up items/i }),
+        ).toBeInTheDocument(),
+      );
+      // After the 2-second settle, the marker should be written under
+      // the banker-scoped key. We do not wait that long here (would
+      // require fake timers); instead we verify the prefix exists in
+      // the catchUpLastSeen module and that NO other prefix is in use.
+      expect(CATCH_UP_LAST_SEEN_STORAGE_KEY_PREFIX).toBe(
+        'cc:lastVisit:catchUp:',
+      );
+    });
+
+    it('since-last-visit line never uses notification / sync / pushed / official-record vocabulary', async () => {
+      setCatchUpLastSeenMs(
+        'banker:banker-1',
+        Date.now() - 1 * 24 * 60 * 60 * 1000,
+      );
+      loadMock.mockResolvedValue(populatedData());
+      const { container } = render(<BankerMorningCatchUp />);
+      await waitFor(() =>
+        expect(
+          screen.getByRole('list', { name: /Banker morning catch-up items/i }),
+        ).toBeInTheDocument(),
+      );
+      const text = container.textContent ?? '';
+      expect(text).not.toMatch(/\bunread\b/i);
+      expect(text).not.toMatch(/\bnotification\b/i);
+      expect(text).not.toMatch(/\b(is|was|has been)\s+(synced|pushed|delivered)\b/i);
+      expect(text).not.toMatch(/\bofficial\s+(record|state|status)\b/i);
+      expect(text).not.toMatch(/\breal[- ]?time\b/i);
+    });
+  });
+
+  // -----------------------------------------------------------------
+  // Phase 91 — local catch-up item ledger (dismiss / snooze / restore)
+  // -----------------------------------------------------------------
+
+  describe('Phase 91 — local catch-up item ledger', () => {
+    function dataWithOverdueTask(): BankerWorkQueueData {
+      return dataWith({
+        deals: [
+          {
+            id: 'd-1',
+            name: 'Hot Deal',
+            clientName: undefined,
+            stage: 'Underwriting',
+            status: 'Active',
+            amount: undefined,
+            targetCloseDate: isoDaysFromNow(60),
+            lastActivityOn: isoDaysAgo(1),
+            stageEntryDate: isoDaysAgo(5),
+            isClosed: false,
+            collateralSummary: undefined,
+          },
+        ],
+        tasks: [
+          {
+            id: 't1',
+            dealId: 'd-1',
+            title: 'Send Q2 financials',
+            dueDate: isoDaysAgo(2),
+            modifiedOn: undefined,
+            completed: false,
+          },
+        ],
+      });
+    }
+
+    it('renders "Dismiss locally" + "Snooze 24h" buttons on each non-dismissed item', async () => {
+      loadMock.mockResolvedValue(dataWithOverdueTask());
+      render(<BankerMorningCatchUp />);
+      await waitFor(() =>
+        expect(
+          screen.getByRole('list', { name: /Banker morning catch-up items/i }),
+        ).toBeInTheDocument(),
+      );
+      expect(
+        screen.getByRole('button', {
+          name: /Dismiss catch-up item for Hot Deal locally/i,
+        }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', {
+          name: /Snooze catch-up item for Hot Deal 24 hours locally/i,
+        }),
+      ).toBeInTheDocument();
+    });
+
+    it('clicking Dismiss locally marks the row dismissed + reveals a Restore button', async () => {
+      loadMock.mockResolvedValue(dataWithOverdueTask());
+      render(<BankerMorningCatchUp />);
+      const user = userEvent.setup();
+      const dismissBtn = await screen.findByRole('button', {
+        name: /Dismiss catch-up item for Hot Deal locally/i,
+      });
+      await user.click(dismissBtn);
+      expect(screen.getByText(/Dismissed locally/i)).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', {
+          name: /Restore catch-up item for Hot Deal/i,
+        }),
+      ).toBeInTheDocument();
+    });
+
+    it('clicking Restore on a dismissed row brings back the Dismiss/Snooze controls', async () => {
+      loadMock.mockResolvedValue(dataWithOverdueTask());
+      render(<BankerMorningCatchUp />);
+      const user = userEvent.setup();
+      await user.click(
+        await screen.findByRole('button', {
+          name: /Dismiss catch-up item for Hot Deal locally/i,
+        }),
+      );
+      await user.click(
+        screen.getByRole('button', {
+          name: /Restore catch-up item for Hot Deal/i,
+        }),
+      );
+      expect(
+        screen.getByRole('button', {
+          name: /Dismiss catch-up item for Hot Deal locally/i,
+        }),
+      ).toBeInTheDocument();
+      expect(screen.queryByText(/Dismissed locally/i)).toBeNull();
+    });
+
+    it('clicking Snooze 24h hides the item from the visible feed', async () => {
+      loadMock.mockResolvedValue(dataWithOverdueTask());
+      render(<BankerMorningCatchUp />);
+      const user = userEvent.setup();
+      await user.click(
+        await screen.findByRole('button', {
+          name: /Snooze catch-up item for Hot Deal 24 hours locally/i,
+        }),
+      );
+      // Snoozed items are filtered out of the visible feed; with one
+      // item snoozed and nothing else fires, the empty-state copy
+      // appears.
+      expect(
+        screen.getByText(/No catch-up items from current records/i),
+      ).toBeInTheDocument();
+    });
+
+    it('rehydrates a pre-existing dismissed entry from localStorage on mount', async () => {
+      // Pre-seed a dismissed entry for the overdue-task item id the
+      // derivation will compute on mount. The Phase 88 derivation
+      // builds ids of the shape `overdue-task:<dealId>:<rowId>`.
+      recordCatchUpItemDismissed({
+        surface: 'banker-catch-up',
+        itemKey: 'overdue-task:d-1:t1',
+        itemKind: 'overdue-task',
+        dealId: 'd-1',
+        titleSnapshot: 'Overdue task',
+        now: new Date('2026-05-17T10:00:00Z'),
+      });
+      loadMock.mockResolvedValue(dataWithOverdueTask());
+      render(<BankerMorningCatchUp />);
+      await waitFor(() =>
+        expect(
+          screen.getByRole('list', { name: /Banker morning catch-up items/i }),
+        ).toBeInTheDocument(),
+      );
+      expect(screen.getByText(/Dismissed locally/i)).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', {
+          name: /Restore catch-up item for Hot Deal/i,
+        }),
+      ).toBeInTheDocument();
+    });
+
+    it('rehydrates a pre-existing active snooze from localStorage on mount (hides the item)', async () => {
+      const futureUntil = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      recordCatchUpItemSnoozed({
+        surface: 'banker-catch-up',
+        itemKey: 'overdue-task:d-1:t1',
+        itemKind: 'overdue-task',
+        dealId: 'd-1',
+        now: new Date(),
+        snoozeUntil: futureUntil,
+      });
+      loadMock.mockResolvedValue(dataWithOverdueTask());
+      render(<BankerMorningCatchUp />);
+      await waitFor(() =>
+        expect(
+          screen.getByText(/No catch-up items from current records/i),
+        ).toBeInTheDocument(),
+      );
+    });
+
+    it('an expired snooze (snoozeUntil in the past) re-surfaces the item naturally', async () => {
+      const pastUntil = new Date(Date.now() - 1);
+      recordCatchUpItemSnoozed({
+        surface: 'banker-catch-up',
+        itemKey: 'overdue-task:d-1:t1',
+        itemKind: 'overdue-task',
+        dealId: 'd-1',
+        now: new Date(Date.now() - 25 * 60 * 60 * 1000),
+        snoozeUntil: pastUntil,
+      });
+      loadMock.mockResolvedValue(dataWithOverdueTask());
+      render(<BankerMorningCatchUp />);
+      await waitFor(() =>
+        expect(
+          screen.getByRole('list', { name: /Banker morning catch-up items/i }),
+        ).toBeInTheDocument(),
+      );
+      // The item is visible again, and the Dismiss/Snooze controls
+      // appear on it (NOT a Restore button — an expired snooze is
+      // not a dismissed state).
+      expect(
+        screen.getByRole('button', {
+          name: /Dismiss catch-up item for Hot Deal locally/i,
+        }),
+      ).toBeInTheDocument();
+    });
+
+    it('the disclaimer states the local-only tracking + does-not-change-deal-status invariant', async () => {
+      loadMock.mockResolvedValue(dataWithOverdueTask());
+      render(<BankerMorningCatchUp />);
+      await waitFor(() =>
+        expect(
+          screen.getByText(
+            /"Dismiss locally" and "Snooze locally" are tracked on this browser only/i,
+          ),
+        ).toBeInTheDocument(),
+      );
+      expect(
+        screen.getByText(/they do not change deal status/i),
+      ).toBeInTheDocument();
+    });
+
+    it('the ledger row never says resolved / completed / closed / acknowledged / workflow-updated', async () => {
+      loadMock.mockResolvedValue(dataWithOverdueTask());
+      render(<BankerMorningCatchUp />);
+      const user = userEvent.setup();
+      await user.click(
+        await screen.findByRole('button', {
+          name: /Dismiss catch-up item for Hot Deal locally/i,
+        }),
+      );
+      const body = document.body.textContent ?? '';
+      expect(body).not.toMatch(/\b(is|was|has been|will be)\s+resolved\b/i);
+      expect(body).not.toMatch(/\b(is|was|has been|will be)\s+completed\b/i);
+      expect(body).not.toMatch(/\b(is|was|has been|will be)\s+closed\b/i);
+      expect(body).not.toMatch(/\backnowledged\b/i);
+      expect(body).not.toMatch(/\bworkflow\s+updated\b/i);
+      expect(body).not.toMatch(/\bsystem\s+handled\b/i);
+    });
+
+    it('the ledger storage key is `cc:catchUpItemLedger:v1` (disjoint from Phase 83)', () => {
+      expect(CATCH_UP_ITEM_LEDGER_STORAGE_KEY).toBe('cc:catchUpItemLedger:v1');
+    });
+  });
+
+  // -----------------------------------------------------------------
+  // Phase 94 — Mark all seen affordance
+  // -----------------------------------------------------------------
+
+  describe('Phase 94 — Mark all seen', () => {
+    function dataWithOverdueTask(): BankerWorkQueueData {
+      return dataWith({
+        deals: [
+          {
+            id: 'd-1',
+            name: 'Hot Deal',
+            clientName: undefined,
+            stage: 'Underwriting',
+            status: 'Active',
+            amount: undefined,
+            targetCloseDate: isoDaysFromNow(60),
+            lastActivityOn: isoDaysAgo(1),
+            stageEntryDate: isoDaysAgo(5),
+            isClosed: false,
+            collateralSummary: undefined,
+          },
+        ],
+        tasks: [
+          {
+            id: 't1',
+            dealId: 'd-1',
+            title: 'Send Q2 financials',
+            dueDate: isoDaysAgo(2),
+            modifiedOn: undefined,
+            completed: false,
+          },
+        ],
+      });
+    }
+
+    it('does NOT render when there are no new items (newCount===0)', async () => {
+      // Pre-seed a fresh marker so the only item (45d-ago stage-aging
+      // would-be item) does not count as new. Actually use the
+      // overdue-task scenario: pre-seed marker AFTER the task's
+      // due date so it's not "new".
+      setCatchUpLastSeenMs(
+        'banker:banker-1',
+        Date.now() - 1 * 24 * 60 * 60 * 1000, // yesterday
+      );
+      loadMock.mockResolvedValue(dataWithOverdueTask());
+      render(<BankerMorningCatchUp />);
+      await waitFor(() =>
+        expect(
+          screen.getByRole('list', { name: /Banker morning catch-up items/i }),
+        ).toBeInTheDocument(),
+      );
+      expect(
+        screen.queryByRole('button', {
+          name: /Mark all catch-up items seen on this browser/i,
+        }),
+      ).toBeNull();
+    });
+
+    it('does NOT render on first visit (no prior marker)', async () => {
+      loadMock.mockResolvedValue(dataWithOverdueTask());
+      render(<BankerMorningCatchUp />);
+      await waitFor(() =>
+        expect(
+          screen.getByText(/First visit on this browser/i),
+        ).toBeInTheDocument(),
+      );
+      expect(
+        screen.queryByRole('button', {
+          name: /Mark all catch-up items seen on this browser/i,
+        }),
+      ).toBeNull();
+    });
+
+    it('does NOT render when scope is unscoped (no bankerId)', async () => {
+      useBankerMock.mockReturnValue({
+        bankerId: '',
+        fullName: 'M. Paller',
+        email: 'm@bank.test',
+        systemUserId: 'sys-1',
+        writeDisabledReason: undefined,
+        roleType: undefined,
+        creditAuthority: { approvalLimit: undefined, creditCommitteeMember: undefined, approvalOverrideAuthority: undefined },
+      });
+      loadMock.mockResolvedValue(dataWithOverdueTask());
+      render(<BankerMorningCatchUp />);
+      await waitFor(() =>
+        expect(
+          screen.getByText(/Last-seen marker unavailable/i),
+        ).toBeInTheDocument(),
+      );
+      expect(
+        screen.queryByRole('button', {
+          name: /Mark all catch-up items seen on this browser/i,
+        }),
+      ).toBeNull();
+    });
+
+    it('renders when there are new items + scope is available', async () => {
+      // Pre-seed marker 7d ago; overdue-task anchor is 2d ago → new.
+      setCatchUpLastSeenMs(
+        'banker:banker-1',
+        Date.now() - 7 * 24 * 60 * 60 * 1000,
+      );
+      loadMock.mockResolvedValue(dataWithOverdueTask());
+      render(<BankerMorningCatchUp />);
+      const btn = await screen.findByRole('button', {
+        name: /Mark all catch-up items seen on this browser/i,
+      });
+      expect(btn).toBeInTheDocument();
+      expect(btn.textContent).toBe('Mark all seen');
+      expect(
+        screen.getByText(/Clears local new-item markers only/i),
+      ).toBeInTheDocument();
+    });
+
+    it('clicking clears the "N new" count line and "New" badges immediately', async () => {
+      setCatchUpLastSeenMs(
+        'banker:banker-1',
+        Date.now() - 7 * 24 * 60 * 60 * 1000,
+      );
+      loadMock.mockResolvedValue(dataWithOverdueTask());
+      render(<BankerMorningCatchUp />);
+      await screen.findByText(/1 new since your last visit on this browser/i);
+      expect(
+        screen.getByLabelText(/New since your last visit on this browser/i),
+      ).toBeInTheDocument();
+      const user = userEvent.setup();
+      await user.click(
+        screen.getByRole('button', {
+          name: /Mark all catch-up items seen on this browser/i,
+        }),
+      );
+      // After click: count line flips to "No new items"; per-item
+      // "New" badge disappears; the Mark-all-seen button itself
+      // disappears (because newCount === 0).
+      expect(
+        screen.getByText(/No new items since your last visit on this browser/i),
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByLabelText(/New since your last visit on this browser/i),
+      ).toBeNull();
+      expect(
+        screen.queryByRole('button', {
+          name: /Mark all catch-up items seen on this browser/i,
+        }),
+      ).toBeNull();
+    });
+
+    it('persists the new marker to localStorage on click', async () => {
+      setCatchUpLastSeenMs(
+        'banker:banker-1',
+        Date.now() - 7 * 24 * 60 * 60 * 1000,
+      );
+      loadMock.mockResolvedValue(dataWithOverdueTask());
+      render(<BankerMorningCatchUp />);
+      await screen.findByText(/1 new since your last visit on this browser/i);
+      const before = Date.now();
+      const user = userEvent.setup();
+      await user.click(
+        screen.getByRole('button', {
+          name: /Mark all catch-up items seen on this browser/i,
+        }),
+      );
+      // The Phase 90 marker for this scope is now >= the click time.
+      const raw = localStorage.getItem('cc:lastVisit:catchUp:banker:banker-1');
+      expect(raw).not.toBeNull();
+      const stored = Number(raw);
+      expect(stored).toBeGreaterThanOrEqual(before);
+    });
+
+    it('does NOT clear the Phase 91 dismiss/snooze ledger', async () => {
+      // Dismiss the only catch-up item, THEN mark all seen. The
+      // dismiss entry should survive — Phase 94 only touches the
+      // last-seen marker.
+      const initialMarker = Date.now() - 7 * 24 * 60 * 60 * 1000;
+      setCatchUpLastSeenMs('banker:banker-1', initialMarker);
+      // Add a second deal so something stays visible after dismiss.
+      loadMock.mockResolvedValue(
+        dataWith({
+          deals: [
+            {
+              id: 'd-1',
+              name: 'Hot Deal',
+              clientName: undefined,
+              stage: 'Underwriting',
+              status: 'Active',
+              amount: undefined,
+              targetCloseDate: isoDaysFromNow(60),
+              lastActivityOn: isoDaysAgo(1),
+              stageEntryDate: isoDaysAgo(5),
+              isClosed: false,
+              collateralSummary: undefined,
+            },
+            {
+              id: 'd-2',
+              name: 'Other Deal',
+              clientName: undefined,
+              stage: 'Underwriting',
+              status: 'Active',
+              amount: undefined,
+              targetCloseDate: isoDaysFromNow(60),
+              lastActivityOn: isoDaysAgo(1),
+              stageEntryDate: isoDaysAgo(5),
+              isClosed: false,
+              collateralSummary: undefined,
+            },
+          ],
+          tasks: [
+            {
+              id: 't1',
+              dealId: 'd-1',
+              title: 'Send Q2 financials',
+              dueDate: isoDaysAgo(2),
+              modifiedOn: undefined,
+              completed: false,
+            },
+            {
+              id: 't2',
+              dealId: 'd-2',
+              title: 'Send Q3 financials',
+              dueDate: isoDaysAgo(2),
+              modifiedOn: undefined,
+              completed: false,
+            },
+          ],
+        }),
+      );
+      render(<BankerMorningCatchUp />);
+      const user = userEvent.setup();
+      await user.click(
+        await screen.findByRole('button', {
+          name: /Dismiss catch-up item for Hot Deal locally/i,
+        }),
+      );
+      // Now the Mark-all-seen button is visible (Other Deal item is
+      // still "new"). Click it.
+      await user.click(
+        screen.getByRole('button', {
+          name: /Mark all catch-up items seen on this browser/i,
+        }),
+      );
+      // Hot Deal's dismiss entry survives unchanged.
+      const ledger = localStorage.getItem('cc:catchUpItemLedger:v1');
+      expect(ledger).not.toBeNull();
+      const parsed = JSON.parse(ledger!);
+      const entry =
+        parsed['banker-catch-up|overdue-task:d-1:t1'];
+      expect(entry).toBeDefined();
+      expect(entry.action).toBe('dismissed');
+    });
+
+    it('the Mark-all-seen row never uses forbidden vocabulary', async () => {
+      setCatchUpLastSeenMs(
+        'banker:banker-1',
+        Date.now() - 7 * 24 * 60 * 60 * 1000,
+      );
+      loadMock.mockResolvedValue(dataWithOverdueTask());
+      const { container } = render(<BankerMorningCatchUp />);
+      await screen.findByRole('button', {
+        name: /Mark all catch-up items seen on this browser/i,
+      });
+      const text = container.textContent ?? '';
+      expect(text).not.toMatch(/\bunread\b/i);
+      expect(text).not.toMatch(/\backnowledged\b/i);
+      expect(text).not.toMatch(/\bresolved\b/i);
+      expect(text).not.toMatch(/\b(is|was|has been|will be)\s+completed\b/i);
+      expect(text).not.toMatch(/\bofficial\s+(record|state|status|read)\b/i);
+      expect(text).not.toMatch(/\bworkflow\s+updated\b/i);
+      expect(text).not.toMatch(/\bnotification\s+cleared\b/i);
+      expect(text).not.toMatch(/\b(is|was|has been)\s+synced\b/i);
+      // Specifically forbid "(is|was|has been) read" as a positive
+      // claim — but the existing "as read" idiom in the brief's
+      // forbidden list does NOT appear in our copy.
+      expect(text).not.toMatch(/\bmarked\s+as\s+read\b/i);
+    });
+  });
+
+  describe('Phase 98 — Copy Teams summary', () => {
+    function dataWithItems() {
+      return dataWith({
+        deals: [
+          {
+            id: 'd-1',
+            name: 'Acme Working Capital',
+            clientName: 'Acme Manufacturing, LLC',
+            stage: 'Underwriting',
+            status: 'Active',
+            amount: 4_500_000,
+            targetCloseDate: isoDaysFromNow(60),
+            lastActivityOn: isoDaysAgo(1),
+            stageEntryDate: isoDaysAgo(5),
+            isClosed: false,
+            collateralSummary: undefined,
+          },
+        ],
+        tasks: [
+          {
+            id: 't-1',
+            dealId: 'd-1',
+            title: 'Send Q2 financials',
+            dueDate: isoDaysAgo(3),
+            modifiedOn: undefined,
+            completed: false,
+          },
+        ],
+      });
+    }
+
+    it('renders a "Copy Teams summary" button in the populated state', async () => {
+      loadMock.mockResolvedValue(dataWithItems());
+      render(<BankerMorningCatchUp />);
+      const btn = await screen.findByRole('button', {
+        name: /Copy Teams summary for banker morning catch-up/i,
+      });
+      expect(btn).toBeEnabled();
+      expect(btn.textContent).toContain('Copy Teams summary');
+    });
+
+    it('does NOT render the Copy button when the empty-state is shown', async () => {
+      loadMock.mockResolvedValue(emptyData());
+      render(<BankerMorningCatchUp />);
+      await screen.findByText(/No catch-up items from current records/i);
+      expect(
+        screen.queryByRole('button', {
+          name: /Copy Teams summary for banker morning catch-up/i,
+        }),
+      ).toBeNull();
+    });
+
+    it('clicking Copy Teams summary writes the formatted summary to the clipboard', async () => {
+      loadMock.mockResolvedValue(dataWithItems());
+      const user = userEvent.setup();
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: { writeText },
+      });
+      render(<BankerMorningCatchUp />);
+      await user.click(
+        await screen.findByRole('button', {
+          name: /Copy Teams summary for banker morning catch-up/i,
+        }),
+      );
+      await waitFor(() => {
+        expect(writeText).toHaveBeenCalledTimes(1);
+      });
+      const written = writeText.mock.calls[0]![0] as string;
+      expect(written).toMatch(/^Banker morning catch-up — \d{4}-\d{2}-\d{2}\n/);
+      expect(written).toContain('Acme Working Capital');
+      expect(written).toContain(
+        'Local copy only. Not posted to Teams. Paste into Teams. ' +
+          'You send the message manually.',
+      );
+    });
+
+    it('shows "Copied to clipboard. Paste into Teams." status after a successful copy', async () => {
+      loadMock.mockResolvedValue(dataWithItems());
+      const user = userEvent.setup();
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: { writeText: vi.fn().mockResolvedValue(undefined) },
+      });
+      render(<BankerMorningCatchUp />);
+      await user.click(
+        await screen.findByRole('button', {
+          name: /Copy Teams summary for banker morning catch-up/i,
+        }),
+      );
+      const status = await screen.findByText(
+        /Copied to clipboard\. Paste into Teams\./i,
+      );
+      expect(status.closest('[role="status"]')).not.toBeNull();
+    });
+
+    it('shows "Clipboard unavailable. Select and copy manually." alert when clipboard is missing', async () => {
+      loadMock.mockResolvedValue(dataWithItems());
+      const user = userEvent.setup();
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: undefined,
+      });
+      render(<BankerMorningCatchUp />);
+      await user.click(
+        await screen.findByRole('button', {
+          name: /Copy Teams summary for banker morning catch-up/i,
+        }),
+      );
+      const alert = await screen.findByRole('alert');
+      expect(alert.textContent).toMatch(
+        /Clipboard unavailable\. Select and copy manually\./i,
+      );
+    });
+
+    it('clicking Copy does NOT mark items seen (Phase 90 marker untouched) or dismiss / snooze any item', async () => {
+      loadMock.mockResolvedValue(dataWithItems());
+      const user = userEvent.setup();
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: { writeText },
+      });
+      // Pre-seed a known last-seen marker far enough in the past
+      // that the visible item would naturally count as new.
+      const markerMs = Date.now() - 10 * MS_PER_DAY;
+      setCatchUpLastSeenMs(`banker:banker-1`, markerMs);
+      // Pre-seed the ledger as empty so we can detect any unwanted
+      // dismiss / snooze write.
+      localStorage.removeItem(CATCH_UP_ITEM_LEDGER_STORAGE_KEY);
+
+      render(<BankerMorningCatchUp />);
+      // Wait for the populated render to settle (the Phase 90
+      // 2-second settle would otherwise bump the marker — Phase 98
+      // is about the COPY click NOT bumping things).
+      await screen.findByRole('button', {
+        name: /Copy Teams summary for banker morning catch-up/i,
+      });
+
+      const markerBefore = localStorage.getItem(
+        `${CATCH_UP_LAST_SEEN_STORAGE_KEY_PREFIX}banker:banker-1`,
+      );
+      const ledgerBefore = localStorage.getItem(
+        CATCH_UP_ITEM_LEDGER_STORAGE_KEY,
+      );
+
+      await user.click(
+        screen.getByRole('button', {
+          name: /Copy Teams summary for banker morning catch-up/i,
+        }),
+      );
+      await waitFor(() => {
+        expect(writeText).toHaveBeenCalledTimes(1);
+      });
+
+      const markerAfter = localStorage.getItem(
+        `${CATCH_UP_LAST_SEEN_STORAGE_KEY_PREFIX}banker:banker-1`,
+      );
+      const ledgerAfter = localStorage.getItem(
+        CATCH_UP_ITEM_LEDGER_STORAGE_KEY,
+      );
+      // The marker is whatever the Phase 90 effect already wrote
+      // (or the pre-seeded value). The copy click MUST NOT change
+      // it.
+      expect(markerAfter).toBe(markerBefore);
+      // The ledger MUST stay null (no dismiss / snooze entries
+      // created by copying).
+      expect(ledgerAfter).toBe(ledgerBefore);
+    });
+
+    it('a pre-existing dismissed item remains dismissed after copy (ledger entries are not cleared)', async () => {
+      loadMock.mockResolvedValue(dataWithItems());
+      // Pre-seed a dismiss entry for the visible item.
+      recordCatchUpItemDismissed({
+        surface: 'banker-catch-up',
+        itemKey: 'overdue-task:d-1:t-1',
+        itemKind: 'overdue-task',
+        dealId: 'd-1',
+        titleSnapshot: 'Overdue task',
+        now: new Date(),
+      });
+      const user = userEvent.setup();
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: { writeText: vi.fn().mockResolvedValue(undefined) },
+      });
+      render(<BankerMorningCatchUp />);
+      await user.click(
+        await screen.findByRole('button', {
+          name: /Copy Teams summary for banker morning catch-up/i,
+        }),
+      );
+      // The dismissed row stays muted with its Restore affordance.
+      expect(
+        screen.getByRole('button', {
+          name: /Restore catch-up item for Acme Working Capital/i,
+        }),
+      ).toBeInTheDocument();
+    });
+
+    it('a pre-existing snoozed item remains snoozed after copy (snoozeUntil unchanged)', async () => {
+      // Two-deal fixture: snooze one item, leave one visible so the
+      // Copy button renders. The snoozed item must NOT come back
+      // and the ledger entry MUST stay byte-identical after the
+      // copy click.
+      loadMock.mockResolvedValue(
+        dataWith({
+          deals: [
+            {
+              id: 'd-1',
+              name: 'Acme Working Capital',
+              clientName: 'Acme Manufacturing, LLC',
+              stage: 'Underwriting',
+              status: 'Active',
+              amount: 4_500_000,
+              targetCloseDate: isoDaysFromNow(60),
+              lastActivityOn: isoDaysAgo(1),
+              stageEntryDate: isoDaysAgo(5),
+              isClosed: false,
+              collateralSummary: undefined,
+            },
+            {
+              id: 'd-2',
+              name: 'Beta Corp',
+              clientName: 'Beta',
+              stage: 'Underwriting',
+              status: 'Active',
+              amount: 1_000_000,
+              targetCloseDate: isoDaysFromNow(60),
+              lastActivityOn: isoDaysAgo(1),
+              stageEntryDate: isoDaysAgo(5),
+              isClosed: false,
+              collateralSummary: undefined,
+            },
+          ],
+          tasks: [
+            {
+              id: 't-1',
+              dealId: 'd-1',
+              title: 'Send Q2 financials',
+              dueDate: isoDaysAgo(3),
+              modifiedOn: undefined,
+              completed: false,
+            },
+            {
+              id: 't-2',
+              dealId: 'd-2',
+              title: 'Send tax returns',
+              dueDate: isoDaysAgo(2),
+              modifiedOn: undefined,
+              completed: false,
+            },
+          ],
+        }),
+      );
+      const now = new Date();
+      recordCatchUpItemSnoozed({
+        surface: 'banker-catch-up',
+        itemKey: 'overdue-task:d-1:t-1',
+        itemKind: 'overdue-task',
+        dealId: 'd-1',
+        titleSnapshot: 'Overdue task',
+        now,
+        snoozeUntil: new Date(now.getTime() + MS_PER_DAY),
+      });
+      const ledgerBefore = localStorage.getItem(
+        CATCH_UP_ITEM_LEDGER_STORAGE_KEY,
+      );
+      const user = userEvent.setup();
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: { writeText: vi.fn().mockResolvedValue(undefined) },
+      });
+      render(<BankerMorningCatchUp />);
+      await user.click(
+        await screen.findByRole('button', {
+          name: /Copy Teams summary for banker morning catch-up/i,
+        }),
+      );
+      const ledgerAfter = localStorage.getItem(
+        CATCH_UP_ITEM_LEDGER_STORAGE_KEY,
+      );
+      // The exact same snooze entry is still in the ledger; the
+      // copy click never wrote.
+      expect(ledgerAfter).toBe(ledgerBefore);
+    });
+
+    it('renders the Phase 101 Outlook handoff buttons alongside the Teams copy button', async () => {
+      loadMock.mockResolvedValue(dataWithItems());
+      render(<BankerMorningCatchUp />);
+      await screen.findByRole('button', {
+        name: /Copy Teams summary for banker morning catch-up/i,
+      });
+      expect(
+        screen.getByRole('button', {
+          name: /Open in Outlook for banker morning catch-up/i,
+        }),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByRole('button', {
+          name: /Copy email for banker morning catch-up/i,
+        }),
+      ).toBeInTheDocument();
+    });
+
+    it('clipped output never claims sent / posted / delivered / notified / synced / Teams integrated', async () => {
+      loadMock.mockResolvedValue(dataWithItems());
+      const user = userEvent.setup();
+      const writeText = vi.fn().mockResolvedValue(undefined);
+      Object.defineProperty(navigator, 'clipboard', {
+        configurable: true,
+        value: { writeText },
+      });
+      render(<BankerMorningCatchUp />);
+      await user.click(
+        await screen.findByRole('button', {
+          name: /Copy Teams summary for banker morning catch-up/i,
+        }),
+      );
+      await waitFor(() => {
+        expect(writeText).toHaveBeenCalled();
+      });
+      const text = writeText.mock.calls[0]![0] as string;
+      // Strip the negation-laden disclaimer line before checking
+      // forbidden positive claims.
+      const body = text.replace(/— Local copy only\.[^\n]+/g, '');
+      expect(body).not.toMatch(/\bsent\b/i);
+      expect(body).not.toMatch(/\bposted\b/i);
+      expect(body).not.toMatch(/\bdelivered\b/i);
+      expect(body).not.toMatch(/\bnotified\b/i);
+      expect(body).not.toMatch(/\bsynced\b/i);
+      expect(body).not.toMatch(/Teams\s+integrated/i);
+      expect(body).not.toMatch(/Graph\s+connected/i);
+    });
+  });
+});

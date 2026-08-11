@@ -1,0 +1,184 @@
+import type { CSSProperties } from 'react';
+import { palette, radius, spacing, typography } from '../shared/theme';
+import { DrillThroughCard } from '../shared/drillthrough/DrillThroughCard';
+import { buildDrillThroughTarget } from '../shared/drillthrough/drillThroughTypes';
+import { CrmBankerWorkingSurface } from '../crm/workspaceIntegration/CrmBankerWorkingSurface';
+import { bankerCrmPreviewInput } from '../crm/workspaceIntegration/crmWorkspacePreviewInputs';
+
+/**
+ * Phase 157 — Premium CRM Command Center cockpit on the Banker dashboard.
+ *
+ * Prominent command card, six readable drill-through intelligence cards,
+ * CRM and Lending Workflow readiness lanes, and relationship intelligence
+ * summary. All copy uses neutral OGB-owned terminology. No fake CRM data.
+ * No sync/push/write controls. No live calls. No vendor names.
+ */
+export function BankerCrmIntelligencePanel() {
+  const input = bankerCrmPreviewInput();
+
+  const commandCenterTarget = buildDrillThroughTarget({
+    id: 'banker-crm-command-center',
+    title: 'CRM Command Center',
+    subtitle: 'Relationship and loan workflow intelligence',
+    surface: 'crm_relationship_intelligence',
+    entityKind: 'cockpit_widget',
+    summary: 'Review relationship records, matching, and readiness from your current workspace.',
+    detailSections: [
+      {
+        title: 'Overview',
+        rows: [
+          { label: 'Status', value: 'CRM is active. Relationship records are available to view (read-only here).' },
+          { label: 'Next step', value: 'Review relationship records and matching.' },
+          { label: 'Source', value: 'Derived from your current workspace context.' },
+        ],
+      },
+    ],
+  });
+
+  const crmLaneTarget = buildDrillThroughTarget({
+    id: 'banker-crm-lane-crm-readiness',
+    title: 'CRM Readiness',
+    surface: 'crm_connector_readiness',
+    entityKind: 'status',
+    summary: input.salesforceReadiness,
+    detailSections: [{
+      title: 'CRM Readiness',
+      rows: [
+        { label: 'Status', value: input.salesforceReadiness },
+        { label: 'Availability', value: 'CRM is active — relationship records are available.' },
+        { label: 'Next step', value: 'Review relationship records and matching.' },
+      ],
+    }],
+  });
+
+  const lendingLaneTarget = buildDrillThroughTarget({
+    id: 'banker-crm-lane-lending-readiness',
+    title: 'Lending Workflow Readiness',
+    surface: 'crm_connector_readiness',
+    entityKind: 'status',
+    summary: input.ncinoReadiness,
+    detailSections: [{
+      title: 'Lending Workflow Readiness',
+      rows: [
+        { label: 'Status', value: input.ncinoReadiness },
+        { label: 'Availability', value: 'Loan workflow is active.' },
+        { label: 'Next step', value: 'Review loan workflow readiness and routing.' },
+      ],
+    }],
+  });
+
+  const relSummaryTarget = buildDrillThroughTarget({
+    id: 'banker-crm-relationship-summary',
+    title: 'Relationship Intelligence Summary',
+    surface: 'crm_relationship_intelligence',
+    entityKind: 'intelligence_panel',
+    summary: 'Relationship status, match review, ownership gaps, and items needing review.',
+    detailSections: [{
+      title: 'Relationship Intelligence',
+      rows: [
+        { label: 'Relationship', value: input.relationshipOverview ?? 'Not available' },
+        { label: 'Match review', value: input.entityMatchStatus },
+        { label: 'Ownership gaps', value: String(input.sourceOfTruthGaps) },
+        { label: 'Needs review', value: String(input.syncPreviewBlockers) },
+        { label: 'Next step', value: input.nextSafeBankerStep },
+      ],
+    }],
+  });
+
+  return (
+    <section aria-label="CRM Command Center" data-banker-crm-entry="command-center" style={s.wrap}>
+      {/* Hero command card — two-column internal layout */}
+      <DrillThroughCard target={commandCenterTarget}>
+        <div style={s.heroFace} data-crm-hero="full-width">
+          <div style={s.heroColumns}>
+            <div style={s.heroLeft}>
+              <div style={s.heroTitleRow}>
+                <span style={s.heroTitle}>CRM Command Center</span>
+                <span style={s.badge}>CRM active</span>
+                <span style={s.badgePreview}>Read-only</span>
+              </div>
+              <span style={s.heroSubtitle}>Relationship and loan workflow intelligence</span>
+              <span style={s.heroDesc}>
+                Review relationship records, matching, and readiness from your current workspace.
+              </span>
+            </div>
+            <div style={s.heroRight}>
+              <span style={s.heroNextLabel}>Next step</span>
+              <span style={s.heroNextValue}>Review relationship records and matching</span>
+            </div>
+          </div>
+        </div>
+      </DrillThroughCard>
+
+      {/* Six intelligence cards — command grid */}
+      <CrmBankerWorkingSurface input={input} />
+
+      {/* Readiness lanes — fill columns */}
+      <div style={s.laneGrid}>
+        <DrillThroughCard target={crmLaneTarget}>
+          <div style={s.laneCard} data-crm-lane="fill">
+            <span style={s.laneTitle}>CRM Readiness</span>
+            <span style={s.laneValue}>{input.salesforceReadiness}</span>
+            <span style={s.laneHint}>Next: Review CRM readiness prerequisites</span>
+          </div>
+        </DrillThroughCard>
+        <DrillThroughCard target={lendingLaneTarget}>
+          <div style={s.laneCard} data-crm-lane="fill">
+            <span style={s.laneTitle}>Lending Workflow Readiness</span>
+            <span style={s.laneValue}>{input.ncinoReadiness}</span>
+            <span style={s.laneHint}>Next: Review lending workflow configuration</span>
+          </div>
+        </DrillThroughCard>
+      </div>
+
+      {/* Relationship intelligence summary — full width */}
+      <DrillThroughCard target={relSummaryTarget}>
+        <div style={s.relSummary}>
+          <div style={s.relHeader}>
+            <span style={s.relTitle}>Relationship Intelligence Summary</span>
+          </div>
+          <div style={s.relMetrics}>
+            <span style={s.relMetric}>Relationship: {input.relationshipOverview ?? 'Not available'}</span>
+            <span style={s.relMetric}>Match: {input.entityMatchStatus}</span>
+            <span style={s.relMetric}>Ownership Gaps: {input.sourceOfTruthGaps}</span>
+            <span style={s.relMetric}>Needs Review: {input.syncPreviewBlockers}</span>
+          </div>
+          <span style={s.relNext}>Next: {input.nextSafeBankerStep}</span>
+        </div>
+      </DrillThroughCard>
+    </section>
+  );
+}
+
+const s: Record<string, CSSProperties> = {
+  wrap: { display: 'flex', flexDirection: 'column', gap: spacing.md, width: '100%' },
+
+  // Hero — full width, two-column internal
+  heroFace: { padding: `${spacing.xl} ${spacing.xl}`, background: palette.primaryBg, borderRadius: radius.md, border: `2px solid ${palette.primary}`, width: '100%', boxSizing: 'border-box' },
+  heroColumns: { display: 'grid', gridTemplateColumns: '1fr auto', gap: spacing.xl, alignItems: 'start' },
+  heroLeft: { display: 'flex', flexDirection: 'column', gap: spacing.sm },
+  heroRight: { display: 'flex', flexDirection: 'column', gap: spacing.sm, alignItems: 'flex-end', textAlign: 'right', minWidth: 180 },
+  heroTitleRow: { display: 'flex', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' },
+  heroTitle: { fontSize: typography.size.xl, fontWeight: typography.weight.bold, color: palette.text, letterSpacing: typography.letterSpacing.heading },
+  heroSubtitle: { fontSize: typography.size.md, color: palette.textMuted, fontWeight: typography.weight.semibold },
+  heroDesc: { fontSize: typography.size.sm, color: palette.text, lineHeight: typography.lineHeight.snug },
+  heroNextLabel: { fontSize: typography.size.xs, color: palette.textSubtle, textTransform: 'uppercase', letterSpacing: typography.letterSpacing.label, fontWeight: typography.weight.semibold },
+  heroNextValue: { fontSize: typography.size.sm, color: palette.text, fontWeight: typography.weight.semibold },
+  badge: { display: 'inline-block', fontSize: typography.size.xs, fontWeight: typography.weight.bold, color: palette.primaryFg, background: palette.primary, padding: `3px ${spacing.md}`, borderRadius: radius.sm, textTransform: 'uppercase', letterSpacing: typography.letterSpacing.label },
+  badgePreview: { display: 'inline-block', fontSize: typography.size.xs, fontWeight: typography.weight.bold, color: palette.infoFg, background: palette.infoBg, padding: `3px ${spacing.md}`, borderRadius: radius.sm, textTransform: 'uppercase', letterSpacing: typography.letterSpacing.label },
+
+  // Lanes — fill columns
+  laneGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: spacing.md, width: '100%' },
+  laneCard: { display: 'flex', flexDirection: 'column', gap: spacing.sm, padding: `${spacing.lg} ${spacing.xl}`, background: palette.surface, borderRadius: radius.md, border: `1px solid ${palette.border}`, flex: 1 },
+  laneTitle: { fontSize: typography.size.md, fontWeight: typography.weight.bold, color: palette.text },
+  laneValue: { fontSize: typography.size.sm, color: palette.textMuted, fontWeight: typography.weight.semibold },
+  laneHint: { fontSize: typography.size.xs, color: palette.textSubtle, fontStyle: 'italic' },
+
+  // Relationship summary — full width
+  relSummary: { display: 'flex', flexDirection: 'column', gap: spacing.sm, padding: `${spacing.lg} ${spacing.xl}`, background: palette.surface, borderRadius: radius.md, border: `1px solid ${palette.border}`, width: '100%', boxSizing: 'border-box' },
+  relHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'center' },
+  relTitle: { fontSize: typography.size.md, fontWeight: typography.weight.bold, color: palette.text },
+  relMetrics: { display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: spacing.sm },
+  relMetric: { fontSize: typography.size.sm, color: palette.textMuted, padding: `${spacing.sm} ${spacing.md}`, background: palette.surfaceAlt, borderRadius: radius.sm, textAlign: 'center' },
+  relNext: { fontSize: typography.size.sm, color: palette.textSubtle, fontStyle: 'italic' },
+};

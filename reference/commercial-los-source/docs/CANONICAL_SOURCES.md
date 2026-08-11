@@ -1,0 +1,123 @@
+# Canonical Sources
+
+The authority for each concern in this codebase. If you find a second
+implementation of any row, the canonical source wins and the duplicate
+gets collapsed (per
+[ENGINEERING_OPERATING_RULES.md §4](ENGINEERING_OPERATING_RULES.md)).
+
+This file points at code. It does not restate the contents of the
+modules it names. Read the modules.
+
+---
+
+## Governance metadata
+
+| Concern                                  | Canonical source                                                                                                  |
+| ---------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| Governed writes (shipped)                | `GOVERNED_WRITES` in [platformInventory.ts](../src/shared/governance/platformInventory.ts)                        |
+| Deliberately-blocked capabilities        | `DELIBERATELY_BLOCKED` in [platformInventory.ts](../src/shared/governance/platformInventory.ts)                   |
+| Not-wired capabilities (with reason)     | `NOT_WIRED` in [platformInventory.ts](../src/shared/governance/platformInventory.ts)                              |
+| Local-only flows (generate / copy only)  | `LOCAL_ONLY_FLOWS` in [platformInventory.ts](../src/shared/governance/platformInventory.ts)                       |
+| Executive transitional fallback features | `EXEC_TRANSITIONAL_FALLBACK_FEATURES` in [platformInventory.ts](../src/shared/governance/platformInventory.ts)    |
+| Workspace deal-access matrix             | `WORKSPACE_DEAL_ACCESS` in [platformInventory.ts](../src/shared/governance/platformInventory.ts)                  |
+| Architectural invariants (boolean flags) | `WORKSPACE_ISOLATION_VERIFIED`, `PERMISSION_BEFORE_QUERY_VERIFIED` in [platformInventory.ts](../src/shared/governance/platformInventory.ts) |
+| Reference-data governance posture        | `REFERENCE_DATA_GOVERNED` in [platformInventory.ts](../src/shared/governance/platformInventory.ts)                |
+| Release readiness derivation             | [releaseReadiness.ts](../src/shared/governance/releaseReadiness.ts)                                               |
+| Stage progression availability contract  | [stageProgressionAvailability.ts](../src/shared/governance/stageProgressionAvailability.ts)                       |
+| Correlation-id generation (governed writes) | `newCorrelationId` in [correlationId.ts](../src/shared/governance/correlationId.ts)                            |
+| Audit outcome enum values (`cr664_outcomestatus`) | `AUDIT_OUTCOME_SUCCEEDED` / `AUDIT_OUTCOME_FAILED` in [auditEnums.ts](../src/shared/governance/auditEnums.ts) |
+| Timeline visibility enum value (`cr664_visibilityscope`) | `TIMELINE_VISIBILITY_BANKER_AND_MANAGER` in [timelineEnums.ts](../src/shared/governance/timelineEnums.ts) |
+| Current-user → Dataverse systemuserid resolution | `resolveCurrentSystemUserId` in [currentUserLookup.ts](../src/shared/governance/currentUserLookup.ts)      |
+
+## Lifecycle / stage
+
+**The live, gated stage vocabulary the deal cockpit actually runs on is the seven-code
+`CANONICAL_STAGE_CODES` set in
+[stageOrderingContract.ts](../src/workflow/stageOrderingContract.ts)** (`INTAKE, UNDERWRITING,
+CREDIT_APPROVAL, COMMITMENT, DOCUMENTATION, CLOSING_FUNDING, BOARDED`) — consumed by
+`loanWorkflowRequirementEngine.ts`, `loanWorkflowRequirementRegistry.ts`, `dealBlockerModel.ts`,
+`DealStageProgressionCard.tsx`, `DealBlockers.tsx`, and `buildLiveStageAdvanceDeps.ts`.
+`stageCatalog.ts` below is a separate, frozen, governance-only vocabulary retained for
+`platformInventory.ts`'s static inventory and `stageProgressionGuard.ts`'s non-blocking Stage Map
+badge — it gates nothing in the live write path. Do not treat it as the canonical stage source.
+
+| Concern                                       | Canonical source                                                                       |
+| --------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| **Live stage vocabulary, ordering, next/prior/terminal resolution** | `CANONICAL_STAGE_CODES` / `CANONICAL_STAGES` / `recognizeCanonicalStage` / `resolveStageOrdering` in [stageOrderingContract.ts](../src/workflow/stageOrderingContract.ts) |
+| **Stage-exit requirement evaluation (what gates advancing out of a stage)** | `deriveStageExitReadiness` / `evaluateStageExitPolicy` / `WorkflowRequirementFacts` in [loanWorkflowRequirementEngine.ts](../src/workflow/loanWorkflowRequirementEngine.ts), driven by the requirement list in [loanWorkflowRequirementRegistry.ts](../src/workflow/loanWorkflowRequirementRegistry.ts) |
+| **The one blocker model every surface must consume** (Attention Console, Metric Deck, Stage Map, Advance guard) | `deriveDealBlockerModelForStage` in [dealBlockerModel.ts](../src/deals/dealBlockerModel.ts) — callers MUST pass the full `WorkflowRequirementFacts` shape (see `DealStageProgressionCard.tsx` for the reference construction); a caller that omits a fact category makes every requirement backed by it fail closed as a hard blocker, not a genuine absence |
+| Frozen governance-only stage vocabulary (retired from the cockpit; do not gate new work on this) | `STAGE_CATALOG` in [stageCatalog.ts](../src/shared/stages/stageCatalog.ts) |
+| Stage selectors (next / terminal / transition) — governance-only, see above | `getStageById` / `getNextStage` / `isTerminalStage` / `canTransitionStage` / `getLifecycleGroup` in [stageCatalog.ts](../src/shared/stages/stageCatalog.ts) |
+| Stage NAME → lifecycle group (soft)           | `getLifecycleGroupByName` in [stageCatalog.ts](../src/shared/stages/stageCatalog.ts)   |
+| Memo-gating predicate (Phase 27)              | `stageNameGatesMemo` in [stageCatalog.ts](../src/shared/stages/stageCatalog.ts)        |
+| Lifecycle group pattern set                   | `LIFECYCLE_NAME_PATTERNS` (module-private) in [stageCatalog.ts](../src/shared/stages/stageCatalog.ts) |
+
+## Routing & deal loading
+
+| Concern                                  | Canonical source                                                          |
+| ---------------------------------------- | ------------------------------------------------------------------------- |
+| Deal route dispatch (role branching)     | [DealRoute.tsx](../src/deals/DealRoute.tsx)                               |
+| Banker deal load + authorization         | `loadDealForBanker` in [dealQueries.ts](../src/deals/dealQueries.ts)      |
+| Manager deal load (team-scoped, RO)      | `loadDealForManager` in [dealQueries.ts](../src/deals/dealQueries.ts)     |
+| Team deal load (team-scoped, RO)         | `loadDealForTeam` in [dealQueries.ts](../src/deals/dealQueries.ts)        |
+| Banker context (req / optional)          | `useBanker` / `useOptionalBanker` in [BankerContext.tsx](../src/banker/BankerContext.tsx) |
+
+## Deal population & document/task status
+
+| Concern                                  | Canonical source                                                          |
+| ---------------------------------------- | ------------------------------------------------------------------------- |
+| Active deal (OData filter)               | `ACTIVE_DEAL_ODATA_PREDICATE` in [dealVisibilityScopes.ts](../src/shared/deals/dealVisibilityScopes.ts) |
+| Test/smoke deal classification & exclusion | `isTestOrSmokeDeal` / `isTestOrSmokeDealName` / `operationalDeals` in [testDealClassification.ts](../src/shared/deals/testDealClassification.ts) |
+| Document status bucket classification (outstanding/received/reviewed) | `classifyLegacyDocumentStatus` / `isGovernedExcusedDocument` in [documentStatusClassification.ts](../src/deals/documentStatusClassification.ts) |
+
+## Observability & shared primitives
+
+| Concern                                  | Canonical source                                                          |
+| ---------------------------------------- | ------------------------------------------------------------------------- |
+| Performance instrumentation registry     | [perfRegistry.ts](../src/shared/observability/perfRegistry.ts)            |
+| Shared work-queue primitives (severity / windows / day math) | [primitives.ts](../src/shared/workQueue/primitives.ts) |
+
+## Schema & SDK
+
+| Concern                                  | Canonical source                                                          |
+| ---------------------------------------- | ------------------------------------------------------------------------- |
+| Typed Dataverse services                 | [src/generated/services/](../src/generated/services/) (regenerated; do not hand-edit) |
+| Model types                              | [src/generated/models/](../src/generated/models/) (regenerated; do not hand-edit) |
+| Portfolio boarding target schema (13-table `cr664_portfolioboardedloan*` family) | [portfolioLoanBoardingDataverseSchemaPlan.ts](../src/portfolioBoarding/portfolioLoanBoardingDataverseSchemaPlan.ts) |
+| Legacy portfolio/covenant/stress-test entities (superseded, dead — do not build against) | [../../src/Entities/README_LEGACY_PORTFOLIO_SCHEMA.md](../../src/Entities/README_LEGACY_PORTFOLIO_SCHEMA.md) |
+| SharePoint per-loan document folder path + upload port/adapters/mode | [portfolioSharePointDocumentSchemaPlan.ts](../src/portfolioBoarding/portfolioSharePointDocumentSchemaPlan.ts), [portfolioSharePointDocumentPort.ts](../src/portfolioBoarding/portfolioSharePointDocumentPort.ts), [portfolioSharePointDocumentAdapters.ts](../src/portfolioBoarding/portfolioSharePointDocumentAdapters.ts) |
+
+## Cross-cutting docs
+
+| Concern                                  | Canonical source                                                          |
+| ---------------------------------------- | ------------------------------------------------------------------------- |
+| Stabilization punch list                 | [STABILIZATION_CHECKLIST.md](STABILIZATION_CHECKLIST.md)                  |
+| Phase 1–40 narrative + bundle history    | [RELEASE_NOTES_PHASES_1_40.md](RELEASE_NOTES_PHASES_1_40.md)              |
+| Stage governance rationale + non-goals   | [STAGE_GOVERNANCE.md](STAGE_GOVERNANCE.md)                                |
+| Stage progression unblock checklist (planning) | [STAGE_PROGRESSION_ENABLEMENT_MAP.md](STAGE_PROGRESSION_ENABLEMENT_MAP.md) |
+| Borrower portal feasibility audit (Phase 64) | [PHASE_64_BORROWER_PORTAL_AUDIT.md](PHASE_64_BORROWER_PORTAL_AUDIT.md) |
+| Borrower portal deferral rationale + unblock checklist (Phase 65) | [PHASE_65_BORROWER_PORTAL_DEFERRAL.md](PHASE_65_BORROWER_PORTAL_DEFERRAL.md) |
+| Borrower-safe status packet handoff workflow (Phase 67) | [PHASE_67_PACKET_EMAIL_HANDOFF.md](PHASE_67_PACKET_EMAIL_HANDOFF.md) |
+| Microsoft Vibe scope coverage tracker (Phase 69) | [MICROSOFT_VIBE_CAPABILITY_COVERAGE.md](MICROSOFT_VIBE_CAPABILITY_COVERAGE.md) |
+| Standing engineering rules               | [ENGINEERING_OPERATING_RULES.md](ENGINEERING_OPERATING_RULES.md)          |
+| Phase brief + AAR format                 | [PHASE_EXECUTION_TEMPLATE.md](PHASE_EXECUTION_TEMPLATE.md)                |
+| **Loan workflow live-wiring status** (source of truth) | [LOS_WORKFLOW_TRUTH_MATRIX.md](LOS_WORKFLOW_TRUTH_MATRIX.md) — verified accurate against code as of 2026-07-14; see [LOAN_WORKFLOW_INDEPENDENT_AUDIT_2026-07-14.md](LOAN_WORKFLOW_INDEPENDENT_AUDIT_2026-07-14.md). `LOAN_WORKFLOW_TEAM_READY_AAR.md` and Part 2 of `LOAN_WORKFLOW_FULL_TEAM_READINESS_AUDIT.md` are **superseded** — their "all four transition kinds are live-wired" claim was false. |
+
+---
+
+## Rules of use
+
+1. **Adding a new canonical source** is a deliberate act. Pick a
+   precise concern, name the file, and add a row here in the same
+   phase. Don't ship a second source without a row.
+2. **Removing / renaming** a canonical source requires updating every
+   row that references it. Tests in
+   [stageCatalog.test.ts](../src/shared/stages/stageCatalog.test.ts)
+   already demonstrate the static-source sweep pattern that catches
+   inline duplication; replicate it for new canonical sources where
+   duplication risk is high.
+3. **If two rows could plausibly own a concern**, pick one and remove
+   the other. Overlap is the failure mode this file prevents.
+4. **`src/generated/` is generated.** Never edit it directly. Schema
+   changes go through the Power Apps regeneration path; the rest of
+   the codebase consumes the generated output read-only.
