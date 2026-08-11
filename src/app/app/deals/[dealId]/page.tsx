@@ -14,5 +14,6 @@ export default async function DealPage({ params }: { params: Promise<{ dealId: s
   const deal = await loadDealDetail(context, dealId);
   if (!deal) notFound();
   const downloadsEnabled = process.env.BUDDY_DOCUMENT_DOWNLOADS_ENABLED === "true";
-  return <AppShell context={context}><AppHeader context={context} eyebrow="Loan workflow" title={deal.name} /><DealCockpit deal={deal} downloadsEnabled={downloadsEnabled} /></AppShell>;
+  const uploadsEnabled = process.env.BUDDY_DOCUMENT_UPLOADS_ENABLED === "true";
+  return <AppShell context={context}><AppHeader context={context} eyebrow="Loan workflow" title={deal.name} /><DealCockpit deal={deal} downloadsEnabled={downloadsEnabled} uploadsEnabled={uploadsEnabled} /></AppShell>;
 }
