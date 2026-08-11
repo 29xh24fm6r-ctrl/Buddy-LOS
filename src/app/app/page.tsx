@@ -1,65 +1,28 @@
 import { redirect } from "next/navigation";
-import Link from "next/link";
 import { loadAccessContext } from "@/lib/auth/session";
+import { readFoundationStatus } from "@/lib/config/foundation-status";
+import { deriveBankerCommandCenter } from "@/lib/los/read-model";
+import { loadCommandCenterDeals } from "@/lib/los/queries";
+import { AppHeader, AppShell } from "@/components/app/AppShell";
+import { BankerCommandCenter } from "@/components/banker/BankerCommandCenter";
 import { signOut } from "@/app/login/actions";
-
-const workspaceLabels = {
-  administration: "Administration",
-  banker: "Banker Workspace",
-  underwriting: "Underwriting",
-  closing: "Closing",
-  read_only: "Read-only Workspace",
-} as const;
 
 export const dynamic = "force-dynamic";
 
 export default async function ApplicationPage() {
   const context = await loadAccessContext();
   if (context.kind === "unauthenticated") redirect("/login");
+  if (context.kind === "membership_required") return <AccessPending />;
+  const readsEnabled = readFoundationStatus().readsEnabled;
+  const deals = readsEnabled ? await loadCommandCenterDeals(context) : [];
 
-  if (context.kind === "membership_required") {
-    return (
-      <main className="access-pending">
-        <section>
-          <p className="eyebrow">Identity verified</p>
-          <h1>Institution access is pending.</h1>
-          <p>Your account is authenticated, but it has no active bank or credit-union membership. Ask your institution administrator to grant access.</p>
-          <form action={signOut}><button type="submit">Sign out</button></form>
-        </section>
-      </main>
-    );
-  }
-
-  const { activeOrganization } = context;
   return (
-    <div className="app-shell">
-      <aside className="app-sidebar">
-        <Link className="brand" href="/app">Buddy</Link>
-        <p className="institution-name">{activeOrganization.organizationName}</p>
-        <p className="workspace-pill">{workspaceLabels[context.workspace]}</p>
-        <nav aria-label="Workspace navigation">
-          <Link aria-current="page" href="/app">Command center</Link>
-          <span>CRM</span><span>Deals</span><span>Tasks</span><span>Documents</span><span>Portfolio</span>
-        </nav>
-        <form action={signOut}><button type="submit">Sign out</button></form>
-      </aside>
-      <main className="app-main">
-        <header className="app-header">
-          <div><p className="eyebrow">{workspaceLabels[context.workspace]}</p><h1>Operating command center</h1></div>
-          <div className="user-block"><strong>{context.displayName ?? context.email ?? "Institution user"}</strong><span>{activeOrganization.role.replace("_", " ")}</span></div>
-        </header>
-        <section className="command-ribbon" aria-label="Command center summary">
-          <article><span>My pipeline</span><strong>—</strong><small>Data connection pending</small></article>
-          <article><span>Needs attention</span><strong>—</strong><small>Workflow port pending</small></article>
-          <article><span>Upcoming closings</span><strong>—</strong><small>Closing port pending</small></article>
-          <article><span>Portfolio alerts</span><strong>—</strong><small>Portfolio port pending</small></article>
-        </section>
-        <section className="workspace-placeholder">
-          <p className="eyebrow">Native SaaS shell</p>
-          <h2>Identity and institution boundaries are ready.</h2>
-          <p>The original Commercial LOS command-center layouts will be mounted here subsystem by subsystem. No operational data or actions are simulated.</p>
-        </section>
-      </main>
-    </div>
+    <AppShell context={context}>
+      <AppHeader context={context} eyebrow="Banker Workspace" title="Operating command center" />
+      {readsEnabled ? <BankerCommandCenter model={deriveBankerCommandCenter(deals)} /> : <ReadsPending />}
+    </AppShell>
   );
 }
+
+function ReadsPending() { return <section className="workspace-placeholder"><p className="eyebrow">Installed default-off</p><h2>Native pipeline reads are awaiting activation.</h2><p>The command center is implemented, but no live lending records will load until read isolation is certified and the read feature flag is enabled.</p></section>; }
+function AccessPending() { return <main className="access-pending"><section><p className="eyebrow">Identity verified</p><h1>Institution access is pending.</h1><p>Your account has no active bank or credit-union membership. Ask your institution administrator to grant access.</p><form action={signOut}><button type="submit">Sign out</button></form></section></main>; }

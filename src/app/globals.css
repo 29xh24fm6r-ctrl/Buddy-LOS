@@ -30,3 +30,25 @@ button,input { font:inherit; } button { cursor:pointer; border:0; border-radius:
 .workspace-placeholder { margin-top:2rem; padding:2.5rem; border:1px solid #ccd4cd; background:white; } .workspace-placeholder h2 { max-width:45rem; margin:.5rem 0; font:400 2.3rem Georgia,serif; } .workspace-placeholder p:last-child { max-width:48rem; color:#657068; line-height:1.6; }
 @media (max-width:900px) { .app-shell { grid-template-columns:1fr; } .app-sidebar { min-height:auto; } .app-sidebar nav { grid-template-columns:repeat(3,1fr); } .app-sidebar form { margin-top:1rem; } .command-ribbon { grid-template-columns:repeat(2,1fr); } }
 @media (max-width:600px) { .app-main { padding:1.25rem; } .app-header { flex-direction:column; } .user-block { text-align:left; } .app-sidebar nav,.command-ribbon { grid-template-columns:1fr; } .command-ribbon article { border-right:0; border-bottom:1px solid #ccd4cd; } }
+
+.command-ribbon article[data-tone="attention"] { box-shadow:inset 3px 0 #a14e32; }
+.operating-panel { margin-top:2rem; padding:1.5rem; border:1px solid #ccd4cd; background:white; }
+.panel-heading { display:flex; justify-content:space-between; gap:1rem; align-items:flex-end; padding-bottom:1rem; border-bottom:1px solid #e0e5e0; }
+.panel-heading h2 { margin:.25rem 0 0; font:400 2rem Georgia,serif; } .panel-heading>span { color:#657068; }
+.pipeline-lanes { display:grid; grid-template-columns:repeat(auto-fit,minmax(15rem,1fr)); gap:1rem; padding-top:1rem; align-items:start; }
+.pipeline-lane { border:1px solid #d7ded8; background:#f7f9f6; } .pipeline-lane>header { padding:.9rem; display:flex; justify-content:space-between; gap:.75rem; border-bottom:1px solid #d7ded8; }
+.pipeline-lane>header div { display:grid; gap:.25rem; } .pipeline-lane>header span,.pipeline-lane>header small { color:#657068; font-size:.78rem; }
+.pipeline-lane>div { display:grid; gap:.65rem; padding:.65rem; }
+.deal-card { display:grid; gap:.35rem; padding:.85rem; border:1px solid #d7ded8; border-radius:.4rem; background:white; color:#162019; }
+.deal-card span,.deal-card small { color:#657068; font-size:.78rem; } .deal-card:hover { border-color:#6c8d78; }
+.honest-empty { padding:2rem 0; } .honest-empty p { margin:.4rem 0 0; color:#657068; }
+.breadcrumb { margin:1.5rem 0; display:flex; gap:.5rem; color:#657068; font-size:.85rem; }
+.deal-identity { display:flex; justify-content:space-between; gap:2rem; align-items:flex-start; padding:2rem; background:white; border:1px solid #ccd4cd; }
+.deal-identity h2 { margin:.35rem 0; font:400 2.8rem Georgia,serif; } .deal-identity p:last-child { color:#657068; }
+.stage-badge { padding:.5rem .8rem; border-radius:999px; background:#e5f1e8; color:#315b40; font-size:.8rem; }
+.detail-grid { display:grid; grid-template-columns:repeat(3,1fr); margin-top:1rem; border-top:1px solid #ccd4cd; border-left:1px solid #ccd4cd; }
+.detail-grid article { min-height:7rem; padding:1rem; display:grid; align-content:start; gap:.6rem; background:white; border-right:1px solid #ccd4cd; border-bottom:1px solid #ccd4cd; }
+.detail-grid span { color:#657068; font-size:.78rem; text-transform:uppercase; letter-spacing:.08em; } .detail-grid em { color:#8a6758; }
+.contact-list { display:grid; gap:.7rem; padding-top:1rem; } .contact-list article { display:flex; justify-content:space-between; gap:1rem; padding:1rem; border:1px solid #d7ded8; }
+.contact-list article div { display:grid; gap:.35rem; } .contact-list article span,.contact-list article small { color:#657068; }
+@media (max-width:700px) { .detail-grid { grid-template-columns:1fr; } .deal-identity,.panel-heading,.contact-list article { flex-direction:column; align-items:flex-start; } }
