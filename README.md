@@ -45,6 +45,7 @@ npm run check
 - [Governed document upload exchange](docs/product/GOVERNED-DOCUMENT-UPLOAD-EXCHANGE.md)
 - [Document upload workspace UI](docs/product/DOCUMENT-UPLOAD-WORKSPACE-UI.md)
 - [Trusted document scan callback](docs/product/TRUSTED-DOCUMENT-SCAN-CALLBACK.md)
+- [Document scan submission queue](docs/product/DOCUMENT-SCAN-SUBMISSION-QUEUE.md)
 - [Security baseline](docs/security/SECURITY-BASELINE.md)
 - [Identity and tenant gate](docs/security/IDENTITY-AND-TENANT-GATE.md)
 

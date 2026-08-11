@@ -40,7 +40,7 @@ export async function POST(request: Request) {
   if (await sha256Hex(blob) !== callback.sha256)
     return Response.json({ error: "Stored document hash mismatch." }, { status: 409, ...RESPONSE_INIT });
 
-  const { data, error } = await admin.rpc("record_document_scan_result", {
+  const { data, error } = await admin.rpc("record_document_scan_result_v2", {
     p_organization_id: callback.organizationId, p_document_id: callback.documentId,
     p_scanner_provider: callback.provider, p_scanner_run_id: callback.runId,
     p_result: callback.result, p_sha256: callback.sha256,
