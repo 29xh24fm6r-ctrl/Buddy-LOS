@@ -18,6 +18,17 @@ export type DealSummary = {
 
 export type PipelineLane = { stage: string; label: string; deals: DealSummary[]; amount: number };
 
+export type BorrowerSummary = {
+  id: string;
+  legalName: string;
+  borrowerKind: string;
+  externalReference: string | null;
+  relationshipStartDate: string | null;
+  primaryContact: string | null;
+};
+
+export type BorrowerDirectoryRow = BorrowerSummary & { activeDeals: number; activeExposure: number };
+
 export type BankerCommandCenterModel = {
   deals: DealSummary[];
   lanes: PipelineLane[];
@@ -73,6 +84,43 @@ export function deriveBankerCommandCenter(deals: readonly DealSummary[], now = n
     closingSoon,
     needsAttention,
   };
+}
+
+export function deriveBorrowerDirectory(borrowers: readonly BorrowerSummary[], deals: readonly DealSummary[]): BorrowerDirectoryRow[] {
+  const activeDeals = deals.filter((deal) => !terminalStages.has(deal.stage));
+  const aggregates = new Map<string, { count: number; exposure: number }>();
+  for (const deal of activeDeals) {
+    const current = aggregates.get(deal.borrowerId) ?? { count: 0, exposure: 0 };
+    aggregates.set(deal.borrowerId, {
+      count: current.count + 1,
+      exposure: current.exposure + (deal.approvedAmount ?? deal.requestedAmount ?? 0),
+    });
+  }
+  return borrowers.map((borrower) => {
+    const aggregate = aggregates.get(borrower.id) ?? { count: 0, exposure: 0 };
+    return {
+      ...borrower,
+      activeDeals: aggregate.count,
+      activeExposure: aggregate.exposure,
+    };
+  }).sort((a, b) => a.legalName.localeCompare(b.legalName));
+}
+
+export function filterBorrowerDirectory(rows: readonly BorrowerDirectoryRow[], query: string) {
+  const normalized = query.trim().toLocaleLowerCase();
+  if (!normalized) return [...rows];
+  return rows.filter((row) => [row.legalName, row.borrowerKind, row.externalReference, row.primaryContact]
+    .some((value) => value?.toLocaleLowerCase().includes(normalized)));
+}
+
+export function filterDealPipeline(deals: readonly DealSummary[], query: string, stage: string) {
+  const normalized = query.trim().toLocaleLowerCase();
+  return deals.filter((deal) => {
+    const matchesStage = !stage || deal.stage === stage;
+    const matchesQuery = !normalized || [deal.name, deal.borrowerName, deal.dealNumber, deal.productType]
+      .some((value) => value?.toLocaleLowerCase().includes(normalized));
+    return matchesStage && matchesQuery;
+  });
 }
 
 export function stageLabel(stage: string) {

@@ -1,6 +1,6 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
-import { canReadInstitutionPipeline, type DealSummary } from "./read-model";
+import { canReadInstitutionPipeline, type BorrowerSummary, type DealSummary } from "./read-model";
 import type { AccessContext } from "@/lib/auth/access-context";
 
 type ReadyContext = Extract<AccessContext, { kind: "ready" }>;
@@ -10,6 +10,9 @@ type DealRow = {
   expected_close_date: string | null; updated_at: string;
 };
 type BorrowerRow = { id: string; legal_name: string };
+type BorrowerDirectoryRecord = BorrowerRow & {
+  borrower_kind: string; external_reference: string | null; relationship_start_date: string | null;
+};
 
 export type DealDetail = DealSummary & { purpose: string | null; createdAt: string; version: number };
 export type BorrowerDetail = {
@@ -46,6 +49,32 @@ export async function loadCommandCenterDeals(context: ReadyContext): Promise<Dea
     for (const row of (data ?? []) as BorrowerRow[]) borrowers.set(row.id, row.legal_name);
   }
   return dealRows.map((row) => toSummary(row, borrowers.get(row.borrower_id) ?? "Borrower unavailable"));
+}
+
+export async function loadBorrowerDirectory(context: ReadyContext): Promise<BorrowerSummary[]> {
+  const supabase = await createClient();
+  const organizationId = context.activeOrganization.organizationId;
+  const [{ data: borrowerData, error: borrowerError }, { data: contactData, error: contactError }] = await Promise.all([
+    supabase.from("borrowers")
+      .select("id, legal_name, borrower_kind, external_reference, relationship_start_date")
+      .eq("organization_id", organizationId).is("archived_at", null).order("legal_name").limit(500),
+    supabase.from("borrower_contacts")
+      .select("borrower_id, value, restricted_use")
+      .eq("organization_id", organizationId).eq("is_primary", true).order("created_at").limit(500),
+  ]);
+  if (borrowerError || contactError) throw new Error("Unable to load the borrower directory.");
+  const contacts = new Map<string, string>();
+  for (const contact of contactData ?? []) {
+    if (!contacts.has(contact.borrower_id)) contacts.set(contact.borrower_id, contact.restricted_use ? "Restricted" : contact.value);
+  }
+  return ((borrowerData ?? []) as BorrowerDirectoryRecord[]).map((borrower) => ({
+    id: borrower.id,
+    legalName: borrower.legal_name,
+    borrowerKind: borrower.borrower_kind,
+    externalReference: borrower.external_reference,
+    relationshipStartDate: borrower.relationship_start_date,
+    primaryContact: contacts.get(borrower.id) ?? null,
+  }));
 }
 
 export async function loadDealDetail(context: ReadyContext, dealId: string): Promise<DealDetail | null> {
