@@ -52,3 +52,15 @@ button,input { font:inherit; } button { cursor:pointer; border:0; border-radius:
 .contact-list { display:grid; gap:.7rem; padding-top:1rem; } .contact-list article { display:flex; justify-content:space-between; gap:1rem; padding:1rem; border:1px solid #d7ded8; }
 .contact-list article div { display:grid; gap:.35rem; } .contact-list article span,.contact-list article small { color:#657068; }
 @media (max-width:700px) { .detail-grid { grid-template-columns:1fr; } .deal-identity,.panel-heading,.contact-list article { flex-direction:column; align-items:flex-start; } }
+
+.intake-panel { margin-top:2rem; padding:1.5rem; border:1px solid #ccd4cd; background:white; }
+.intake-panel>.form-error { margin:1rem 0 0; padding:.85rem 1rem; border-left:3px solid #a14e32; background:#fbf1ed; color:#7e3824; }
+.intake-form { display:grid; gap:1.25rem; padding-top:1.25rem; }
+.intake-form fieldset { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:1rem; margin:0; padding:1.25rem; border:1px solid #d7ded8; }
+.intake-form legend { padding:0 .45rem; font:400 1.3rem Georgia,serif; }
+.intake-form label { display:grid; gap:.4rem; color:#4f5d53; font-size:.82rem; font-weight:700; }
+.intake-form input,.intake-form select,.intake-form textarea { width:100%; border:1px solid #bfc9c1; border-radius:.4rem; padding:.75rem; background:#fbfcfa; color:#162019; font:inherit; }
+.intake-form textarea { resize:vertical; } .intake-form .full-field { grid-column:1/-1; }
+.form-actions { display:flex; align-items:center; justify-content:space-between; gap:2rem; }
+.form-actions p { max-width:42rem; margin:0; color:#657068; font-size:.85rem; line-height:1.5; }
+@media (max-width:700px) { .intake-form fieldset { grid-template-columns:1fr; } .intake-form .full-field { grid-column:auto; } .form-actions { align-items:stretch; flex-direction:column; } }
