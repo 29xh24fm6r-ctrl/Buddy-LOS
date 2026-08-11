@@ -20,3 +20,23 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run check
+
+  database:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Start isolated Postgres
+        run: npx supabase start --exclude gotrue,realtime,storage-api,imgproxy,kong,mailpit,postgrest,postgres-meta,studio,edge-runtime,logflare,vector,supavisor
+      - name: Apply migrations from zero
+        run: npx supabase db reset --local --no-seed
+      - name: Lint database schemas
+        run: npx supabase db lint --local --schema public --level warning --fail-on error
+      - name: Stop isolated Postgres
+        if: always()
+        run: npx supabase stop --no-backup
