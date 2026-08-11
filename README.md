@@ -38,6 +38,7 @@ npm run check
 - [Underwriting readiness foundation](docs/product/UNDERWRITING-READINESS-FOUNDATION.md)
 - [Private document foundation](docs/product/PRIVATE-DOCUMENT-FOUNDATION.md)
 - [Governed document upload preparation](docs/product/DOCUMENT-UPLOAD-PREPARATION.md)
+- [Document quarantine completion](docs/product/DOCUMENT-QUARANTINE-COMPLETION.md)
 - [Security baseline](docs/security/SECURITY-BASELINE.md)
 - [Identity and tenant gate](docs/security/IDENTITY-AND-TENANT-GATE.md)
 
