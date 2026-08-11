@@ -42,6 +42,7 @@ npm run check
 - [Clean document access authorization](docs/product/CLEAN-DOCUMENT-ACCESS-AUTHORIZATION.md)
 - [Trusted document download exchange](docs/product/TRUSTED-DOCUMENT-DOWNLOAD-EXCHANGE.md)
 - [Deal document workspace](docs/product/DEAL-DOCUMENT-WORKSPACE.md)
+- [Governed document upload exchange](docs/product/GOVERNED-DOCUMENT-UPLOAD-EXCHANGE.md)
 - [Security baseline](docs/security/SECURITY-BASELINE.md)
 - [Identity and tenant gate](docs/security/IDENTITY-AND-TENANT-GATE.md)
 
