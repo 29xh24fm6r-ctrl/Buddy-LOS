@@ -43,6 +43,7 @@ npm run check
 - [Trusted document download exchange](docs/product/TRUSTED-DOCUMENT-DOWNLOAD-EXCHANGE.md)
 - [Deal document workspace](docs/product/DEAL-DOCUMENT-WORKSPACE.md)
 - [Governed document upload exchange](docs/product/GOVERNED-DOCUMENT-UPLOAD-EXCHANGE.md)
+- [Document upload workspace UI](docs/product/DOCUMENT-UPLOAD-WORKSPACE-UI.md)
 - [Security baseline](docs/security/SECURITY-BASELINE.md)
 - [Identity and tenant gate](docs/security/IDENTITY-AND-TENANT-GATE.md)
 
