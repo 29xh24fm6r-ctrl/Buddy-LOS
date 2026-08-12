@@ -46,6 +46,7 @@ npm run check
 - [Document upload workspace UI](docs/product/DOCUMENT-UPLOAD-WORKSPACE-UI.md)
 - [Trusted document scan callback](docs/product/TRUSTED-DOCUMENT-SCAN-CALLBACK.md)
 - [Document scan submission queue](docs/product/DOCUMENT-SCAN-SUBMISSION-QUEUE.md)
+- [Document scanner provider contract](docs/product/DOCUMENT-SCANNER-PROVIDER-CONTRACT.md)
 - [Governed document retention and cleanup](docs/product/GOVERNED-DOCUMENT-RETENTION-CLEANUP.md)
 - [Document security and recovery harness](docs/product/DOCUMENT-SECURITY-RECOVERY-HARNESS.md)
 - [Document commissioning](docs/operations/DOCUMENT-COMMISSIONING.md)
