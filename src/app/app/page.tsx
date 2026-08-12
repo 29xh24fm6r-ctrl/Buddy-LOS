@@ -16,11 +16,12 @@ export default async function ApplicationPage() {
   if (context.kind === "membership_required") return <AccessPending />;
   const readsEnabled = readFoundationStatus().readsEnabled;
   const deals = readsEnabled ? await loadCommandCenterDeals(context) : [];
+  const model = deriveBankerCommandCenter(deals);
 
   return (
     <AppShell context={context}>
-      <AppHeader context={context} eyebrow={context.workspace === "administration" ? "Institutional Workspace" : "Banker Workspace"} title={context.workspace === "administration" ? "Executive command center" : "Operating command center"} />
-      {readsEnabled ? (context.workspace === "administration" ? <InstitutionalCommandCenter model={deriveBankerCommandCenter(deals)} /> : <BankerCommandCenter model={deriveBankerCommandCenter(deals)} />) : <ReadsPending />}
+      <AppHeader context={context} eyebrow={context.workspace === "administration" ? "Institutional Workspace" : "Banker Workspace"} title={context.workspace === "administration" ? "Executive command center" : "Operating command center"} pipelineAmount={model.totalExposure} activeDeals={model.totalActive} attentionCount={model.needsAttention} />
+      {readsEnabled ? (context.workspace === "administration" ? <InstitutionalCommandCenter model={model} /> : <BankerCommandCenter model={model} />) : <ReadsPending />}
     </AppShell>
   );
 }
