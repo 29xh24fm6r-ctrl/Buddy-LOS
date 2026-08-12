@@ -1,0 +1,12 @@
+export type CashFlowWaterfallInput={netIncomeBase:number|null;depreciation:number|null;amortization:number|null;section179Normalized:number|null;bonusDepreciationNormalized:number|null;interestExpense:number|null;nonRecurringIncome:number|null;nonRecurringExpense:number|null;ownerBenefitAddbacks:number[];normalizedTaxProvision:number|null;maintenanceCapex:number|null;annualDebtService:number|null;isPassThrough:boolean};
+export type CashFlowWaterfall={reportedEbitda:number|null;qualityOfEarningsAdjustment:number|null;adjustedEbitda:number|null;ownerAdjustedEbitda:number|null;ncads:number|null;cashAfterDebtService:number|null;dscr:number|null;lineage:Array<{key:string;value:number|null;inputs:string[]}>};
+const sum=(values:Array<number|null>)=>{const present=values.filter((v):v is number=>v!==null);return present.length?present.reduce((a,b)=>a+b,0):null;};
+const add=(a:number|null,b:number|null)=>a===null&&b===null?null:(a??0)+(b??0);
+export function computeCashFlowWaterfall(input:CashFlowWaterfallInput):CashFlowWaterfall{
+ const noncash=sum([input.depreciation,input.amortization,input.section179Normalized,input.bonusDepreciationNormalized]);
+ const reportedEbitda=sum([input.netIncomeBase,noncash,input.interestExpense]);
+ const qualityOfEarningsAdjustment=input.nonRecurringIncome!==null||input.nonRecurringExpense!==null?(input.nonRecurringExpense??0)-(input.nonRecurringIncome??0):null;
+ const adjustedEbitda=reportedEbitda===null?null:add(reportedEbitda,qualityOfEarningsAdjustment),ownerBenefits=sum(input.ownerBenefitAddbacks),ownerAdjustedEbitda=adjustedEbitda===null?null:add(adjustedEbitda,ownerBenefits),tax=input.isPassThrough?0:input.normalizedTaxProvision;
+ const ncads=ownerAdjustedEbitda===null?null:ownerAdjustedEbitda-(tax??0)-(input.maintenanceCapex??0),cashAfterDebtService=ncads===null?null:ncads-(input.annualDebtService??0),dscr=ncads!==null&&input.annualDebtService!==null&&input.annualDebtService>0?ncads/input.annualDebtService:null;
+ return{reportedEbitda,qualityOfEarningsAdjustment,adjustedEbitda,ownerAdjustedEbitda,ncads,cashAfterDebtService,dscr,lineage:[{key:"CF_EBITDA_REPORTED",value:reportedEbitda,inputs:["NET_INCOME_BASE","NONCASH_ADDBACKS","INTEREST_EXPENSE"]},{key:"CF_EBITDA_ADJUSTED",value:adjustedEbitda,inputs:["CF_EBITDA_REPORTED","QOE_ADJUSTMENT"]},{key:"CF_NCADS",value:ncads,inputs:["CF_EBITDA_OWNER_ADJUSTED","NORMALIZED_TAX_PROVISION","MAINTENANCE_CAPEX"]},{key:"DSCR",value:dscr,inputs:["CF_NCADS","ANNUAL_DEBT_SERVICE"]}]};
+}
