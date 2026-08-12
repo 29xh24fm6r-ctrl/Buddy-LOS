@@ -123,3 +123,14 @@ button,input { font:inherit; } button { cursor:pointer; border:0; border-radius:
 .document-write-boundary small { margin-left:auto; }
 .document-gate-notice { margin:1rem 0 0; padding:.8rem 1rem; border-left:3px solid #9a7044; background:#faf4eb; color:#705231; font-size:.82rem; }
 @media (max-width:700px) { .document-requirement-card>header,.document-version-list li,.document-write-boundary { flex-direction:column; } .document-version-actions { width:100%; justify-content:space-between; } .document-write-boundary small { margin-left:0; } }
+
+.underwriter-summary { display:grid; grid-template-columns:1.35fr 1fr; gap:2rem; padding:1.25rem 0; }
+.underwriter-summary h3,.underwriter-summary strong { font:400 1.45rem Georgia,serif; } .underwriter-summary p { max-width:42rem; color:#657068; line-height:1.55; }
+.underwriter-summary dl { padding:0 1rem; border:1px solid #d7ded8; background:#f7f9f6; } .underwriter-summary dd { color:#315b40; font-family:Arial,Helvetica,sans-serif; font-weight:700; }
+.underwriter-action { display:flex; align-items:center; justify-content:space-between; gap:2rem; padding:1rem; border:1px solid #d7ded8; background:#fbfcfa; }
+.underwriter-action>div { display:grid; gap:.35rem; } .underwriter-action small { color:#657068; line-height:1.4; } .underwriter-action button { min-width:14rem; }
+.underwriter-action button:disabled { cursor:not-allowed; background:#dfe4df; color:#778079; }
+.underwriter-outcome,.underwriter-review { margin:0 0 1rem; padding:.85rem 1rem; border-left:3px solid #9a7044; background:#faf4eb; color:#705231; }
+.underwriter-outcome.success,.underwriter-review { border-left-color:#4f7c5d; background:#edf6ef; color:#315b40; }
+.underwriter-review p { margin:.35rem 0 0; line-height:1.5; }
+@media (max-width:700px) { .underwriter-summary { grid-template-columns:1fr; } .underwriter-action { align-items:stretch; flex-direction:column; } .underwriter-action button { width:100%; } }

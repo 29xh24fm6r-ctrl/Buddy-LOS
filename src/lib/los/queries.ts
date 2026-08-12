@@ -3,6 +3,8 @@ import { createClient } from "@/lib/supabase/server";
 import { canReadInstitutionPipeline, type BorrowerSummary, type DealSummary } from "./read-model";
 import type { AccessContext } from "@/lib/auth/access-context";
 import { deriveUnderwritingReadiness, type ReadinessItem, type UnderwritingReadiness } from "./underwriting-readiness";
+import { decideModuleAccess, type ModuleAccessDecision, type ProductModuleEntitlement } from "@/lib/modules/entitlements";
+import type { UnderwritingJobSummary } from "@/lib/underwriting/workspace";
 
 type ReadyContext = Extract<AccessContext, { kind: "ready" }>;
 type DealRow = {
@@ -30,6 +32,7 @@ export type DealDetail = DealSummary & {
   purpose: string | null; createdAt: string; version: number; readiness: UnderwritingReadiness;
   documentVersions: DealDocumentVersion[];
 };
+export type UnderwritingWorkspaceRecord = { moduleAccess: ModuleAccessDecision; latestJob: UnderwritingJobSummary | null };
 export type BorrowerDetail = {
   id: string; legalName: string; borrowerKind: string; externalReference: string | null;
   relationshipStartDate: string | null; contacts: { id: string; kind: string; label: string | null; value: string; isPrimary: boolean; isVerified: boolean; restrictedUse: boolean }[];
@@ -128,6 +131,23 @@ export async function loadDealDetail(context: ReadyContext, dealId: string): Pro
   return { ...summary, purpose: data.purpose, createdAt: data.created_at, version: data.version,
     readiness: deriveUnderwritingReadiness((checklist ?? []).map(mapItem), (documents ?? []).map(mapItem)),
     documentVersions: ((documentVersions ?? []) as DealDocumentRow[]).map(toDocumentVersion) };
+}
+
+export async function loadUnderwritingWorkspace(context: ReadyContext, dealId: string): Promise<UnderwritingWorkspaceRecord> {
+  const supabase = await createClient();
+  const organizationId = context.activeOrganization.organizationId;
+  const [{ data: module, error: moduleError }, { data: job, error: jobError }] = await Promise.all([
+    supabase.from("organization_product_modules").select("organization_id, module_key, status, starts_at, ends_at")
+      .eq("organization_id", organizationId).eq("module_key", "underwriting").maybeSingle(),
+    supabase.from("underwriting_jobs").select("id, status, created_at, updated_at, completed_at, failure_code")
+      .eq("organization_id", organizationId).eq("deal_id", dealId).order("created_at", { ascending: false }).limit(1).maybeSingle(),
+  ]);
+  if (moduleError || jobError) throw new Error("Unable to load the Buddy Underwriter workspace.");
+  const entitlements: ProductModuleEntitlement[] = module ? [{ organizationId: module.organization_id, module: module.module_key, status: module.status, startsAt: module.starts_at, endsAt: module.ends_at }] : [];
+  return {
+    moduleAccess: decideModuleAccess("underwriting", entitlements),
+    latestJob: job ? { id: job.id, status: job.status, createdAt: job.created_at, updatedAt: job.updated_at, completedAt: job.completed_at, failureCode: job.failure_code } : null,
+  };
 }
 
 export async function loadBorrowerDetail(context: ReadyContext, borrowerId: string): Promise<BorrowerDetail | null> {
