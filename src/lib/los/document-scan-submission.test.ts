@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { parseScanSubmissionConfig } from "./document-scan-submission";
+import { describe, expect, it, vi } from "vitest";
+import { parseScanSubmissionConfig, ScanSubmissionError, submitDocumentScan } from "./document-scan-submission";
 
 describe("document scan submission configuration", () => {
   const valid = { BUDDY_DOCUMENT_SCANNER_ENDPOINT: "https://scanner.example/submit", BUDDY_DOCUMENT_SCANNER_CALLBACK_URL: "https://buddy.example/api/internal/document-scans/callback", BUDDY_DOCUMENT_SCANNER_API_KEY: "scanner-api-key-long-enough", BUDDY_DOCUMENT_SCANNER_PROVIDER: "example-scanner" };
@@ -8,5 +8,69 @@ describe("document scan submission configuration", () => {
     expect(parseScanSubmissionConfig({ ...valid, BUDDY_DOCUMENT_SCANNER_ENDPOINT: "http://scanner.example" })).toBeNull();
     expect(parseScanSubmissionConfig({ ...valid, BUDDY_DOCUMENT_SCANNER_API_KEY: "short" })).toBeNull();
     expect(parseScanSubmissionConfig({ ...valid, BUDDY_DOCUMENT_SCANNER_PROVIDER: "" })).toBeNull();
+  });
+});
+
+describe("provider-neutral document scan contract", () => {
+  const config = {
+    endpoint: "https://scanner.example/submit",
+    callbackUrl: "https://buddy.example/api/internal/document-scans/callback",
+    apiKey: "scanner-api-key-long-enough",
+    provider: "approved-scanner",
+  };
+  const input = {
+    jobId: "9f17738e-4cba-4106-b235-89ed62145bda",
+    organizationId: "f9a9b61f-c459-4f66-886f-b5017ac87cab",
+    documentId: "55eb8df7-35a5-43fc-8325-a7904d24c932",
+    sha256: "a".repeat(64),
+    mimeType: "application/pdf",
+    blob: new Blob(["private-loan-document"], { type: "application/pdf" }),
+  };
+
+  it("sends the versioned authenticated multipart contract without redirecting", async () => {
+    const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
+      expect(init?.method).toBe("POST");
+      expect(init?.redirect).toBe("error");
+      expect(init?.cache).toBe("no-store");
+      expect(new Headers(init?.headers).get("authorization")).toBe(`Bearer ${config.apiKey}`);
+      expect(new Headers(init?.headers).get("idempotency-key")).toBe(input.jobId);
+      const body = init?.body as FormData;
+      expect(body.get("contractVersion")).toBe("buddy-document-scan-v1");
+      expect(body.get("provider")).toBe(config.provider);
+      expect(body.get("organizationId")).toBe(input.organizationId);
+      expect(body.get("documentId")).toBe(input.documentId);
+      expect(body.get("sha256")).toBe(input.sha256);
+      expect(body.get("mimeType")).toBe(input.mimeType);
+      expect(body.get("callbackUrl")).toBe(config.callbackUrl);
+      expect(body.get("callbackAuthentication")).toBe("hmac-sha256-v1");
+      const file = body.get("file") as File;
+      expect(file.name).toBe(`${input.documentId}.document`);
+      expect(file.type).toBe(input.mimeType);
+      return Response.json({ runId: "provider-run-123" });
+    });
+
+    await expect(submitDocumentScan(config, input, fetchImpl as typeof fetch)).resolves.toEqual({ runId: "provider-run-123" });
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
+  it.each([
+    [408, true],
+    [429, true],
+    [503, true],
+    [400, false],
+    [401, false],
+  ])("classifies HTTP %i retryability without exposing response bodies", async (status, retryable) => {
+    const fetchImpl = vi.fn(async () => new Response("provider secret detail", { status }));
+    const failure = await submitDocumentScan(config, input, fetchImpl as typeof fetch).catch((caught) => caught);
+    expect(failure).toBeInstanceOf(ScanSubmissionError);
+    expect(failure).toMatchObject({ retryable });
+    expect((failure as Error).message).not.toContain("provider secret detail");
+  });
+
+  it("rejects non-JSON and oversized success responses", async () => {
+    await expect(submitDocumentScan(config, input, vi.fn(async () => new Response("ok")) as typeof fetch))
+      .rejects.toEqual(expect.objectContaining<Partial<ScanSubmissionError>>({ retryable: false }));
+    await expect(submitDocumentScan(config, input, vi.fn(async () => Response.json({ runId: "x".repeat(4097) })) as typeof fetch))
+      .rejects.toEqual(expect.objectContaining<Partial<ScanSubmissionError>>({ retryable: false }));
   });
 });
