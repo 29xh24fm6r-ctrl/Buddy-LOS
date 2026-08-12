@@ -8,7 +8,7 @@
 | Borrowers | Business and contact profiles | Schema candidate | Authorized CRUD and audit proof |
 | Loan applications | Intake, ownership and lifecycle | Schema candidate | Reload, concurrency and transition tests |
 | Documents | Private upload and review workspace | Planned | Access, scanning, retention and deletion proof |
-| Underwriting | Analysis, conditions and decisions | Planned | Policy, source and human-approval evidence |
+| Underwriting | Separately entitled analysis, conditions and decisions | Contract foundation | Policy, source and human-approval evidence |
 | Closing | Checklist, approvals and funding readiness | Planned | Workflow and exception tests |
 | Portfolio | Servicing, covenants and reviews | Planned | Durable schedule and alert proof |
 | Administration | Users, roles, settings and audit | Planned | Least-privilege and operator tests |
