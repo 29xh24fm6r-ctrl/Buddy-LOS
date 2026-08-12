@@ -376,3 +376,26 @@ input,select,textarea { border-color:var(--cc-border)!important; background:var(
 @media (max-width:1180px) { .banker-kpi-grid,.executive-kpis { grid-template-columns:repeat(3,1fr); } .banker-dashboard-grid { grid-template-columns:1fr; } }
 @media (max-width:850px) { .app-shell { grid-template-columns:1fr; } .app-sidebar { position:relative; height:auto; } .workspace-nav { display:grid; grid-template-columns:repeat(2,1fr); } }
 @media (max-width:560px) { .app-header,.workspace-tabs,.banker-kpi-grid,.executive-kpis,.banker-dashboard-grid,.executive-grid,.executive-status,.breadcrumb,.deal-command-header,.deal-workspace-tabs,.deal-overview,.deal-overview+.operating-panel,.document-workspace,.underwriter-workspace,.closing-workspace { margin-left:1rem; margin-right:1rem; } .app-header { padding:1.25rem; } .app-header-top { flex-direction:column; } .workspace-nav { grid-template-columns:1fr; } .banker-kpi-grid,.executive-kpis { grid-template-columns:1fr; } }
+
+/* Original BankerShell operating hierarchy: action cockpit before analytics. */
+.banker-command-deck { margin:0 2rem 1rem; overflow:hidden; border:1px solid var(--cc-border); border-radius:8px; background:linear-gradient(165deg,var(--cc-surface),var(--cc-surface-subtle)); box-shadow:var(--cc-shadow-elevated); }
+.banker-command-deck-heading { display:flex; align-items:flex-start; justify-content:space-between; gap:1rem; padding:1.1rem 1.2rem; border-bottom:1px solid var(--cc-divider); }
+.banker-command-deck-heading .eyebrow { margin:0 0 .3rem; color:var(--cc-link); font-size:.62rem; font-weight:800; letter-spacing:.08em; text-transform:uppercase; }
+.banker-command-deck-heading h2 { margin:0; color:var(--cc-text); font-family:var(--font-display),serif; font-size:1.35rem; letter-spacing:-.015em; }
+.banker-command-deck-heading p:last-child { margin:.35rem 0 0; color:var(--cc-text-muted); font-size:.72rem; }
+.banker-command-deck-heading>a { display:flex; align-items:center; gap:.35rem; color:var(--cc-link); font-size:.68rem; font-weight:800; white-space:nowrap; }
+.banker-command-deck-heading>a svg { width:14px; height:14px; }
+.banker-command-grid { display:grid; grid-template-columns:minmax(0,1.25fr) minmax(18rem,.75fr); }
+.banker-priority-stack { display:grid; align-content:start; gap:.65rem; padding:1rem; border-right:1px solid var(--cc-divider); }
+.banker-priority-row { display:grid; grid-template-columns:2.5rem minmax(0,1fr) auto; align-items:center; gap:.85rem; min-height:4.35rem; padding:.7rem .85rem; border:1px solid var(--cc-border); border-left:3px solid var(--cc-cobalt); border-radius:5px; background:var(--cc-surface-subtle); text-decoration:none; }
+.banker-priority-row[data-tone="urgent"] { border-left-color:var(--cc-blocked); }.banker-priority-row[data-tone="attention"] { border-left-color:var(--cc-at-risk); }.banker-priority-row[data-tone="clear"] { border-left-color:var(--cc-clear); }.banker-priority-row[data-tone="unavailable"] { border-left-color:var(--cc-text-subtle); opacity:.72; }
+.banker-priority-row>strong { color:var(--cc-text); font-family:var(--font-display),serif; font-size:1.75rem; text-align:center; }
+.banker-priority-row>span { min-width:0; display:grid; gap:.2rem; }.banker-priority-row b { color:var(--cc-text); font-size:.72rem; }.banker-priority-row small { color:var(--cc-text-muted); font-size:.62rem; line-height:1.4; }
+.banker-priority-row>svg { width:15px; color:var(--cc-text-subtle); }
+.portfolio-health { padding:1rem; }.portfolio-health h3 { margin:0 0 .75rem; color:var(--cc-text); font-size:.75rem; }
+.portfolio-health>div { display:grid; grid-template-columns:1fr 1fr; gap:.55rem; }
+.portfolio-health article { min-height:4rem; display:flex; flex-direction:column; justify-content:center; gap:.25rem; padding:.65rem; border:1px solid var(--cc-border); border-radius:5px; background:var(--cc-deck-tile); }
+.portfolio-health article.muted { background:var(--cc-surface-subtle); opacity:.65; }.portfolio-health strong { color:var(--cc-text); font-family:var(--font-display),serif; font-size:1rem; overflow-wrap:anywhere; }.portfolio-health article.muted strong { font-family:var(--font-sans),sans-serif; font-size:.64rem; font-weight:500; font-style:italic; }
+.portfolio-health span { color:var(--cc-text-muted); font-size:.58rem; line-height:1.3; }
+@media (max-width:980px) { .banker-command-grid { grid-template-columns:1fr; } .banker-priority-stack { border-right:0; border-bottom:1px solid var(--cc-divider); } }
+@media (max-width:560px) { .banker-command-deck { margin-left:1rem; margin-right:1rem; } .banker-command-deck-heading { flex-direction:column; } .portfolio-health>div { grid-template-columns:1fr; } }
