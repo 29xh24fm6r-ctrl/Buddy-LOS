@@ -1,0 +1,17 @@
+create type public.credit_assessment_status as enum('needs_review','reviewed','superseded');
+create table public.credit_assessments(
+ id uuid primary key default gen_random_uuid(),organization_id uuid not null,job_id uuid not null,deal_id uuid not null,spread_id uuid not null,
+ engine_version text not null check(engine_version='buddy-credit-engine.v1'),policy_version text not null,assessment jsonb not null check(jsonb_typeof(assessment)='object'),
+ status public.credit_assessment_status not null default 'needs_review',created_at timestamptz not null default now(),reviewed_at timestamptz,reviewed_by uuid references auth.users(id) on delete restrict,supersedes_assessment_id uuid references public.credit_assessments(id) on delete restrict,
+ unique(id,organization_id),unique(job_id,spread_id,engine_version,policy_version),foreign key(job_id,organization_id) references public.underwriting_jobs(id,organization_id) on delete restrict,foreign key(deal_id,organization_id) references public.deals(id,organization_id) on delete restrict,foreign key(spread_id,organization_id) references public.financial_spreads(id,organization_id) on delete restrict,
+ check((status='reviewed' and reviewed_at is not null and reviewed_by is not null) or status<>'reviewed')
+);
+create table public.credit_policy_exceptions(
+ id uuid primary key default gen_random_uuid(),organization_id uuid not null,assessment_id uuid not null,deal_id uuid not null,code text not null,actual numeric,policy_limit numeric not null,severity text not null check(severity in('warning','material')),message text not null,status text not null default 'open' check(status in('open','mitigated','waived')),created_at timestamptz not null default now(),resolved_at timestamptz,resolved_by uuid references auth.users(id) on delete restrict,resolution_rationale text,
+ foreign key(assessment_id,organization_id) references public.credit_assessments(id,organization_id) on delete cascade,foreign key(deal_id,organization_id) references public.deals(id,organization_id) on delete restrict,unique(assessment_id,code),check((status='open' and resolved_at is null and resolved_by is null) or status<>'open')
+);
+create index credit_assessments_deal_idx on public.credit_assessments(organization_id,deal_id,created_at desc);create index credit_policy_exceptions_open_idx on public.credit_policy_exceptions(organization_id,deal_id) where status='open';
+alter table public.credit_assessments enable row level security;alter table public.credit_policy_exceptions enable row level security;revoke all on public.credit_assessments,public.credit_policy_exceptions from public,anon,authenticated;grant select on public.credit_assessments,public.credit_policy_exceptions to authenticated;
+create policy "credit_assessments_read_authorized" on public.credit_assessments for select to authenticated using(exists(select 1 from public.deals deal where deal.id=credit_assessments.deal_id and deal.organization_id=credit_assessments.organization_id));
+create policy "credit_policy_exceptions_read_authorized" on public.credit_policy_exceptions for select to authenticated using(exists(select 1 from public.credit_assessments assessment where assessment.id=credit_policy_exceptions.assessment_id and assessment.organization_id=credit_policy_exceptions.organization_id));
+comment on table public.credit_assessments is 'Deterministic advisory credit analysis. Human review, override, and decision authority remain separate and uncommissioned.';

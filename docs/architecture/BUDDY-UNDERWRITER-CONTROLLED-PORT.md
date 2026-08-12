@@ -35,9 +35,9 @@ The module must fail closed when entitlement, tenant identity, clean-document au
 ## Next controlled-port slices
 
 1. Authorized underwriting job command and durable outbox, still default-off. **Implemented; execution remains unavailable.**
-2. Port Buddy document classification and extraction behind provider-neutral adapters. **Contract and artifact foundation implemented; providers remain disconnected.**
+2. Port Buddy document classification and extraction behind provider-neutral adapters. **Runtime implemented default-off; provider selection and activation remain uncommissioned.**
 3. Port normalized financial facts and spreading with provenance fixtures. **Contract and storage foundation implemented; calculations remain disconnected.**
-4. Port global cash flow, risk, collateral and policy analysis.
+4. Port global cash flow, risk, collateral and policy analysis. **Deterministic engine and advisory storage implemented; human decisions remain separate.**
 5. Port credit memo assembly and human review/approval boundaries.
 6. Port SBA packaging as a separately entitled downstream module.
 
