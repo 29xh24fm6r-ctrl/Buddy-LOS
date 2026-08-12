@@ -5,6 +5,7 @@ import { deriveBankerCommandCenter } from "@/lib/los/read-model";
 import { loadCommandCenterDeals } from "@/lib/los/queries";
 import { AppHeader, AppShell } from "@/components/app/AppShell";
 import { BankerCommandCenter } from "@/components/banker/BankerCommandCenter";
+import { InstitutionalCommandCenter } from "@/components/institution/InstitutionalCommandCenter";
 import { signOut } from "@/app/login/actions";
 
 export const dynamic = "force-dynamic";
@@ -18,8 +19,8 @@ export default async function ApplicationPage() {
 
   return (
     <AppShell context={context}>
-      <AppHeader context={context} eyebrow="Banker Workspace" title="Operating command center" />
-      {readsEnabled ? <BankerCommandCenter model={deriveBankerCommandCenter(deals)} /> : <ReadsPending />}
+      <AppHeader context={context} eyebrow={context.workspace === "administration" ? "Institutional Workspace" : "Banker Workspace"} title={context.workspace === "administration" ? "Executive command center" : "Operating command center"} />
+      {readsEnabled ? (context.workspace === "administration" ? <InstitutionalCommandCenter model={deriveBankerCommandCenter(deals)} /> : <BankerCommandCenter model={deriveBankerCommandCenter(deals)} />) : <ReadsPending />}
     </AppShell>
   );
 }

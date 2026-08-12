@@ -39,7 +39,7 @@ export function AppShell({ context, children }: { context: ReadyContext; childre
         </div>
 
         <p className="institution-name">{activeOrganization.organizationName}</p>
-        <WorkspaceNavigation />
+        <WorkspaceNavigation workspace={context.workspace} />
 
         <div className="sidebar-help">
           <span>?</span>
