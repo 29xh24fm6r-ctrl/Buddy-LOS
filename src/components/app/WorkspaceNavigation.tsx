@@ -1,40 +1,45 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
-import type { WorkspaceKey } from "@/lib/auth/access-context";
+import { usePathname, useSearchParams } from "next/navigation";
 import { LosIcon, type LosIconName } from "@/components/app/LosIcon";
+import type { WorkspaceSurface } from "@/lib/workspace-surfaces";
 
-type NavItem = { href: string; label: string; icon: LosIconName; exact?: boolean };
+type NavItem = { href: string; label: string; icon: LosIconName; exact?: boolean; view?: string };
 type NavGroup = { label: string; items: readonly NavItem[] };
 
-const bankerGroups: readonly NavGroup[] = [
-  { label: "My pipeline", items: [{ href: "/app", label: "Dashboard", icon: "dashboard", exact: true }, { href: "/app/deals", label: "Active deals", icon: "deals" }, { href: "/app/deals", label: "My alerts", icon: "alert" }] },
-  { label: "Work queue", items: [{ href: "/app/deals", label: "Tasks & actions", icon: "tasks" }, { href: "/app/deals", label: "Due diligence", icon: "documents" }] },
-  { label: "Relationships", items: [{ href: "/app/crm", label: "CRM hub", icon: "crm" }, { href: "/app/crm", label: "Activity log", icon: "activity" }] },
-  { label: "Resources", items: [{ href: "/app/intake", label: "Loan workflow", icon: "workflow" }] },
-];
+function groupsFor(surface: WorkspaceSurface): readonly NavGroup[] {
+  const suffix = surface === "crm" ? "" : `?surface=${surface}`;
+  return [
+    { label: "My pipeline", items: [{ href: `/app${suffix}`, label: "Dashboard", icon: "dashboard", exact: true }, { href: withView(`/app/deals${suffix}`, "active"), label: "Active deals", icon: "deals", view: "active" }, { href: withView(`/app/deals${suffix}`, "alerts"), label: "My alerts", icon: "alert", view: "alerts" }] },
+    { label: "Work queue", items: [{ href: withView(`/app/deals${suffix}`, "tasks"), label: "Tasks & actions", icon: "tasks", view: "tasks" }, { href: withView(`/app/deals${suffix}`, "due-diligence"), label: "Due diligence", icon: "documents", view: "due-diligence" }] },
+    { label: "Relationships", items: [{ href: "/app/crm", label: "CRM hub", icon: "crm" }, { href: "/app/crm?view=activities", label: "Activity log", icon: "activity", view: "activities" }] },
+    { label: "Resources", items: [{ href: `/app/intake${suffix}`, label: "Loan workflow", icon: "workflow" }] },
+  ];
+}
 
-const institutionalGroups: readonly NavGroup[] = [
-  { label: "Institution", items: [{ href: "/app", label: "Command center", icon: "dashboard", exact: true }, { href: "/app/deals", label: "Portfolio pipeline", icon: "deals" }, { href: "/app/deals", label: "Risk & exceptions", icon: "alert" }] },
-  { label: "Operations", items: [{ href: "/app/deals", label: "Team work queue", icon: "tasks" }, { href: "/app/intake", label: "Loan production", icon: "workflow" }, { href: "/app/crm", label: "Relationships", icon: "crm" }] },
-  { label: "Management", items: [{ href: "/app", label: "Performance", icon: "activity" }, { href: "/app", label: "Data quality", icon: "documents" }] },
-];
-
-export function WorkspaceNavigation({ workspace }: { workspace: WorkspaceKey }) {
+export function WorkspaceNavigation({ surface }: { surface: WorkspaceSurface }) {
   const pathname = usePathname();
-  const visibleGroups = workspace === "administration" || workspace === "read_only" ? institutionalGroups : bankerGroups;
+  const searchParams = useSearchParams();
+  const currentView = searchParams.get("view");
   return (
     <nav className="workspace-nav" aria-label="Workspace navigation">
-      {visibleGroups.map((group) => (
+      {groupsFor(surface).map((group) => (
         <section key={group.label}>
           <p>{group.label}</p>
           {group.items.map((item) => {
-            const active = item.exact ? pathname === item.href : pathname.startsWith(item.href);
+            const itemPath = item.href.split("?")[0];
+            const active = item.exact
+              ? pathname === itemPath
+              : pathname.startsWith(itemPath) && (item.view ? currentView === item.view || (item.view === "active" && !currentView) : !currentView);
             return <Link href={item.href} key={`${group.label}-${item.label}`} aria-current={active ? "page" : undefined}><span><LosIcon name={item.icon} /></span>{item.label}</Link>;
           })}
         </section>
       ))}
     </nav>
   );
+}
+
+function withView(href: string, view: string) {
+  return `${href}${href.includes("?") ? "&" : "?"}view=${view}`;
 }

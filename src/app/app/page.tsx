@@ -3,25 +3,36 @@ import { loadAccessContext } from "@/lib/auth/session";
 import { readFoundationStatus } from "@/lib/config/foundation-status";
 import { deriveBankerCommandCenter } from "@/lib/los/read-model";
 import { loadCommandCenterDeals } from "@/lib/los/queries";
-import { AppHeader, AppShell } from "@/components/app/AppShell";
+import { AppHeader, AppShell, WorkspaceHeader } from "@/components/app/AppShell";
 import { BankerCommandCenter } from "@/components/banker/BankerCommandCenter";
-import { InstitutionalCommandCenter } from "@/components/institution/InstitutionalCommandCenter";
+import { RoleCommandCenter } from "@/components/institution/RoleCommandCenter";
 import { signOut } from "@/app/login/actions";
+import { resolveWorkspaceSurface } from "@/lib/workspace-surfaces";
 
 export const dynamic = "force-dynamic";
 
-export default async function ApplicationPage() {
+export default async function ApplicationPage({ searchParams }: { searchParams: Promise<{ surface?: string }> }) {
   const context = await loadAccessContext();
   if (context.kind === "unauthenticated") redirect("/login");
   if (context.kind === "membership_required") return <AccessPending />;
   const readsEnabled = readFoundationStatus().readsEnabled;
   const deals = readsEnabled ? await loadCommandCenterDeals(context) : [];
   const model = deriveBankerCommandCenter(deals);
+  const requested = (await searchParams).surface;
+  const surface = resolveWorkspaceSurface(requested, context.activeOrganization.role, context.workspace);
+  if (surface === "crm") redirect("/app/crm");
+
+  const workspaceTitles = {
+    team: ["Commercial lending", "Team Command Center", "Shared pipeline, bottlenecks, document needs, and task load across the team."],
+    manager: ["Commercial lending", "Manager Command Center", "Team pipeline health, banker production, and risk roll-up."],
+    portfolio: ["Commercial lending", "Portfolio Command Center", "Live authorized portfolio exposure, mix, and risk roll-up."],
+    admin: ["Commercial lending", "Admin Command Center", "Institution configuration, operational health, and governed access."],
+  } as const;
 
   return (
-    <AppShell context={context}>
-      <AppHeader context={context} eyebrow={context.workspace === "administration" ? "Institutional Workspace" : "Banker Workspace"} title={context.workspace === "administration" ? "Executive command center" : "Operating command center"} pipelineAmount={model.totalExposure} activeDeals={model.totalActive} attentionCount={model.needsAttention} />
-      {readsEnabled ? (context.workspace === "administration" ? <InstitutionalCommandCenter model={model} /> : <BankerCommandCenter model={model} />) : <ReadsPending />}
+    <AppShell context={context} surface={surface}>
+      {surface === "banker" ? <AppHeader context={context} eyebrow="Banker Workspace" title="Operating command center" pipelineAmount={model.totalExposure} activeDeals={model.totalActive} attentionCount={model.needsAttention} /> : <WorkspaceHeader context={context} surface={surface} eyebrow={workspaceTitles[surface][0]} title={workspaceTitles[surface][1]} subtitle={workspaceTitles[surface][2]} />}
+      {readsEnabled ? (surface === "banker" ? <BankerCommandCenter model={model} /> : <RoleCommandCenter surface={surface} model={model} />) : <ReadsPending />}
     </AppShell>
   );
 }
