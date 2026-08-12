@@ -37,6 +37,8 @@ jobs:
         run: npx supabase db reset --local --no-seed
       - name: Lint database schemas
         run: npx supabase db lint --local --schema public --level warning --fail-on error
+      - name: Verify document security and recovery contracts
+        run: npx supabase db query --local --file supabase/tests/document_security_recovery.sql
       - name: Stop isolated Postgres
         if: always()
         run: npx supabase stop --no-backup
