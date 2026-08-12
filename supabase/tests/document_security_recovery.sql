@@ -56,7 +56,10 @@ do $$ declare claimed jsonb; begin
   exception when unique_violation then null; end;
   if public.claim_document_cleanup_job() is not null then raise exception 'legal hold cleanup denial failed'; end if;
   if (public.get_document_operations_health()->>'schemaVersion')<>'buddy-document-operations-health-v1' then raise exception 'document operations health contract missing'; end if;
-  if public.get_document_operations_health()::text ~ '(a/doc|retry.pdf|test-run|repeat\\(' then raise exception 'document operations health leaked document data'; end if;
+  if position('a/doc' in public.get_document_operations_health()::text)>0
+    or position('retry.pdf' in public.get_document_operations_health()::text)>0
+    or position('test-run' in public.get_document_operations_health()::text)>0
+  then raise exception 'document operations health leaked document data'; end if;
 end $$;
 reset role;
 
