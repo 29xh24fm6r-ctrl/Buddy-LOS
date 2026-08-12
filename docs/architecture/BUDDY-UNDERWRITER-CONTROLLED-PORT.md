@@ -36,7 +36,7 @@ The module must fail closed when entitlement, tenant identity, clean-document au
 
 1. Authorized underwriting job command and durable outbox, still default-off. **Implemented; execution remains unavailable.**
 2. Port Buddy document classification and extraction behind provider-neutral adapters. **Contract and artifact foundation implemented; providers remain disconnected.**
-3. Port normalized financial facts and spreading with provenance fixtures.
+3. Port normalized financial facts and spreading with provenance fixtures. **Contract and storage foundation implemented; calculations remain disconnected.**
 4. Port global cash flow, risk, collateral and policy analysis.
 5. Port credit memo assembly and human review/approval boundaries.
 6. Port SBA packaging as a separately entitled downstream module.
