@@ -33,6 +33,10 @@ do $$ begin
     perform public.govern_document_retention('20000000-0000-4000-8000-000000000001','50000000-0000-4000-8000-000000000001',current_date,false,'shorten held record','held-retention-002');
     raise exception 'retention shortening unexpectedly succeeded';
   exception when invalid_parameter_value then null; end;
+  begin
+    perform public.get_document_operations_health();
+    raise exception 'browser document operations health unexpectedly succeeded';
+  exception when insufficient_privilege then null; end;
 end $$;
 reset role;
 
@@ -51,6 +55,11 @@ do $$ declare claimed jsonb; begin
     raise exception 'conflicting scan replay unexpectedly succeeded';
   exception when unique_violation then null; end;
   if public.claim_document_cleanup_job() is not null then raise exception 'legal hold cleanup denial failed'; end if;
+  if (public.get_document_operations_health()->>'schemaVersion')<>'buddy-document-operations-health-v1' then raise exception 'document operations health contract missing'; end if;
+  if position('a/doc' in public.get_document_operations_health()::text)>0
+    or position('retry.pdf' in public.get_document_operations_health()::text)>0
+    or position('test-run' in public.get_document_operations_health()::text)>0
+  then raise exception 'document operations health leaked document data'; end if;
 end $$;
 reset role;
 
