@@ -1,0 +1,84 @@
+import { mkdtempSync, mkdirSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { dirname, join } from "node:path";
+import { describe, expect, it } from "vitest";
+// The operational preflight intentionally remains directly executable Node.js.
+// @ts-expect-error The adjacent executable has no public TypeScript declaration.
+import { evaluateDocumentCommissioning } from "../../../scripts/document-commissioning-preflight.mjs";
+
+const artifacts = [
+  "src/app/api/deals/[dealId]/documents/uploads/prepare/route.ts",
+  "src/app/api/documents/[documentId]/upload/finalize/route.ts",
+  "src/app/api/documents/[documentId]/download/route.ts",
+  "src/app/api/internal/document-scans/submit/route.ts",
+  "src/app/api/internal/document-scans/callback/route.ts",
+  "src/app/api/internal/document-cleanup/route.ts",
+  "supabase/tests/document_security_recovery.sql",
+];
+
+function installedRoot() {
+  const root = mkdtempSync(join(tmpdir(), "buddy-commissioning-"));
+  for (const artifact of artifacts) {
+    const target = join(root, artifact);
+    mkdirSync(dirname(target), { recursive: true });
+    writeFileSync(target, "test");
+  }
+  return root;
+}
+
+const configuredEnv = {
+  NEXT_PUBLIC_SUPABASE_URL: "https://project.supabase.co",
+  NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "publishable-key-long-enough",
+  SUPABASE_SECRET_KEY: "secret-key-that-is-long-enough",
+  BUDDY_DOCUMENT_SCANNER_PROVIDER: "approved-provider",
+  BUDDY_DOCUMENT_SCANNER_ENDPOINT: "https://scanner.example/submit",
+  BUDDY_DOCUMENT_SCANNER_API_KEY: "scanner-api-key-long-enough",
+  BUDDY_DOCUMENT_SCANNER_CALLBACK_URL: "https://buddy.example/api/internal/document-scans/callback",
+  BUDDY_DOCUMENT_SCANNER_WEBHOOK_SECRET: "webhook-secret-at-least-thirty-two-characters",
+  CRON_SECRET: "cron-secret-at-least-thirty-two-characters",
+};
+
+const completeEvidence = {
+  release: { gitSha: "1234567890abcdef", vercelDeploymentId: "dpl_123", supabaseMigrationHead: "20260812000000" },
+  providerApproval: { provider: "approved-provider", contractOwner: "security-owner", approvedAt: "2026-08-12T11:00:00Z" },
+  liveTests: {
+    tenantIsolation: true,
+    uploadReadbackAndHash: true,
+    cleanAndRejectedCallbacks: true,
+    callbackReplayAndTamper: true,
+    scannerOutageAndLeaseRecovery: true,
+    disposalMoveAndRestore: true,
+    auditRowsInspected: true,
+    secretExposureScan: true,
+  },
+  activation: { authorized: true, approvedBy: "release-owner", approvedAt: "2026-08-12T12:00:00Z" },
+};
+
+describe("document commissioning preflight", () => {
+  it("fails closed without configuration or evidence", () => {
+    const result = evaluateDocumentCommissioning({ env: {}, evidence: null, root: installedRoot() });
+    expect(result.decision).toBe("HOLD");
+    expect(result.stages).toEqual({ installed: true, configured: false, liveTested: false, activated: false });
+    expect(result.missingConfiguration).toContain("SUPABASE_SECRET_KEY");
+  });
+
+  it("does not confuse complete configuration with live certification", () => {
+    const result = evaluateDocumentCommissioning({ env: configuredEnv, evidence: null, root: installedRoot() });
+    expect(result.stages).toMatchObject({ configured: true, liveTested: false, activated: false });
+    expect(result.decision).toBe("HOLD");
+  });
+
+  it("requires every gate and named approval for GO", () => {
+    const env = {
+      ...configuredEnv,
+      BUDDY_DOCUMENT_DOWNLOADS_ENABLED: "true",
+      BUDDY_DOCUMENT_UPLOADS_ENABLED: "true",
+      BUDDY_DOCUMENT_SCANNING_ENABLED: "true",
+      BUDDY_DOCUMENT_CLEANUP_ENABLED: "true",
+      NEXT_PUBLIC_BUDDY_DOCUMENTS_ENABLED: "true",
+    };
+    const result = evaluateDocumentCommissioning({ env, evidence: completeEvidence, root: installedRoot() });
+    expect(result.decision).toBe("GO");
+    expect(result.stages).toEqual({ installed: true, configured: true, liveTested: true, activated: true });
+  });
+});
