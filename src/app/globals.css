@@ -221,3 +221,45 @@ button,input { font:inherit; } button { cursor:pointer; border:0; border-radius:
 @media (max-width:1180px) { .banker-kpi-grid { grid-template-columns:repeat(3,1fr); } .banker-dashboard-grid { grid-template-columns:1fr; } .banker-right-rail { grid-template-columns:repeat(3,1fr); } }
 @media (max-width:850px) { .app-shell { grid-template-columns:1fr; } .app-sidebar { position:relative; height:auto; } .workspace-nav { display:grid; grid-template-columns:repeat(2,1fr); } .sidebar-help { display:none; } .banker-kpi-grid { grid-template-columns:repeat(2,1fr); } .banker-right-rail { grid-template-columns:1fr; } }
 @media (max-width:560px) { .app-main { padding:1.1rem; } .app-header { align-items:flex-start; flex-direction:column; } .workspace-nav { grid-template-columns:1fr; } .banker-kpi-grid { grid-template-columns:1fr; } .header-actions { width:100%; } .header-actions a { flex:1; } }
+
+/* Original LOS deal command center parity */
+.breadcrumb { margin:.1rem 0 1rem; color:#7c8798; font-size:.66rem; }
+.breadcrumb a { color:#426bb2; font-weight:700; }
+.deal-command-header { display:flex; align-items:center; justify-content:space-between; gap:1rem; padding:1.15rem 1.25rem; border:1px solid #dfe4eb; border-radius:.55rem .55rem 0 0; background:white; }
+.deal-command-title { display:flex; align-items:center; gap:.9rem; min-width:0; }
+.deal-monogram { width:2.8rem; height:2.8rem; flex:0 0 auto; display:grid; place-items:center; border-radius:.55rem; background:#eaf1ff; color:#315fae; font-size:1rem; font-weight:800; }
+.deal-command-title .eyebrow { margin:0; color:#5477b5; font-size:.57rem; }
+.deal-command-title h2 { margin:.18rem 0; color:#182641; font-size:1.35rem; letter-spacing:-.025em; }
+.deal-command-title p:last-child { margin:0; color:#7b8799; font-size:.68rem; }
+.deal-command-actions { display:flex; align-items:center; gap:.6rem; }
+.stage-badge { border:1px solid #cbdaf7; background:#edf3ff; color:#315da9; font-weight:800; }
+.deal-workspace-tabs { position:sticky; top:0; z-index:4; display:flex; gap:0; margin:0 0 1rem; padding:0 .55rem; border:1px solid #dfe4eb; border-top:0; background:white; box-shadow:0 4px 10px rgba(32,48,73,.04); overflow-x:auto; }
+.deal-workspace-tabs a { padding:.75rem .85rem; border-bottom:2px solid transparent; color:#768297; font-size:.66rem; font-weight:800; }
+.deal-workspace-tabs a:first-child { border-color:#376dce; color:#2e5cab; }
+.deal-overview { display:grid; grid-template-columns:minmax(0,1fr) 16rem; gap:1rem; margin-bottom:1rem; }
+.deal-overview .detail-grid { grid-template-columns:repeat(3,1fr); margin:0; border:1px solid #dfe4eb; border-radius:.5rem; overflow:hidden; }
+.deal-overview .detail-grid article { min-height:6.2rem; border-color:#e5e9ef; }
+.detail-grid span { color:#7b8798; font-size:.6rem; font-weight:800; }
+.detail-grid strong,.detail-grid a { color:#24354f; font-size:.78rem; }
+.deal-health-card { padding:1rem; border:1px solid #dfe4eb; border-radius:.5rem; background:white; box-shadow:0 2px 8px rgba(28,43,67,.045); }
+.deal-health-card .eyebrow { margin:0 0 .75rem; color:#5577b2; font-size:.57rem; }
+.deal-health-card>strong { display:block; color:#1f3150; font-size:2rem; letter-spacing:-.05em; }
+.deal-health-card>span { color:#8590a1; font-size:.61rem; }
+.deal-health-card>div { height:.38rem; margin:.75rem 0; border-radius:999px; background:#e7ebf0; overflow:hidden; }
+.deal-health-card>div i { display:block; height:100%; border-radius:inherit; background:#3b75d8; }
+.deal-health-card dl div { padding:.48rem 0; border-color:#edf0f4; font-size:.65rem; }
+.deal-health-card dt { color:#7d899a; }.deal-health-card dd { color:#243650; font-family:inherit; font-weight:800; }
+.deal-overview+.operating-panel,.document-workspace,.underwriter-workspace,.closing-workspace { margin-top:1rem; border-radius:.5rem; box-shadow:0 2px 8px rgba(28,43,67,.045); }
+.readiness-summary { border-color:#e0e5ec; border-radius:.4rem; overflow:hidden; }
+.readiness-summary article { min-height:auto; border-color:#e0e5ec; background:#f8fafc; }
+.readiness-summary strong { color:#243550; font:700 1.4rem Arial,Helvetica,sans-serif; }
+.readiness-columns>section { border-color:#e0e5ec; border-radius:.4rem; }
+.document-requirement-card { border-color:#dfe5ec; border-radius:.45rem; overflow:hidden; }
+.document-requirement-card>header { background:#f8fafc; }
+.closing-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:.75rem; padding-top:1rem; }
+.closing-grid article { display:grid; gap:.45rem; padding:1rem; border:1px solid #e0e5ec; border-radius:.4rem; background:#f8fafc; }
+.closing-grid span { color:#788598; font-size:.6rem; font-weight:800; letter-spacing:.06em; text-transform:uppercase; }
+.closing-grid strong { color:#263750; font-size:.8rem; }
+.governed-boundary { margin:1rem 0 0; padding:.8rem 1rem; border-left:3px solid #a47a3c; background:#fbf6eb; color:#765a32; font-size:.65rem; line-height:1.5; }
+@media (max-width:900px) { .deal-overview { grid-template-columns:1fr; } }
+@media (max-width:620px) { .deal-command-header,.deal-command-actions { align-items:flex-start; flex-direction:column; } .deal-overview .detail-grid,.closing-grid { grid-template-columns:1fr; } }

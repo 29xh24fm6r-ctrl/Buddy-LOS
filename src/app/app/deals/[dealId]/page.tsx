@@ -2,7 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import { loadAccessContext } from "@/lib/auth/session";
 import { readFoundationStatus } from "@/lib/config/foundation-status";
 import { loadDealDetail, loadUnderwritingWorkspace } from "@/lib/los/queries";
-import { AppHeader, AppShell } from "@/components/app/AppShell";
+import { AppShell } from "@/components/app/AppShell";
 import { DealCockpit } from "@/components/deals/DealCockpit";
 
 export const dynamic = "force-dynamic";
@@ -19,5 +19,5 @@ export default async function DealPage({ params, searchParams }: { params: Promi
   const downloadsEnabled = process.env.BUDDY_DOCUMENT_DOWNLOADS_ENABLED === "true";
   const uploadsEnabled = process.env.BUDDY_DOCUMENT_UPLOADS_ENABLED === "true";
   const outcome = (await searchParams).underwriting;
-  return <AppShell context={context}><AppHeader context={context} eyebrow="Loan workflow" title={deal.name} /><DealCockpit deal={deal} downloadsEnabled={downloadsEnabled} uploadsEnabled={uploadsEnabled} underwriting={underwriting} runtimeEnabled={process.env.BUDDY_UNDERWRITER_RUNTIME_ENABLED === "true"} underwritingOutcome={outcome} role={context.activeOrganization.role} /></AppShell>;
+  return <AppShell context={context}><DealCockpit deal={deal} downloadsEnabled={downloadsEnabled} uploadsEnabled={uploadsEnabled} underwriting={underwriting} runtimeEnabled={process.env.BUDDY_UNDERWRITER_RUNTIME_ENABLED === "true"} underwritingOutcome={outcome} role={context.activeOrganization.role} /></AppShell>;
 }
