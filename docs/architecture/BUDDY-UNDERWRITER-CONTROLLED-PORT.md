@@ -34,7 +34,7 @@ The module must fail closed when entitlement, tenant identity, clean-document au
 
 ## Next controlled-port slices
 
-1. Authorized underwriting job command and durable outbox, still default-off.
+1. Authorized underwriting job command and durable outbox, still default-off. **Implemented; execution remains unavailable.**
 2. Port Buddy document classification and extraction behind provider-neutral adapters.
 3. Port normalized financial facts and spreading with provenance fixtures.
 4. Port global cash flow, risk, collateral and policy analysis.

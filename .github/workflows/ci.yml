@@ -39,6 +39,8 @@ jobs:
         run: npx supabase db lint --local --schema public --level warning --fail-on error
       - name: Verify document security and recovery contracts
         run: psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" --set ON_ERROR_STOP=on --file supabase/tests/document_security_recovery.sql
+      - name: Verify underwriting job and outbox contracts
+        run: psql "postgresql://postgres:postgres@127.0.0.1:54322/postgres" --set ON_ERROR_STOP=on --file supabase/tests/underwriting_job_outbox.sql
       - name: Stop isolated Postgres
         if: always()
         run: npx supabase stop --no-backup
