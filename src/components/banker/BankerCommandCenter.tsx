@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { LosIcon } from "@/components/app/LosIcon";
 import type { BankerCommandCenterModel } from "@/lib/los/read-model";
 
 export function BankerCommandCenter({ model }: { model: BankerCommandCenterModel }) {
@@ -14,23 +15,70 @@ export function BankerCommandCenter({ model }: { model: BankerCommandCenterModel
         <Link className="active" href="/app">Dashboard</Link>
         <Link href="/app/deals">Active deals</Link>
         <Link href="/app/intake">Loan workflow</Link>
-        <Link href="/app/deals">Tasks & actions</Link>
+        <Link href="/app/deals">Tasks &amp; actions</Link>
         <Link href="/app/deals">Due diligence</Link>
         <Link href="/app/crm">CRM hub</Link>
         <Link href="/app/crm">Activity</Link>
       </nav>
 
+      <section className="banker-command-deck" aria-labelledby="banker-command-title">
+        <header className="banker-command-deck-heading">
+          <div>
+            <p className="eyebrow">Banker operating command center</p>
+            <h2 id="banker-command-title">What needs you</h2>
+            <p>What needs attention, where your pipeline sits, and what comes next.</p>
+          </div>
+          <Link href="/app/deals">Open work queue <LosIcon name="arrow" /></Link>
+        </header>
+        <div className="banker-command-grid">
+          <div className="banker-priority-stack">
+            <PriorityRow
+              count={model.needsAttention}
+              title="Deals past target close"
+              detail={model.needsAttention ? "Review the affected deal records and reset the next action." : "No past-due target close dates in your authorized pipeline."}
+              href="/app/deals"
+              tone={model.needsAttention ? "urgent" : "clear"}
+            />
+            <PriorityRow
+              count={model.closingSoon}
+              title="Closing within 14 days"
+              detail={model.closingSoon ? "Confirm documentation, conditions, and handoff readiness." : "No upcoming target close dates in the next 14 days."}
+              href="/app/deals"
+              tone={model.closingSoon ? "attention" : "clear"}
+            />
+            <PriorityRow
+              count={0}
+              title="Assigned tasks overdue"
+              detail="Task assignments are not commissioned in the native SaaS read model yet."
+              href="/app/deals"
+              tone="unavailable"
+            />
+          </div>
+          <aside className="portfolio-health" aria-label="Portfolio and workflow health">
+            <h3>Portfolio &amp; workflow health</h3>
+            <div>
+              <HealthTile label="Active deals" value={String(model.totalActive)} />
+              <HealthTile label="Active exposure" value={formatMoney(model.totalExposure)} />
+              <HealthTile label="Closing soon" value={String(model.closingSoon)} />
+              <HealthTile label="Needs attention" value={String(model.needsAttention)} />
+              <HealthTile label="Documents outstanding" value="Unavailable" muted />
+              <HealthTile label="Credit memos in draft" value="Unavailable" muted />
+            </div>
+          </aside>
+        </div>
+      </section>
+
       <section className="banker-kpi-grid" aria-label="Banker performance snapshot">
         <Metric label="Pipeline" value={formatMoney(model.totalExposure)} detail="Active authorized deals" tone="blue" icon="$" />
-        <Metric label="Weighted" value={emptyMetric} detail="Probability data not available" muted icon="✦" />
-        <Metric label="Active deals" value={String(model.totalActive)} detail="Authorized to your workspace" tone="blue" icon="▤" />
+        <Metric label="Weighted" value={emptyMetric} detail="Probability data not available" muted icon="W" />
+        <Metric label="Active deals" value={String(model.totalActive)} detail="Authorized to your workspace" tone="blue" icon="#" />
         <Metric label="Urgent" value={String(model.needsAttention)} detail="Past target close date" tone={model.needsAttention ? "red" : "green"} icon="!" />
-        <Metric label="Closing soon" value={String(model.closingSoon)} detail="Target close within 14 days" tone="amber" icon="◫" />
-        <Metric label="YTD closed" value={emptyMetric} detail="Close outcome data not available" muted icon="✓" />
-        <Metric label="Win rate" value={emptyMetric} detail="Outcome data not available" muted icon="↗" />
-        <Metric label="High probability" value={emptyMetric} detail="Probability data not available" muted icon="◆" />
-        <Metric label="Needs attention" value={String(model.needsAttention)} detail="Current pipeline exceptions" tone={model.needsAttention ? "amber" : "green"} icon="⌁" />
-        <Metric label="In underwriting" value={String(model.deals.filter((deal) => deal.stage === "underwriting").length)} detail="Active deals in underwriting" tone="violet" icon="◈" />
+        <Metric label="Closing soon" value={String(model.closingSoon)} detail="Target close within 14 days" tone="amber" icon="14" />
+        <Metric label="YTD closed" value={emptyMetric} detail="Close outcome data not available" muted icon="Y" />
+        <Metric label="Win rate" value={emptyMetric} detail="Outcome data not available" muted icon="%" />
+        <Metric label="High probability" value={emptyMetric} detail="Probability data not available" muted icon="P" />
+        <Metric label="Needs attention" value={String(model.needsAttention)} detail="Current pipeline exceptions" tone={model.needsAttention ? "amber" : "green"} icon="!" />
+        <Metric label="In underwriting" value={String(model.deals.filter((deal) => deal.stage === "underwriting").length)} detail="Active deals in underwriting" tone="violet" icon="UW" />
       </section>
 
       <div className="banker-dashboard-grid">
@@ -58,24 +106,38 @@ export function BankerCommandCenter({ model }: { model: BankerCommandCenterModel
 
         <aside className="banker-right-rail" aria-label="Banker priorities">
           <section>
-            <header><div><span className="rail-icon amber">◫</span><h2>Closing soon</h2></div><Link href="/app/deals">View all</Link></header>
+            <header><div><span className="rail-icon amber"><LosIcon name="alert" /></span><h2>Closing soon</h2></div><Link href="/app/deals">View all</Link></header>
             {closingDeals.length === 0 ? <HonestEmpty copy="No target closing dates are currently available." /> : (
               <ul>{closingDeals.map((deal) => <li key={deal.id}><Link href={`/app/deals/${deal.id}`}><strong>{deal.name}</strong><span>{deal.borrowerName}</span><small>{deal.expectedCloseDate}</small></Link></li>)}</ul>
             )}
           </section>
           <section>
-            <header><div><span className="rail-icon blue">✓</span><h2>My tasks</h2></div><Link href="/app/deals">Open queue</Link></header>
+            <header><div><span className="rail-icon blue"><LosIcon name="tasks" /></span><h2>My tasks</h2></div><Link href="/app/deals">Open queue</Link></header>
             <HonestEmpty copy="Task assignments are not yet available in the native SaaS read model." />
           </section>
           <section className="quick-actions">
-            <header><div><span className="rail-icon violet">✦</span><h2>Quick actions</h2></div></header>
+            <header><div><span className="rail-icon violet"><LosIcon name="workflow" /></span><h2>Quick actions</h2></div></header>
             <Link href="/app/intake">+ Start a new deal</Link>
-            <Link href="/app/crm">◎ Open CRM hub</Link>
+            <Link href="/app/crm">Open CRM hub</Link>
           </section>
         </aside>
       </div>
     </>
   );
+}
+
+function PriorityRow({ count, title, detail, href, tone }: { count: number; title: string; detail: string; href: string; tone: "urgent" | "attention" | "clear" | "unavailable" }) {
+  return (
+    <Link className="banker-priority-row" data-tone={tone} href={href}>
+      <strong>{tone === "unavailable" ? "—" : count}</strong>
+      <span><b>{title}</b><small>{detail}</small></span>
+      <LosIcon name="arrow" />
+    </Link>
+  );
+}
+
+function HealthTile({ label, value, muted = false }: { label: string; value: string; muted?: boolean }) {
+  return <article className={muted ? "muted" : ""}><strong>{value}</strong><span>{label}</span></article>;
 }
 
 function Metric({ label, value, detail, tone, muted, icon }: { label: string; value: string; detail: string; tone?: string; muted?: boolean; icon: string }) {
