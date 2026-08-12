@@ -1,4 +1,5 @@
 import { createAdminClient } from "@/lib/supabase/admin";
+import { runDocumentCleanup } from "@/lib/los/document-cleanup-worker";
 
 const INIT = { headers: { "Cache-Control": "no-store" } };
 
@@ -11,17 +12,13 @@ export async function GET(request: Request) {
   const job = data as Record<string, unknown> | null;
   if (error) return Response.json({ error: "Cleanup queue is unavailable." }, { status: 502, ...INIT });
   if (!job) return Response.json({ processed: false, reason: "empty" }, INIT);
-  const jobId = String(job.jobId), bucket = String(job.bucket), path = String(job.path), disposalPath = String(job.disposalPath);
-  if (bucket !== "loan-documents" || !path || !disposalPath.startsWith("_disposal/")) {
-    await admin.rpc("record_document_cleanup_failure", { p_job_id: jobId, p_error: "Invalid cleanup object identity." });
-    return Response.json({ processed: true, jobId, status: "failed" }, INIT);
-  }
-  const { error: moveError } = await admin.storage.from(bucket).move(path, disposalPath);
-  if (moveError) {
-    await admin.rpc("record_document_cleanup_failure", { p_job_id: jobId, p_error: "Storage disposal move failed." });
-    return Response.json({ processed: true, jobId, status: "retryable" }, INIT);
-  }
-  const { error: completionError } = await admin.rpc("record_document_cleanup_completed", { p_job_id: jobId, p_disposal_path: disposalPath });
-  if (completionError) return Response.json({ error: "Cleanup evidence could not be recorded." }, { status: 502, ...INIT });
-  return Response.json({ processed: true, jobId, status: "completed" }, INIT);
+  const cleanupJob={jobId:String(job.jobId),bucket:String(job.bucket),path:String(job.path),disposalPath:String(job.disposalPath)};
+  try {
+    const outcome=await runDocumentCleanup(cleanupJob,{
+      move:async(from,to)=>{const {error:moveError}=await admin.storage.from(cleanupJob.bucket).move(from,to);if(moveError)throw moveError;},
+      complete:async(jobId,disposalPath)=>{const {error:completionError}=await admin.rpc("record_document_cleanup_completed",{p_job_id:jobId,p_disposal_path:disposalPath});if(completionError)throw completionError;},
+      fail:async(jobId,message)=>{const {error:failureError}=await admin.rpc("record_document_cleanup_failure",{p_job_id:jobId,p_error:message});if(failureError)throw failureError;},
+    });
+    return Response.json({processed:true,jobId:cleanupJob.jobId,status:outcome.status},INIT);
+  } catch { return Response.json({error:"Cleanup recovery requires operator attention."},{status:502,...INIT}); }
 }
