@@ -48,6 +48,7 @@ npm run check
 - [Document scan submission queue](docs/product/DOCUMENT-SCAN-SUBMISSION-QUEUE.md)
 - [Governed document retention and cleanup](docs/product/GOVERNED-DOCUMENT-RETENTION-CLEANUP.md)
 - [Document security and recovery harness](docs/product/DOCUMENT-SECURITY-RECOVERY-HARNESS.md)
+- [Document commissioning](docs/operations/DOCUMENT-COMMISSIONING.md)
 - [Security baseline](docs/security/SECURITY-BASELINE.md)
 - [Identity and tenant gate](docs/security/IDENTITY-AND-TENANT-GATE.md)
 

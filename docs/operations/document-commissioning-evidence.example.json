@@ -1,0 +1,27 @@
+{
+  "release": {
+    "gitSha": "",
+    "vercelDeploymentId": "",
+    "supabaseMigrationHead": ""
+  },
+  "providerApproval": {
+    "provider": "",
+    "contractOwner": "",
+    "approvedAt": ""
+  },
+  "liveTests": {
+    "tenantIsolation": false,
+    "uploadReadbackAndHash": false,
+    "cleanAndRejectedCallbacks": false,
+    "callbackReplayAndTamper": false,
+    "scannerOutageAndLeaseRecovery": false,
+    "disposalMoveAndRestore": false,
+    "auditRowsInspected": false,
+    "secretExposureScan": false
+  },
+  "activation": {
+    "authorized": false,
+    "approvedBy": "",
+    "approvedAt": ""
+  }
+}
