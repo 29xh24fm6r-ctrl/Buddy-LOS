@@ -110,7 +110,7 @@ describe("original Commercial LOS visual baseline contract", () => {
       expect(error).toContain(behavior);
   });
 
-  it("retains the screenshot-matched Banker, Team, Manager, and Portfolio compositions", () => {
+  it("retains the screenshot-matched Banker, Team, Manager, Portfolio, and Admin compositions", () => {
     const banker = source("src/components/banker/BankerCommandCenter.tsx");
     const roleCenters = source("src/components/institution/RoleCommandCenter.tsx");
 
@@ -130,7 +130,13 @@ describe("original Commercial LOS visual baseline contract", () => {
       "manager-exact-analytics",
       "Portfolio Command Center",
       "portfolio-exact-cockpit",
+      "Admin Control Center",
+      "admin-control-center",
+      "Capability gates",
+      "Institution authority",
     ]) expect(roleCenters).toContain(landmark);
+
+    expect(roleCenters).not.toContain("function AdminCockpit({ model }");
   });
 
   it("retains the screenshot-matched CRM and Deal Cockpit compositions", () => {

@@ -15,7 +15,8 @@ export default async function ApplicationPage({ searchParams }: { searchParams: 
   const context = await loadAccessContext();
   if (context.kind === "unauthenticated") redirect("/login");
   if (context.kind === "membership_required") return <AccessPending />;
-  const readsEnabled = readFoundationStatus().readsEnabled;
+  const foundationStatus = readFoundationStatus();
+  const readsEnabled = foundationStatus.readsEnabled;
   const deals = readsEnabled ? await loadCommandCenterDeals(context) : [];
   const model = deriveBankerCommandCenter(deals);
   const requested = (await searchParams).surface;
@@ -32,7 +33,7 @@ export default async function ApplicationPage({ searchParams }: { searchParams: 
   return (
     <AppShell context={context} surface={surface}>
       {surface === "banker" ? <AppHeader context={context} eyebrow="Banker Workspace" title="Operating command center" pipelineAmount={model.totalExposure} activeDeals={model.totalActive} attentionCount={model.needsAttention} /> : <WorkspaceHeader context={context} surface={surface} eyebrow={workspaceTitles[surface][0]} title={workspaceTitles[surface][1]} subtitle={workspaceTitles[surface][2]} />}
-      {readsEnabled ? (surface === "banker" ? <BankerCommandCenter model={model} /> : <RoleCommandCenter surface={surface} model={model} />) : <ReadsPending />}
+      {readsEnabled ? (surface === "banker" ? <BankerCommandCenter model={model} /> : <RoleCommandCenter surface={surface} model={model} foundationStatus={foundationStatus} context={context} />) : <ReadsPending />}
     </AppShell>
   );
 }

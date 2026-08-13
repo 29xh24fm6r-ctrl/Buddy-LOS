@@ -2,14 +2,16 @@ import Link from "next/link";
 import { formatMoney } from "@/components/banker/BankerCommandCenter";
 import type { BankerCommandCenterModel, DealSummary } from "@/lib/los/read-model";
 import type { WorkspaceSurface } from "@/lib/workspace-surfaces";
+import type { FoundationStatus } from "@/lib/config/foundation-status";
+import type { AccessContext } from "@/lib/auth/access-context";
 
 type RoleSurface = Exclude<WorkspaceSurface, "banker" | "crm">;
 type Tile = { label: string; value: string; tone?: string; muted?: boolean };
 
-export function RoleCommandCenter({ surface, model }: { surface: RoleSurface; model: BankerCommandCenterModel }) {
+export function RoleCommandCenter({ surface, model, foundationStatus, context }: { surface: RoleSurface; model: BankerCommandCenterModel; foundationStatus: FoundationStatus; context: Extract<AccessContext, { kind: "ready" }> }) {
   if (surface === "team") return <TeamCockpit model={model} />;
   if (surface === "portfolio") return <PortfolioCockpit model={model} />;
-  if (surface === "admin") return <AdminCockpit model={model} />;
+  if (surface === "admin") return <AdminCockpit status={foundationStatus} context={context} />;
   return <ManagerCockpit model={model} />;
 }
 
@@ -87,7 +89,34 @@ function PortfolioCockpit({ model }: { model: BankerCommandCenterModel }) {
   </section>;
 }
 
-function AdminCockpit({ model }: { model: BankerCommandCenterModel }) { return <ManagerCockpit model={model} />; }
+function AdminCockpit({ status, context }: { status: FoundationStatus; context: Extract<AccessContext, { kind: "ready" }> }) {
+  const capabilities = [
+    ["Identity & authentication", status.authEnabled, "Supabase identity and session boundary"],
+    ["Authorized data reads", status.readsEnabled, "Organization-scoped operating views"],
+    ["Governed data writes", status.writesEnabled, "CRM, intake, task, and lifecycle commands"],
+    ["Private documents", status.documentsEnabled, "Upload, quarantine, scan, and download exchange"],
+    ["External integrations", status.integrationsEnabled, "Separately commissioned provider connections"],
+  ] as const;
+  const enabledCount = capabilities.filter(([, active]) => active).length;
+  return <section className="admin-control-center">
+    <header><div><p className="eyebrow">Institution administration</p><h2>Admin Control Center</h2><p>Governed access, capability commissioning, and operational readiness.</p></div><div className="cockpit-status"><span>Owner view</span><span>Read-only</span></div></header>
+    <div className="admin-summary-ribbon">
+      <article data-tone="blue"><span>Institution</span><strong>{context.activeOrganization.organizationName}</strong><small>{context.activeOrganization.institutionType ?? "Institution type not set"}</small></article>
+      <article data-tone="green"><span>Signed-in role</span><strong>{context.activeOrganization.role}</strong><small>All six workspaces authorized</small></article>
+      <article data-tone="blue"><span>Memberships</span><strong>{context.memberships.length}</strong><small>Authorized organizations</small></article>
+      <article data-tone={enabledCount === capabilities.length ? "green" : "amber"}><span>Commissioned</span><strong>{enabledCount} of {capabilities.length}</strong><small>Platform capability gates</small></article>
+    </div>
+    <div className="admin-control-grid">
+      <section className="admin-control-panel"><header><div><p className="eyebrow">Platform commissioning</p><h3>Capability gates</h3></div><span>{enabledCount === capabilities.length ? "Operational" : "Controlled rollout"}</span></header><div className="admin-capability-list">{capabilities.map(([label, active, detail]) => <article key={label} data-active={active}><i aria-hidden="true" /><div><strong>{label}</strong><small>{detail}</small></div><b>{active ? "Enabled" : "Default-off"}</b></article>)}</div></section>
+      <section className="admin-control-panel"><header><div><p className="eyebrow">Access governance</p><h3>Institution authority</h3></div><span>Supabase-backed</span></header><dl className="admin-authority-list"><div><dt>Organization ID</dt><dd>{context.activeOrganization.organizationId}</dd></div><div><dt>Organization slug</dt><dd>{context.activeOrganization.organizationSlug}</dd></div><div><dt>Active role</dt><dd>{context.activeOrganization.role}</dd></div><div><dt>Workspace policy</dt><dd>Owner / administrator</dd></div></dl><p className="admin-control-note">Membership and tenant isolation remain authoritative in Supabase. This surface does not create a second access ledger.</p></section>
+    </div>
+    <div className="admin-boundary-grid">
+      <section><p className="eyebrow">Optional product module</p><h3>Buddy Underwriter</h3><strong>Separately entitled</strong><p>Document intelligence and underwriting remain independently sellable and organization-scoped.</p></section>
+      <section><p className="eyebrow">Release boundary</p><h3>Production activation</h3><strong>Evidence controlled</strong><p>Deployment does not automatically commission writes, documents, integrations, or customer modules.</p></section>
+      <section><p className="eyebrow">Operational safety</p><h3>Fail-closed controls</h3><strong>Active</strong><p>Unavailable authorities remain visibly unavailable; the interface does not invent operational values.</p></section>
+    </div>
+  </section>;
+}
 
 function Metric({label,value,tone,muted}:Tile){return <article className={muted?'muted':''} data-tone={tone}><span>{label}</span><strong>{value}</strong><Link href="/app/deals">View details →</Link></article>}
 function QueueLane({title,deals,tone="amber"}:{title:string;deals:DealSummary[];tone?:string}){return <section className="queue-lane" data-tone={tone}><header><strong>{title}</strong><span>{deals.length}</span></header>{deals.length?deals.slice(0,5).map(d=><Link href={`/app/deals/${d.id}`} key={d.id}><strong>{d.name}</strong><small>{d.borrowerName} · {d.expectedCloseDate??'No date'}</small></Link>):<em>None.</em>}{deals.length>5?<small className="queue-lane-more">+{deals.length-5} more on the execution board.</small>:null}</section>}
