@@ -16,7 +16,7 @@ export function DealPipeline({ deals, query, stage, view, surface }: { deals: De
         <label>Stage<select name="stage" defaultValue={stage}><option value="">All stages</option>{stages.map((value) => <option value={value} key={value}>{stageLabel(value)}</option>)}</select></label>
         <button type="submit">Filter</button>{(query || stage) && <Link href={`/app/deals?surface=${surface}&view=active`}>Clear</Link>}
       </form>
-      {deals.length === 0 ? <div className="honest-empty"><strong>No deals match this view.</strong><p>Change the filters or create a governed loan intake when writes are commissioned.</p></div> : (
+      {deals.length === 0 ? <div className="honest-empty recoverable-empty"><strong>No deals match this view.</strong><p>{query || stage ? "Clear the current search and stage filters to return to the full authorized pipeline." : "Create the first governed loan intake when you are ready."}</p><div className="empty-actions">{(query || stage) && <Link href={`/app/deals?surface=${surface}&view=active`}>Clear filters</Link>}<Link href={`/app/intake?surface=${surface}`}>Start governed intake</Link></div></div> : (
         <div className="deal-list">{deals.map((deal) => <Link href={`/app/deals/${deal.id}`} key={deal.id}>
           <span className="deal-stage-marker" aria-hidden="true" /><span><strong>{deal.name}</strong><small>{deal.borrowerName} · {deal.dealNumber ?? "No deal number"}</small></span>
           <span><small>Stage</small><strong>{stageLabel(deal.stage)}</strong></span><span><small>Exposure</small><strong>{formatMoney(deal.approvedAmount ?? deal.requestedAmount ?? 0)}</strong></span>

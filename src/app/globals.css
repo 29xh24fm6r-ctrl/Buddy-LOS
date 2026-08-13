@@ -584,6 +584,12 @@ html { background:#091322; }.los-system-bar { height:38px; padding:0 10px; gap:1
 .crm-more-menu nav { position:absolute; z-index:19; top:calc(100% + 5px); left:0; min-width:130px; display:grid; gap:2px; padding:5px; border:1px solid #3a5578; border-radius:4px; background:#0d192b; box-shadow:0 10px 24px rgba(0,0,0,.35); }
 .crm-more-menu nav a { min-height:32px; display:flex; align-items:center; padding:6px 9px; border-radius:3px; color:#dce6f3; font-size:9px; }
 .crm-more-menu nav a:hover { background:#1b3355; }
+.recoverable-empty { min-height:150px; display:grid; place-content:center; justify-items:start; padding:1.5rem; border:1px dashed #324967; border-radius:4px; background:#101d31; }
+.recoverable-empty>p { max-width:40rem; color:#8ea2bd; line-height:1.5; }
+.empty-actions { display:flex; flex-wrap:wrap; gap:8px; margin-top:1rem; }
+.empty-actions a { min-height:40px; display:inline-flex; align-items:center; justify-content:center; padding:.6rem .9rem; border:1px solid #4c6d98; border-radius:4px; background:#172b48; color:#dce7f5; font-size:10px; font-weight:800; }
+.empty-actions a:last-child { border-color:#5685c4; background:#315f9c; color:white; }
+@media (max-width:560px) { .empty-actions { width:100%; }.empty-actions a { flex:1 1 100%; min-height:44px; } }
 
 /* UX pass 4: confident, accessible form submission. */
 .required-note { grid-column:1/-1; margin:0; color:#9db0c9; font-size:.72rem; }

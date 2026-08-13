@@ -202,4 +202,17 @@ describe("original Commercial LOS visual baseline contract", () => {
       "scroll-snap-align:start",
     ]) expect(css).toContain(rule);
   });
+
+  it("gives filtered empty views a safe, immediate recovery path", () => {
+    const pipeline = source("src/components/deals/DealPipeline.tsx");
+    const crm = source("src/components/crm/BorrowerDirectory.tsx");
+    const css = source("src/app/globals.css");
+
+    for (const behavior of ["recoverable-empty", "Clear filters", "Start governed intake"])
+      expect(pipeline).toContain(behavior);
+    for (const behavior of ["recoverable-empty", "Clear search", "Start governed loan deal"])
+      expect(crm).toContain(behavior);
+    for (const rule of [".recoverable-empty", ".empty-actions", ".empty-actions a:last-child"])
+      expect(css).toContain(rule);
+  });
 });
