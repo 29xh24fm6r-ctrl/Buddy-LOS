@@ -63,6 +63,16 @@ describe("original Commercial LOS visual baseline contract", () => {
     ]) expect(css).toContain(rule);
   });
 
+  it("does not present dead-end controls as working actions", () => {
+    const actions = source("src/components/app/AppUtilityActions.tsx");
+    const crm = source("src/components/crm/BorrowerDirectory.tsx");
+
+    for (const behavior of ["navigator.share", "navigator.clipboard.writeText", "Workspace link copied"])
+      expect(actions).toContain(behavior);
+    for (const behavior of ["UnavailableWriteButton", "Company creation is not commissioned yet", "crm-more-menu", "More CRM destinations"])
+      expect(crm).toContain(behavior);
+  });
+
   it("retains the screenshot-matched Banker, Team, Manager, and Portfolio compositions", () => {
     const banker = source("src/components/banker/BankerCommandCenter.tsx");
     const roleCenters = source("src/components/institution/RoleCommandCenter.tsx");
