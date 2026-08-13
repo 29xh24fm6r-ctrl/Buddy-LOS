@@ -2,21 +2,28 @@ import Link from "next/link";
 import type { BorrowerDirectoryRow } from "@/lib/los/read-model";
 import { formatMoney } from "@/components/banker/BankerCommandCenter";
 
-export function BorrowerDirectory({ rows, query }: { rows: BorrowerDirectoryRow[]; query: string }) {
-  return (
-    <section className="operating-panel" aria-labelledby="borrower-directory-title">
-      <div className="panel-heading"><div><p className="eyebrow">Relationship master</p><h2 id="borrower-directory-title">Borrowers</h2></div><span>{rows.length} visible</span></div>
-      <form className="directory-filters" method="get"><label>Search relationships<input name="q" defaultValue={query} placeholder="Name, type, reference, or contact" /></label><button type="submit">Search</button>{query && <Link href="/app/crm">Clear</Link>}</form>
-      {rows.length === 0 ? <div className="honest-empty"><strong>No borrowers match this view.</strong><p>Missing or unauthorized relationships are never fabricated.</p></div> : (
-        <div className="directory-table" role="table" aria-label="Borrower directory">
-          <div className="directory-header" role="row"><span>Borrower</span><span>Primary contact</span><span>Active deals</span><span>Exposure</span></div>
-          {rows.map((row) => <Link className="directory-row" role="row" href={`/app/borrowers/${row.id}`} key={row.id}>
-            <span><strong>{row.legalName}</strong><small>{label(row.borrowerKind)} · {row.externalReference ?? "No reference"}</small></span>
-            <span>{row.primaryContact ?? <em>Missing</em>}</span><span>{row.activeDeals}</span><span>{formatMoney(row.activeExposure)}</span>
-          </Link>)}
-        </div>
-      )}
-    </section>
-  );
+const tabs = ["home", "companies", "people", "relationships", "opportunities", "activities", "referrals", "calendar", "tasks", "insights", "reports"] as const;
+
+export function BorrowerDirectory({ rows, query, view }: { rows: BorrowerDirectoryRow[]; query: string; view: string }) {
+  const activeView = tabs.includes(view as (typeof tabs)[number]) ? view : "home";
+  const exposure = rows.reduce((sum, row) => sum + row.activeExposure, 0);
+  const activeDeals = rows.reduce((sum, row) => sum + row.activeDeals, 0);
+  const missingContacts = rows.filter((row) => !row.primaryContact).length;
+  return <section className="crm-command-center">
+    <header className="crm-command-header"><div><p className="eyebrow">Relationship intelligence</p><h1>CRM Workspace</h1><p>Companies, people, relationships, activities, and opportunities in one governed command center.</p></div><div className="header-actions"><Link className="secondary-button" href="/app/crm?view=activities">Log activity</Link><Link className="primary-button" href="/app/intake?surface=crm">Start governed loan deal</Link></div></header>
+    <nav className="crm-tabs" aria-label="CRM sections">{tabs.map((tab) => <Link key={tab} className={activeView === tab ? "active" : ""} href={`/app/crm?view=${tab}`}>{label(tab)}</Link>)}</nav>
+    {activeView === "home" ? <CrmHome rows={rows} exposure={exposure} activeDeals={activeDeals} missingContacts={missingContacts} /> : activeView === "companies" || activeView === "people" || activeView === "relationships" ? <Directory rows={rows} query={query} title={activeView} /> : <CrmBoundary view={activeView} rows={rows} />}
+  </section>;
 }
+
+function CrmHome({ rows, exposure, activeDeals, missingContacts }: { rows: BorrowerDirectoryRow[]; exposure: number; activeDeals: number; missingContacts: number }) {
+  return <><div className="crm-action-row"><form action="/app/crm" method="get"><input type="hidden" name="view" value="companies" /><input name="q" placeholder="Search companies, people, relationships, or activities" /><button>Search</button></form><Link href="/app/crm?view=companies">+ Add company</Link><Link href="/app/crm?view=people">+ Add contact</Link><button type="button">More ▾</button></div>
+    <div className="crm-metric-grid"><Metric label="Companies" value={String(rows.length)} detail="authorized records" /><Metric label="People" value={String(rows.length - missingContacts)} detail="primary contacts" /><Metric label="Open opportunities" value={String(activeDeals)} detail={formatMoney(exposure)} /><Metric label="Relationships needing attention" value={String(missingContacts)} detail="missing primary contact" attention={missingContacts > 0} /></div>
+    <section className="crm-attention"><header><div><p className="eyebrow">Operating desk</p><h2>Today &amp; attention</h2></div><Link href="/app/crm?view=companies">View all relationships →</Link></header>{rows.length === 0 ? <div className="honest-empty"><strong>No relationship records yet.</strong><p>The CRM is ready for the first governed company or loan intake.</p></div> : <div className="crm-attention-list">{rows.slice(0, 6).map((row) => <Link href={`/app/borrowers/${row.id}`} key={row.id}><span className="crm-company-mark">{initials(row.legalName)}</span><span><strong>{row.legalName}</strong><small>{row.primaryContact ?? "Primary contact needed"}</small></span><span><small>Open deals</small><strong>{row.activeDeals}</strong></span><span><small>Exposure</small><strong>{formatMoney(row.activeExposure)}</strong></span></Link>)}</div>}</section></>;
+}
+
+function Directory({ rows, query, title }: { rows: BorrowerDirectoryRow[]; query: string; title: string }) { return <section className="operating-panel crm-directory"><div className="panel-heading"><div><p className="eyebrow">Relationship master</p><h2>{label(title)}</h2></div><span>{rows.length} visible</span></div><form className="directory-filters" method="get"><input type="hidden" name="view" value={title} /><label>Search relationships<input name="q" defaultValue={query} placeholder="Name, type, reference, or contact" /></label><button type="submit">Search</button>{query && <Link href={`/app/crm?view=${title}`}>Clear</Link>}</form>{rows.length === 0 ? <div className="honest-empty"><strong>No records match this view.</strong><p>Missing or unauthorized relationships are never fabricated.</p></div> : <div className="directory-table" role="table"><div className="directory-header" role="row"><span>Company</span><span>Primary contact</span><span>Active deals</span><span>Exposure</span></div>{rows.map((row) => <Link className="directory-row" role="row" href={`/app/borrowers/${row.id}`} key={row.id}><span><strong>{row.legalName}</strong><small>{label(row.borrowerKind)} · {row.externalReference ?? "No reference"}</small></span><span>{row.primaryContact ?? <em>Missing</em>}</span><span>{row.activeDeals}</span><span>{formatMoney(row.activeExposure)}</span></Link>)}</div>}</section>; }
+function CrmBoundary({ view, rows }: { view: string; rows: BorrowerDirectoryRow[] }) { return <section className="operating-panel crm-boundary"><div className="panel-heading"><div><p className="eyebrow">CRM operating surface</p><h2>{label(view)}</h2></div></div><div className="honest-empty"><strong>{label(view)} is ready for its governed ledger.</strong><p>{rows.length} authorized relationship records remain available through Companies. No activity, task, referral, or calendar entries are invented before their durable stores are commissioned.</p></div></section>; }
+function Metric({ label: metricLabel, value, detail, attention = false }: { label: string; value: string; detail: string; attention?: boolean }) { return <article data-tone={attention ? "attention" : "standard"}><span>{metricLabel}</span><strong>{value}</strong><small>{detail}</small></article>; }
 function label(value: string) { return value.split("_").map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" "); }
+function initials(value: string) { return value.split(/\s+/).slice(0, 2).map((word) => word.charAt(0)).join("").toUpperCase(); }

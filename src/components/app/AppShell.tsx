@@ -4,42 +4,47 @@ import type { AccessContext } from "@/lib/auth/access-context";
 import { signOut } from "@/app/login/actions";
 import { LosIcon } from "@/components/app/LosIcon";
 import { WorkspaceNavigation } from "@/components/app/WorkspaceNavigation";
+import { allowedWorkspaceSurfaces, workspaceSurfaceHref, workspaceSurfaceLabels, type WorkspaceSurface } from "@/lib/workspace-surfaces";
 
 type ReadyContext = Extract<AccessContext, { kind: "ready" }>;
 
-const workspaceLabels = {
-  administration: "Administration",
-  banker: "Banker Workspace",
-  underwriting: "Underwriting",
-  closing: "Closing",
-  read_only: "Read-only Workspace",
-} as const;
-
-export function AppShell({ context, children }: { context: ReadyContext; children: ReactNode }) {
+export function AppShell({ context, surface, children }: { context: ReadyContext; surface: WorkspaceSurface; children: ReactNode }) {
   const { activeOrganization } = context;
   const displayName = context.displayName ?? context.email ?? "Institution user";
   const initials = displayName.split(/\s|@/).filter(Boolean).slice(0, 2).map((part) => part.charAt(0).toUpperCase()).join("");
+  const surfaces = allowedWorkspaceSurfaces(activeOrganization.role);
 
   return (
-    <div className="app-shell">
-      <aside className="app-sidebar">
-        <Link className="los-brand" href="/app" aria-label="Buddy Lending OS home">
-          <span className="los-brand-mark"><LosIcon name="building" /></span>
-          <span><strong>Lending OS</strong><small>Buddy Loan Operations</small></span>
-        </Link>
-        <div className="workspace-switcher">
-          <span className="workspace-switcher-icon"><LosIcon name="workflow" /></span>
-          <span><small>Current workspace</small><strong>{workspaceLabels[context.workspace]}</strong></span>
-        </div>
-        <p className="institution-name">{activeOrganization.organizationName}</p>
-        <WorkspaceNavigation workspace={context.workspace} />
-        <div className="sidebar-user">
-          <span className="user-avatar">{initials || "BU"}</span>
-          <span><strong>{displayName}</strong><small>{activeOrganization.role.replaceAll("_", " ")}</small></span>
-          <form action={signOut}><button type="submit" aria-label="Sign out"><LosIcon name="arrow" /></button></form>
-        </div>
-      </aside>
-      <main className="app-main">{children}</main>
+    <div className="los-frame">
+      <header className="los-system-bar" aria-label="Application controls">
+        <span className="system-launcher" aria-hidden="true">•••<br />•••<br />•••</span>
+        <span className="system-info" aria-hidden="true">i</span>
+        <span className="system-spacer" />
+        <button type="button" className="system-share">Share⌄</button>
+        <span className="system-more" aria-hidden="true">•••</span>
+        <span className="system-avatar">{initials || "BU"}</span>
+      </header>
+      <div className="app-shell">
+        <aside className="app-sidebar">
+          <Link className="los-brand" href="/app?surface=banker" aria-label="Buddy Lending OS home">
+            <span className="los-brand-mark"><LosIcon name="building" /></span>
+            <span><strong>Lending OS</strong><small>{activeOrganization.organizationName}</small></span>
+          </Link>
+          <nav className="workspace-menu" aria-label="Workspace switcher">
+            <p>Workspace</p>
+            {surfaces.map((item) => (
+              <Link href={workspaceSurfaceHref(item)} aria-current={item === surface ? "page" : undefined} key={item}>{workspaceSurfaceLabels[item]}</Link>
+            ))}
+          </nav>
+          <WorkspaceNavigation surface={surface} />
+          <div className="sidebar-user">
+            <span className="user-avatar">{initials || "BU"}</span>
+            <span><strong>{displayName}</strong><small>{context.email ?? activeOrganization.role.replaceAll("_", " ")}</small></span>
+            <form action={signOut}><button type="submit" aria-label="Sign out"><LosIcon name="arrow" /></button></form>
+          </div>
+        </aside>
+        <main className="app-main">{children}</main>
+      </div>
     </div>
   );
 }
@@ -56,6 +61,15 @@ export function AppHeader({ context, eyebrow, title, pipelineAmount, activeDeals
         <div><strong>{pipelineAmount === undefined ? "—" : formatCompactCurrency(pipelineAmount)}</strong><span>Total pipeline · across active deals</span></div>
         {!!attentionCount && <em>{attentionCount} urgent</em>}
       </div>
+    </header>
+  );
+}
+
+export function WorkspaceHeader({ eyebrow, title, subtitle, context, surface }: { eyebrow: string; title: string; subtitle: string; context: ReadyContext; surface: WorkspaceSurface }) {
+  return (
+    <header className="workspace-command-header">
+      <div><p className="eyebrow">{eyebrow}</p><h1>{title}</h1><p>{subtitle}</p></div>
+      <aside aria-label={`${workspaceSurfaceLabels[surface]} context`}><small>Workspace</small><strong>{workspaceSurfaceLabels[surface]}</strong><small>Signed in</small><strong>{context.displayName ?? context.email ?? "Institution user"}</strong><span>{context.email}</span></aside>
     </header>
   );
 }

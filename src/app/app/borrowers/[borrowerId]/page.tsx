@@ -13,5 +13,5 @@ export default async function BorrowerPage({ params }: { params: Promise<{ borro
   const { borrowerId } = await params;
   const borrower = await loadBorrowerDetail(context, borrowerId);
   if (!borrower) notFound();
-  return <AppShell context={context}><AppHeader context={context} eyebrow="Borrower CRM" title={borrower.legalName} /><BorrowerRelationshipSummary borrower={borrower} /></AppShell>;
+  return <AppShell context={context} surface="crm"><AppHeader context={context} eyebrow="Borrower CRM" title={borrower.legalName} /><BorrowerRelationshipSummary borrower={borrower} /></AppShell>;
 }

@@ -5,6 +5,7 @@ import { loadAccessContext } from "@/lib/auth/session";
 import { readFoundationStatus } from "@/lib/config/foundation-status";
 import { borrowerKinds, canCreateLoanIntake } from "@/lib/los/intake";
 import { createLoanIntake } from "./actions";
+import { resolveWorkspaceSurface } from "@/lib/workspace-surfaces";
 
 export const dynamic = "force-dynamic";
 
@@ -16,16 +17,17 @@ const errorMessages: Record<string, string> = {
   "invalid-response": "The intake command did not return a valid deal record.",
 };
 
-export default async function LoanIntakePage({ searchParams }: { searchParams: Promise<{ error?: string }> }) {
+export default async function LoanIntakePage({ searchParams }: { searchParams: Promise<{ error?: string; surface?: string }> }) {
   const context = await loadAccessContext();
   if (context.kind === "unauthenticated") redirect("/login");
   if (context.kind !== "ready") redirect("/app");
   const writesEnabled = readFoundationStatus().writesEnabled;
   const permitted = canCreateLoanIntake(context.activeOrganization.role);
-  const { error } = await searchParams;
+  const { error, surface: requestedSurface } = await searchParams;
+  const surface = resolveWorkspaceSurface(requestedSurface, context.activeOrganization.role, context.workspace);
 
   return (
-    <AppShell context={context}>
+    <AppShell context={context} surface={surface}>
       <AppHeader context={context} eyebrow="Origination" title="New loan intake" />
       {!writesEnabled ? <IntakePending /> : !permitted ? <IntakeDenied /> : (
         <section className="intake-panel" aria-labelledby="intake-title">
