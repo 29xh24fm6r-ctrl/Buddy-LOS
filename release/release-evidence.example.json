@@ -1,0 +1,10 @@
+{
+  "contractVersion":"buddy-los-release-evidence.v1",
+  "classification":"RELEASE_CANDIDATE",
+  "application":{"gitSha":"REPLACE_WITH_40_CHARACTER_SHA","deploymentUrl":"https://REPLACE.example","observedAt":"REPLACE_ISO_TIMESTAMP"},
+  "database":{"migrationHead":"20260813160000","zeroResetPassed":false,"advisorsReviewed":false},
+  "underwriter":{"imageDigest":"sha256:REPLACE","engineVersion":"REPLACE","contractVersion":"buddy-document-intelligence.v1","enabledOrganizationIds":[]},
+  "verification":{"ordinaryUserJourneys":false,"crossTenantDenied":false,"restoreDrill":false,"rollbackDrill":false,"visualBaseline":false,"accessibility":false},
+  "activation":{"approved":false,"organizationIds":[],"modules":[],"monitoringWindow":"","rollbackOwner":""},
+  "openRisks":["This is a template. No release evidence has been certified."]
+}
