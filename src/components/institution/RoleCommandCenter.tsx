@@ -29,19 +29,36 @@ function TeamCockpit({ model }: { model: BankerCommandCenterModel }) {
 }
 
 function ManagerCockpit({ model }: { model: BankerCommandCenterModel }) {
-  const missing = model.deals.filter((d) => !d.expectedCloseDate || (d.requestedAmount === null && d.approvedAmount === null)).length;
+  const missing = model.deals.filter((deal) => !deal.expectedCloseDate || (deal.requestedAmount === null && deal.approvedAmount === null)).length;
   const tiles: Tile[] = [
     { label: "Active deals", value: String(model.totalActive), tone: "blue" }, { label: "Pipeline amount", value: formatMoney(model.totalExposure), tone: "blue" },
-    { label: "Closing 30d", value: String(model.closingSoon), tone: "green" }, { label: "Closing 30d $", value: formatMoney(model.deals.filter(d => d.expectedCloseDate).reduce((s,d)=>s+(d.approvedAmount??d.requestedAmount??0),0)), tone: "blue" },
+    { label: "Closing 30d", value: String(model.closingSoon), tone: "green" }, { label: "Closing 30d $", value: formatMoney(model.deals.filter((deal) => deal.expectedCloseDate).reduce((sum, deal) => sum + (deal.approvedAmount ?? deal.requestedAmount ?? 0), 0)), tone: "blue" },
     { label: "Blocked", value: String(model.needsAttention), tone: "red" }, { label: "At risk", value: String(model.needsAttention), tone: "amber" },
     { label: "Missing data", value: String(missing), tone: "amber" }, { label: "Stale deals", value: String(model.needsAttention), tone: "amber" },
     { label: "Outstanding docs", value: "Unavailable", muted: true }, { label: "Open tasks", value: "0", tone: "green" },
     { label: "Overdue tasks", value: "0", tone: "green" }, { label: "Avg days in stage", value: "Unavailable", muted: true },
   ];
-  return <Cockpit eyebrow="Management cockpit" title="Manager Bloomberg Control Panel" subtitle="Live authorized pipeline snapshot" tiles={tiles}>
-    <div className="analytics-strip"><ChartCard title="Pipeline by stage" deals={model.deals} mode="stage" /><ChartCard title="Pipeline by banker" deals={model.deals} mode="amount" /><ChartCard title="Aging — days in stage" deals={model.deals} mode="empty" /><ChartCard title="Risk distribution" deals={model.deals} mode="risk" /><ChartCard title="Open tasks by banker" deals={model.deals} mode="empty" /><ChartCard title="Outstanding docs by banker" deals={model.deals} mode="empty" /><ChartCard title="Closings forecast" deals={model.deals} mode="empty" /><ChartCard title="Missing fields" deals={model.deals} mode="missing" /><ChartCard title="Data quality" deals={model.deals} mode="quality" /></div>
+  const analytics = [["Pipeline by stage", "Deal count", "stage"], ["Pipeline by banker", "Deals · amount", "amount"], ["Aging — days in stage", "Deal count", "empty"], ["Risk distribution", "Blocker baseline", "risk"], ["Open tasks by banker", "Overdue highlighted", "empty"], ["Outstanding docs by banker", "", "empty"], ["Closings forecast", "Next 6 months", "empty"], ["Missing fields", "Deals · field", "missing"], ["Data quality", "Completeness buckets", "quality"]] as const;
+  return <section className="manager-exact-cockpit">
+    <header><div><p className="eyebrow">Management cockpit</p><h2>Manager Bloomberg Control Panel</h2><p>Live authorized pipeline snapshot</p></div><div className="cockpit-status"><span>Showing team view</span><span>Read-only</span></div></header>
+    <div className="manager-exact-kpis">{tiles.map((tile) => <Metric key={tile.label} {...tile} />)}</div>
+    <div className="manager-exact-analytics">{analytics.map(([title, meta, mode]) => <section className="manager-exact-chart" key={title}><header><strong>{title}</strong><small>{meta}</small></header><ManagerChartBody deals={model.deals} mode={mode} /><Link href="/app/deals">› View chart details</Link></section>)}</div>
     <ExceptionTape model={model} />
-  </Cockpit>;
+    <div className="manager-exact-tables"><ManagerSummary title="Banker workload" meta="1 banker on team" model={model} /><ManagerSummary title="Top deals by amount" meta={`Showing ${Math.min(5, model.deals.length)} of ${model.deals.length} deals`} model={model} deals /></div>
+  </section>;
+}
+
+function ManagerChartBody({ deals, mode }: { deals: DealSummary[]; mode: string }) {
+  const total = deals.reduce((sum, deal) => sum + (deal.approvedAmount ?? deal.requestedAmount ?? 0), 0);
+  if (mode === "empty") return <em className="manager-no-data">No data yet.</em>;
+  if (mode === "risk") return <div className="manager-risk-chart"><span><b>{deals.length}</b></span><ul><li>Blocked <b>{deals.length}</b></li><li>At risk <b>{deals.length}</b></li><li>Clear <b>0</b></li><li>Unknown <b>0</b></li></ul></div>;
+  if (mode === "stage") return <div className="manager-stage-chart">{[...new Set(deals.map((deal) => deal.stage))].slice(0, 4).map((stage) => <div key={stage}><b>{deals.filter((deal) => deal.stage === stage).length}</b><i /><span>{stage.replaceAll("_", " ")}</span></div>)}</div>;
+  const rows: [string, number][] = mode === "missing" ? [["Target close", deals.filter((deal) => !deal.expectedCloseDate).length], ["Loan amount", deals.filter((deal) => deal.requestedAmount === null && deal.approvedAmount === null).length], ["Client", 0]] : mode === "quality" ? [["Sparse (<50%)", 0], ["Partial (50–74%)", deals.length], ["Mostly populated", 0], ["Complete (100%)", 0]] : [["Assigned banker", deals.length]];
+  return <div className="manager-bar-chart">{rows.map(([label, value]) => <div key={label}><span>{label}</span><i style={{ width: `${Math.max(4, value / Math.max(1, deals.length) * 82)}%` }} /><b>{mode === "amount" ? `${value} · ${formatMoney(total)}` : value}</b></div>)}</div>;
+}
+
+function ManagerSummary({ title, meta, model, deals = false }: { title: string; meta: string; model: BankerCommandCenterModel; deals?: boolean }) {
+  return <section className="manager-summary-table"><header><strong>{title}</strong><small>{meta}</small></header><div className="manager-summary-head"><span>{deals ? "Client" : "Banker"}</span><span>Active deals</span><span>Pipeline $</span><span>{deals ? "Stage" : "Outstanding docs"}</span><span>{deals ? "Status" : "Blocked / at-risk"}</span></div>{deals ? model.deals.slice(0, 5).map((deal) => <Link key={deal.id} href={`/app/deals/${deal.id}`}><strong>{deal.borrowerName}</strong><span>1</span><span>{formatMoney(deal.approvedAmount ?? deal.requestedAmount ?? 0)}</span><span>{deal.stage.replaceAll("_", " ")}</span><span>{deal.expectedCloseDate ?? "No date"}</span></Link>) : <div><strong>Assigned banker</strong><span>{model.totalActive}</span><span>{formatMoney(model.totalExposure)}</span><span>—</span><span>{model.needsAttention}</span></div>}</section>;
 }
 
 function PortfolioCockpit({ model }: { model: BankerCommandCenterModel }) {
