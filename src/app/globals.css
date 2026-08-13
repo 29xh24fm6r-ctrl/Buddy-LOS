@@ -531,3 +531,26 @@ html { background:#091322; }.los-system-bar { height:38px; padding:0 10px; gap:1
 @media (prefers-reduced-motion:reduce) {
   *,*::before,*::after { scroll-behavior:auto!important; transition-duration:.01ms!important; animation-duration:.01ms!important; animation-iteration-count:1!important; }
 }
+
+/* UX pass 2: preserve the accepted command-center geometry with a readable type floor. */
+:where(.manager-exact-cockpit,.team-exact-cockpit,.portfolio-exact-cockpit,.deal-exact-header,.deal-exact-overview,.deal-exact-columns,.banker-right-rail,.banker-exact-lower,.banker-activity-summary,.crm-search-deck,.crm-home-columns,.crm-diagnostic-strip,.crm-result-set) { --dense-label-size:8px; --dense-copy-size:9px; }
+.manager-exact-kpis span,.manager-exact-kpis a,.manager-exact-chart>header small,.manager-exact-chart>a,.manager-stage-chart span,.manager-bar-chart span,.manager-bar-chart b,.manager-risk-chart li,.manager-summary-head { font-size:var(--dense-label-size); line-height:1.35; }
+.manager-no-data,.manager-summary-table>a,.manager-summary-table>div:not(.manager-summary-head) { font-size:var(--dense-copy-size); line-height:1.4; }
+.baseline-kpi-ribbon span,.baseline-kpi-ribbon a,.micro-chart header small,.micro-chart em,.micro-bar,.team-exact-cockpit .queue-lane-more,.portfolio-exposure-table>a,.portfolio-exposure-table>a small { font-size:var(--dense-label-size); line-height:1.35; }
+.banker-right-rail .honest-empty p,.banker-glance>p,.banker-glance>a,.banker-activity-summary>p { font-size:var(--dense-copy-size); line-height:1.45; }
+.banker-exact-health span,.banker-activity-summary span { font-size:var(--dense-label-size); line-height:1.35; }
+.crm-search-deck>p,.crm-home-columns .eyebrow,.crm-result-set .eyebrow,.crm-home-columns>section>p:last-child,.crm-result-set>p:last-child { font-size:var(--dense-copy-size); line-height:1.45; }
+.crm-diagnostic-strip span { font-size:var(--dense-copy-size); line-height:1.45; }
+.deal-exact-title p span,.deal-exact-title p em,.deal-exact-identity span,.deal-exact-status,.deal-readiness-ring span,.deal-signal span,.deal-signal small,.deal-exact-overview footer,.deal-exact-tabs a,.deal-attention-console header span,.deal-attention-console header b,.deal-attention-counts span,.deal-missing-panel strong,.deal-missing-panel span,.deal-alert-row,.deal-exact-rail small,.deal-exact-rail a { font-size:var(--dense-label-size); line-height:1.4; }
+.deal-exact-identity strong,.deal-exact-identity a,.deal-exact-rail header,.deal-exact-rail p { font-size:var(--dense-copy-size); line-height:1.45; }
+:where(.manager-summary-table>a,.portfolio-exposure-table>a,.banker-glance>a,.deal-exact-rail a,.crm-diagnostic-strip article):hover { border-color:#4f719d; background-color:#182c49; }
+@media (max-width:1100px) {
+  .manager-exact-kpis { grid-template-columns:repeat(5,minmax(0,1fr)); }
+  .manager-exact-analytics { grid-template-columns:repeat(2,minmax(0,1fr)); }
+  .portfolio-exact-cockpit .portfolio-analytics { grid-template-columns:repeat(3,minmax(0,1fr)); }
+}
+@media (max-width:650px) {
+  .manager-exact-kpis,.manager-exact-analytics,.manager-exact-tables,.portfolio-exact-cockpit .portfolio-analytics { grid-template-columns:1fr; }
+  .deal-exact-identity,.deal-exact-overview,.deal-attention-counts { grid-template-columns:1fr; }
+  .deal-readiness-ring { margin:8px auto; }
+}

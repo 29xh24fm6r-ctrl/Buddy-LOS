@@ -49,6 +49,20 @@ describe("original Commercial LOS visual baseline contract", () => {
     ]) expect(css).toContain(rule);
   });
 
+  it("keeps dense operational screens readable without changing their composition", () => {
+    const css = source("src/app/globals.css");
+
+    for (const rule of [
+      "UX pass 2: preserve the accepted command-center geometry with a readable type floor",
+      "--dense-label-size:8px",
+      "--dense-copy-size:9px",
+      ".manager-exact-kpis span",
+      ".portfolio-exposure-table>a",
+      ".deal-exact-identity strong",
+      ".crm-diagnostic-strip span",
+    ]) expect(css).toContain(rule);
+  });
+
   it("retains the screenshot-matched Banker, Team, Manager, and Portfolio compositions", () => {
     const banker = source("src/components/banker/BankerCommandCenter.tsx");
     const roleCenters = source("src/components/institution/RoleCommandCenter.tsx");
