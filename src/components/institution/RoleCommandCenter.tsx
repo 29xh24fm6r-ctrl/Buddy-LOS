@@ -22,10 +22,21 @@ function TeamCockpit({ model }: { model: BankerCommandCenterModel }) {
     { label: "Blocked", value: String(model.needsAttention), tone: "red" }, { label: "At risk", value: String(model.needsAttention), tone: "amber" },
     { label: "Stale deals", value: String(stale), tone: "amber" }, { label: "Closing 30d", value: String(model.closingSoon), tone: "green" },
   ];
-  const lanes = ["Overdue tasks", "Due soon tasks", "Outstanding documents", "Pending review docs", "Missing data", "Stale deals", "Blocked / at-risk", "Closing soon"];
-  return <Cockpit eyebrow="Team execution" title="Team Ops Queue" subtitle="What must be worked today across the authorized team pipeline." tiles={tiles}>
-    <div className="ops-lane-grid">{lanes.map((lane, index) => <QueueLane key={lane} title={lane} deals={index >= 4 ? model.deals : []} />)}</div>
-  </Cockpit>;
+  const lanes = [
+    { title: "Overdue tasks", tone: "amber", deals: [] },
+    { title: "Due soon tasks", tone: "blue", deals: [] },
+    { title: "Outstanding documents", tone: "amber", deals: [] },
+    { title: "Pending review docs", tone: "blue", deals: [] },
+    { title: "Missing data", tone: "amber", deals: model.deals },
+    { title: "Stale deals", tone: "amber", deals: model.deals },
+    { title: "Blocked / at-risk", tone: "red", deals: model.deals },
+    { title: "Closing soon", tone: "blue", deals: model.deals.filter((deal) => deal.expectedCloseDate) },
+  ];
+  return <section className="baseline-cockpit team-exact-cockpit">
+    <header><div><p className="eyebrow">Team execution</p><h2>Team Ops Queue</h2><p>What must be worked today across the authorized team pipeline.</p></div><div className="cockpit-status"><span>Read-only</span></div></header>
+    <div className="baseline-kpi-ribbon">{tiles.map((tile) => <Metric key={tile.label} {...tile} />)}</div>
+    <div className="ops-lane-grid">{lanes.map((lane) => <QueueLane key={lane.title} {...lane} />)}</div>
+  </section>;
 }
 
 function ManagerCockpit({ model }: { model: BankerCommandCenterModel }) {
@@ -79,7 +90,7 @@ function Cockpit({ eyebrow, title, subtitle, tiles, children }: { eyebrow:string
   return <section className="baseline-cockpit"><header><div><p className="eyebrow">{eyebrow}</p><h2>{title}</h2><p>{subtitle}</p></div><div className="cockpit-status"><span>Showing team view</span><span>Read-only</span></div></header><div className="baseline-kpi-ribbon">{tiles.map(t=><Metric key={t.label} {...t}/>)}</div>{children}</section>;
 }
 function Metric({label,value,tone,muted}:Tile){return <article className={muted?'muted':''} data-tone={tone}><span>{label}</span><strong>{value}</strong><Link href="/app/deals">View details →</Link></article>}
-function QueueLane({title,deals}:{title:string;deals:DealSummary[]}){return <section className="queue-lane"><header><strong>{title}</strong><span>{deals.length}</span></header>{deals.length?deals.slice(0,5).map(d=><Link href={`/app/deals/${d.id}`} key={d.id}><strong>{d.name}</strong><small>{d.borrowerName} · {d.expectedCloseDate??'No date'}</small></Link>):<em>None.</em>}</section>}
+function QueueLane({title,deals,tone="amber"}:{title:string;deals:DealSummary[];tone?:string}){return <section className="queue-lane" data-tone={tone}><header><strong>{title}</strong><span>{deals.length}</span></header>{deals.length?deals.slice(0,5).map(d=><Link href={`/app/deals/${d.id}`} key={d.id}><strong>{d.name}</strong><small>{d.borrowerName} · {d.expectedCloseDate??'No date'}</small></Link>):<em>None.</em>}{deals.length>5?<small className="queue-lane-more">+{deals.length-5} more on the execution board.</small>:null}</section>}
 function ChartCard({ title, deals, mode }: { title: string; deals: DealSummary[]; mode: string }) {
   const groups = mode === "stage" ? [...new Set(deals.map((deal) => deal.stage))] : ["Authorized"];
   const totalAmount = deals.reduce((sum, deal) => sum + (deal.approvedAmount ?? deal.requestedAmount ?? 0), 0);
