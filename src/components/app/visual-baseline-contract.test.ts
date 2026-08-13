@@ -1,0 +1,93 @@
+import { readFileSync } from "node:fs";
+import { resolve } from "node:path";
+import { describe, expect, it } from "vitest";
+
+const source = (path: string) => readFileSync(resolve(path), "utf8");
+
+describe("original Commercial LOS visual baseline contract", () => {
+  it("retains the shared application chrome and six-workspace switcher", () => {
+    const shell = source("src/components/app/AppShell.tsx");
+    const navigation = source("src/components/app/WorkspaceNavigation.tsx");
+
+    for (const landmark of [
+      "los-system-bar",
+      "app-sidebar",
+      "workspace-menu",
+      "Workspace switcher",
+      "WorkspaceNavigation",
+      "sidebar-user",
+    ]) expect(shell).toContain(landmark);
+
+    for (const label of [
+      "Banker Workspace",
+      "CRM Workspace",
+      "Team Workspace",
+      "Manager Workspace",
+      "Portfolio Workspace",
+      "Admin Workspace",
+    ]) expect(source("src/lib/workspace-surfaces.ts")).toContain(label);
+
+    for (const section of ["My pipeline", "Work queue", "Relationships", "Resources"])
+      expect(navigation).toContain(section);
+  });
+
+  it("retains the screenshot-matched Banker, Team, Manager, and Portfolio compositions", () => {
+    const banker = source("src/components/banker/BankerCommandCenter.tsx");
+    const roleCenters = source("src/components/institution/RoleCommandCenter.tsx");
+
+    for (const landmark of [
+      "banker-kpi-grid",
+      "workspace-tabs",
+      "What needs you",
+      "Pipeline at a glance",
+      "Portfolio &amp; workflow health",
+      "My Activity Summary",
+    ]) expect(banker).toContain(landmark);
+
+    for (const landmark of [
+      "Team Ops Queue",
+      "team-exact-cockpit",
+      "Manager Bloomberg Control Panel",
+      "manager-exact-analytics",
+      "Portfolio Command Center",
+      "portfolio-exact-cockpit",
+    ]) expect(roleCenters).toContain(landmark);
+  });
+
+  it("retains the screenshot-matched CRM and Deal Cockpit compositions", () => {
+    const crm = source("src/components/crm/BorrowerDirectory.tsx");
+    const deal = source("src/components/deals/DealCockpit.tsx");
+
+    for (const landmark of [
+      "CRM Workspace",
+      "crm-search-deck",
+      "Where the book needs a human next action",
+      "Confirmed relationship interactions",
+      "Current authorized CRM result set",
+    ]) expect(crm).toContain(landmark);
+
+    for (const landmark of [
+      "deal-exact-header",
+      "deal-exact-overview",
+      "Attention Console",
+      "deal-exact-rail",
+      "Review readiness",
+      "Closing command center",
+    ]) expect(deal).toContain(landmark);
+  });
+
+  it("retains the compact desktop geometry used by the supplied screenshots", () => {
+    const css = source("src/app/globals.css");
+
+    for (const rule of [
+      ".los-system-bar { height:38px",
+      ".app-shell { grid-template-columns:218px minmax(0,1fr)",
+      ".banker-kpi-grid { grid-template-columns:repeat(5,minmax(0,1fr))",
+      ".team-exact-cockpit .baseline-kpi-ribbon { grid-template-columns:repeat(10,minmax(0,1fr))",
+      ".manager-exact-cockpit",
+      ".portfolio-exact-cockpit .baseline-kpi-ribbon { grid-template-columns:repeat(6,minmax(0,1fr))",
+      ".deal-exact-header",
+      ".crm-search-deck",
+    ]) expect(css).toContain(rule);
+  });
+});
