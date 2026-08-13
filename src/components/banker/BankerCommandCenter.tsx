@@ -128,6 +128,19 @@ export function BankerCommandCenter({ model }: { model: BankerCommandCenterModel
           </section>
         </aside>
       </div>
+
+      <div className="banker-exact-lower">
+        <section className="banker-glance">
+          <h2>Pipeline at a glance</h2>
+          <p><strong>{model.totalActive}</strong> active deals · {formatMoney(model.totalExposure)}</p>
+          {model.lanes.length ? model.lanes.map((lane) => <Link href="/app/deals" key={lane.stage}><span>{lane.label}</span><b>{lane.deals.length}</b></Link>) : <HonestEmpty copy="No active deals are assigned to this workspace." />}
+        </section>
+        <section className="banker-exact-health">
+          <h2>Portfolio &amp; workflow health</h2>
+          <div><HealthTile label="Active deals" value={String(model.totalActive)} /><HealthTile label="Documents outstanding" value="Unavailable" muted /><HealthTile label="Documents awaiting review" value="Unavailable" muted /><HealthTile label="Tasks overdue" value="0" /><HealthTile label="Credit memos in draft" value="Unavailable" muted /><HealthTile label="Closing in 14 days" value={String(model.closingSoon)} /><HealthTile label="Stale 14+ days" value="Unavailable" muted /></div>
+        </section>
+      </div>
+      <section className="banker-activity-summary"><h2>My Activity Summary</h2><p>Workload snapshot — derived from current authorized records.</p><div><HealthTile label="Active deals" value={String(model.totalActive)} /><HealthTile label="Total pipeline" value={formatMoney(model.totalExposure)} /></div></section>
     </>
   );
 }
