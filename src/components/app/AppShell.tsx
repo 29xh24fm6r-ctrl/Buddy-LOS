@@ -69,7 +69,7 @@ export function WorkspaceHeader({ eyebrow, title, subtitle, context, surface }: 
   return (
     <header className="workspace-command-header">
       <div><p className="eyebrow">{eyebrow}</p><h1>{title}</h1><p>{subtitle}</p></div>
-      <aside aria-label={`${workspaceSurfaceLabels[surface]} context`}><small>Workspace</small><strong>{workspaceSurfaceLabels[surface]}</strong><small>Signed in</small><strong>{context.displayName ?? context.email ?? "Institution user"}</strong><span>{context.email}</span></aside>
+      <aside aria-label={`${workspaceSurfaceLabels[surface]} context`}><nav className="workspace-header-switcher" aria-label="Workspace shortcuts">{allowedWorkspaceSurfaces(context.activeOrganization.role).map((item)=><Link href={workspaceSurfaceHref(item)} aria-current={item===surface?"page":undefined} key={item}>{workspaceSurfaceLabels[item]}</Link>)}</nav><small>Workspace</small><strong>{workspaceSurfaceLabels[surface]}</strong><small>Team</small><strong>{context.activeOrganization.organizationName}</strong><small>Signed in</small><strong>{context.displayName ?? context.email ?? "Institution user"}</strong><span>{context.email}</span></aside>
     </header>
   );
 }
