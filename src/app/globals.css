@@ -576,3 +576,18 @@ html { background:#091322; }.los-system-bar { height:38px; padding:0 10px; gap:1
 .auth-form input:user-valid,.intake-form input:user-valid { border-color:#4f806e!important; }
 .intake-form input::placeholder,.intake-form textarea::placeholder { color:#7184a0; opacity:1; }
 .form-actions button { min-width:165px; }
+
+/* UX pass 5: visible workspace transitions and recoverable failures. */
+.workspace-transition { width:100%; min-height:100vh; display:grid; place-items:center; margin:0; padding:2rem; background:linear-gradient(155deg,#0f1a2e,#0c1322); color:#eef2f7; }
+.workspace-loading-card,.workspace-error-card { width:min(680px,100%); padding:2rem; border:1px solid #304665; border-radius:8px; background:linear-gradient(160deg,#172944,#101d31); box-shadow:0 18px 44px rgba(0,0,0,.35); }
+.workspace-loading-card h1,.workspace-error-card h1 { max-width:none; margin:.4rem 0 .8rem; color:#f2ede2; font-family:var(--font-display),serif; font-size:clamp(1.8rem,4vw,2.7rem); line-height:1.08; letter-spacing:-.02em; }
+.workspace-loading-card>p:last-of-type,.workspace-error-card>p:last-of-type { color:#9db0c9; line-height:1.55; }
+.workspace-loading-grid { display:grid; grid-template-columns:repeat(4,1fr); gap:10px; margin-top:1.5rem; }
+.workspace-loading-grid span { min-height:78px; border:1px solid #2a3f60; border-radius:4px; background:linear-gradient(105deg,#162742 30%,#213b60 45%,#162742 60%); background-size:220% 100%; animation:workspace-shimmer 1.4s ease-in-out infinite; }
+.workspace-recovery-actions { display:flex; flex-wrap:wrap; gap:10px; margin-top:1.4rem; }
+.workspace-recovery-actions button,.workspace-recovery-actions a { min-height:42px; display:inline-flex; align-items:center; justify-content:center; padding:.65rem 1rem; border:1px solid #5277a5; border-radius:4px; font-weight:800; }
+.workspace-recovery-actions button { background:#5b8fd9; color:white; }
+.workspace-recovery-actions a { background:#172944; color:#dce7f5; }
+.workspace-error-card small { display:block; margin-top:1.2rem; color:#7186a3; font-family:var(--font-mono),monospace; }
+@keyframes workspace-shimmer { to { background-position:-220% 0; } }
+@media (max-width:600px) { .workspace-transition { padding:1rem; }.workspace-loading-card,.workspace-error-card { padding:1.3rem; }.workspace-loading-grid { grid-template-columns:repeat(2,1fr); } }
