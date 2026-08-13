@@ -4,6 +4,7 @@ import type { AccessContext } from "@/lib/auth/access-context";
 import { signOut } from "@/app/login/actions";
 import { LosIcon } from "@/components/app/LosIcon";
 import { WorkspaceNavigation } from "@/components/app/WorkspaceNavigation";
+import { ShareWorkspaceButton } from "@/components/app/AppUtilityActions";
 import { allowedWorkspaceSurfaces, workspaceSurfaceHref, workspaceSurfaceLabels, type WorkspaceSurface } from "@/lib/workspace-surfaces";
 
 type ReadyContext = Extract<AccessContext, { kind: "ready" }>;
@@ -21,7 +22,7 @@ export function AppShell({ context, surface, children }: { context: ReadyContext
         <span className="system-launcher" aria-hidden="true">•••<br />•••<br />•••</span>
         <strong className="system-product">Buddy LOS <span>|</span> Commercial Lending LOS</strong><span className="system-info" aria-hidden="true">i</span>
         <span className="system-spacer" />
-        <button type="button" className="system-share">Share⌄</button>
+        <ShareWorkspaceButton />
         <span className="system-more" aria-hidden="true">•••</span>
         <span className="system-avatar">{initials || "BU"}</span>
       </header>

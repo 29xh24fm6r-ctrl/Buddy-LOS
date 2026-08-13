@@ -554,3 +554,16 @@ html { background:#091322; }.los-system-bar { height:38px; padding:0 10px; gap:1
   .deal-exact-identity,.deal-exact-overview,.deal-attention-counts { grid-template-columns:1fr; }
   .deal-readiness-ring { margin:8px auto; }
 }
+
+/* UX pass 3: honest controls and explicit action feedback. */
+.utility-action { position:relative; display:inline-flex; align-items:center; }
+.sr-status { position:absolute; width:1px; height:1px; overflow:hidden; clip:rect(0 0 0 0); clip-path:inset(50%); white-space:nowrap; }
+.action-explanation { position:absolute; z-index:20; top:calc(100% + 7px); left:0; width:240px; padding:9px 11px; border:1px solid #49698f; border-radius:4px; background:#0d192b; color:#d9e5f5; box-shadow:0 10px 24px rgba(0,0,0,.35); font-size:9px; font-weight:600; line-height:1.45; }
+.crm-search-deck .utility-action>button { min-height:34px; border:1px solid #3a5578; border-radius:3px; background:#142641; color:#dce6f3; }
+.crm-search-deck .utility-action:first-of-type>button { border-color:#d35454; background:#ca4949; color:white; }
+.crm-more-menu { position:relative; }
+.crm-more-menu summary { min-height:34px; display:flex; align-items:center; padding:0 11px; border:1px solid #3a5578; border-radius:3px; color:#dce6f3; cursor:pointer; font-size:8px; font-weight:800; list-style:none; }
+.crm-more-menu summary::-webkit-details-marker { display:none; }
+.crm-more-menu nav { position:absolute; z-index:19; top:calc(100% + 5px); left:0; min-width:130px; display:grid; gap:2px; padding:5px; border:1px solid #3a5578; border-radius:4px; background:#0d192b; box-shadow:0 10px 24px rgba(0,0,0,.35); }
+.crm-more-menu nav a { min-height:32px; display:flex; align-items:center; padding:6px 9px; border-radius:3px; color:#dce6f3; font-size:9px; }
+.crm-more-menu nav a:hover { background:#1b3355; }
