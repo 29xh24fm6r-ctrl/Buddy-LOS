@@ -169,4 +169,19 @@ describe("original Commercial LOS visual baseline contract", () => {
       ".crm-search-deck",
     ]) expect(css).toContain(rule);
   });
+
+  it("keeps CRM relationship facts labeled when the desktop table header is hidden", () => {
+    const crm = source("src/components/crm/BorrowerDirectory.tsx");
+    const css = source("src/app/globals.css");
+
+    for (const behavior of [
+      'role="columnheader"',
+      'data-label="Company"',
+      'data-label="Primary contact"',
+      'data-label="Active deals"',
+      'data-label="Exposure"',
+    ]) expect(crm).toContain(behavior);
+    for (const rule of [".directory-row>span::before", "content:attr(data-label)", "overflow-wrap:anywhere"])
+      expect(css).toContain(rule);
+  });
 });
