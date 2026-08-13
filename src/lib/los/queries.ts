@@ -37,6 +37,8 @@ export type BorrowerDetail = {
   id: string; legalName: string; borrowerKind: string; externalReference: string | null;
   relationshipStartDate: string | null; contacts: { id: string; kind: string; label: string | null; value: string; isPrimary: boolean; isVerified: boolean; restrictedUse: boolean }[];
 };
+export type CrmActivityRecord = { id:string; borrowerId:string; borrowerName:string; dealId:string|null; kind:string; subject:string; occurredAt:string; notes:string|null };
+export type DealTaskRecord = { id:string; dealId:string; title:string; description:string|null; status:string; dueAt:string|null; assignedTo:string|null; version:number };
 
 export async function loadCommandCenterDeals(context: ReadyContext): Promise<DealSummary[]> {
   const supabase = await createClient();
@@ -93,6 +95,23 @@ export async function loadBorrowerDirectory(context: ReadyContext): Promise<Borr
     relationshipStartDate: borrower.relationship_start_date,
     primaryContact: contacts.get(borrower.id) ?? null,
   }));
+}
+
+export async function loadCrmActivities(context:ReadyContext):Promise<CrmActivityRecord[]> {
+  const supabase=await createClient(), organizationId=context.activeOrganization.organizationId;
+  const {data,error}=await supabase.from("crm_activities").select("id, borrower_id, deal_id, activity_kind, subject, occurred_at, notes").eq("organization_id",organizationId).order("occurred_at",{ascending:false}).limit(100);
+  if(error) throw new Error("Unable to load CRM activities.");
+  const borrowerIds=[...new Set((data??[]).map((row)=>row.borrower_id as string))], names=new Map<string,string>();
+  if(borrowerIds.length){const{data:borrowers,error:borrowerError}=await supabase.from("borrowers").select("id, legal_name").eq("organization_id",organizationId).in("id",borrowerIds);if(borrowerError)throw new Error("Unable to load activity relationships.");for(const borrower of borrowers??[])names.set(borrower.id,borrower.legal_name);}
+  return (data??[]).map((row)=>({id:row.id,borrowerId:row.borrower_id,borrowerName:names.get(row.borrower_id)??"Borrower unavailable",dealId:row.deal_id,kind:row.activity_kind,subject:row.subject,occurredAt:row.occurred_at,notes:row.notes}));
+}
+
+export async function loadDealTasks(context:ReadyContext,dealId?:string):Promise<DealTaskRecord[]> {
+  const supabase=await createClient(), organizationId=context.activeOrganization.organizationId;
+  let query=supabase.from("deal_tasks").select("id, deal_id, title, description, status, due_at, assigned_to, version").eq("organization_id",organizationId).order("due_at",{ascending:true,nullsFirst:false}).limit(200);
+  if(dealId)query=query.eq("deal_id",dealId);
+  const{data,error}=await query;if(error)throw new Error("Unable to load operating tasks.");
+  return(data??[]).map((row)=>({id:row.id,dealId:row.deal_id,title:row.title,description:row.description,status:row.status,dueAt:row.due_at,assignedTo:row.assigned_to,version:row.version}));
 }
 
 export async function loadDealDetail(context: ReadyContext, dealId: string): Promise<DealDetail | null> {
