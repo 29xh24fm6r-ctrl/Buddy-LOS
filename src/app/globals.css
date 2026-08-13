@@ -482,3 +482,19 @@ html { background:#091322; }.los-system-bar { height:38px; padding:0 10px; gap:1
 .team-exact-cockpit .queue-lane>a strong { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .team-exact-cockpit .queue-lane-more { display:block; margin-top:9px; color:#6f8fb8; font-size:7px; font-style:italic; }
 @media (max-width:900px) { .team-exact-cockpit .baseline-kpi-ribbon { grid-template-columns:repeat(2,1fr); }.team-exact-cockpit .ops-lane-grid { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+
+/* Portfolio Command Center screenshot acceptance baseline. */
+.portfolio-exact-cockpit { overflow:hidden; }
+.portfolio-exact-cockpit>header { min-height:68px; }
+.portfolio-exact-cockpit .baseline-kpi-ribbon { grid-template-columns:repeat(6,minmax(0,1fr)); }
+.portfolio-rating-alert { display:block; margin:0 20px 12px; padding:8px 10px; border:1px solid #2e4566; border-radius:3px; background:#182f50; color:#e5c271; font-size:8px; font-weight:800; text-decoration:none; }
+.portfolio-exact-cockpit .portfolio-analytics { grid-template-columns:1.25fr 1.25fr 1.25fr 1.25fr 1fr 1fr; }
+.portfolio-exact-cockpit .micro-chart { min-height:136px; }
+.portfolio-exposure-table>a { position:relative; display:grid; grid-template-columns:1.25fr repeat(6,1fr); gap:10px; padding:12px 78px 12px 12px; border-top:1px dashed #283a55; color:#dfe7f3; font-size:7px; text-decoration:none; }
+.portfolio-exposure-table>a>strong { grid-column:1/-1; color:#e8edf5; font-size:8px; }
+.portfolio-exposure-table>a>span { display:grid; gap:3px; color:#c0ccdc; text-transform:capitalize; }
+.portfolio-exposure-table>a small { color:#6f89ad; font-size:6px; font-weight:800; letter-spacing:.06em; text-transform:uppercase; }
+.portfolio-exposure-table>a>b { position:absolute; right:12px; top:14px; color:#f0ebde; font-size:9px; }
+.portfolio-exact-cockpit .collapsed-control { margin-left:20px; margin-right:20px; }
+.portfolio-exact-cockpit .collapsed-control:last-child { margin-bottom:18px; }
+@media (max-width:900px) { .portfolio-exact-cockpit .baseline-kpi-ribbon { grid-template-columns:repeat(2,1fr); }.portfolio-exact-cockpit .portfolio-analytics { grid-template-columns:repeat(2,1fr); }.portfolio-exposure-table>a { grid-template-columns:repeat(2,1fr); padding-right:12px; }.portfolio-exposure-table>a>b { position:static; } }

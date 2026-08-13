@@ -77,18 +77,18 @@ function PortfolioCockpit({ model }: { model: BankerCommandCenterModel }) {
     { label: "Boarded loans", value: String(model.totalActive), tone: "blue" }, { label: "Book exposure", value: formatMoney(model.totalExposure), tone: "blue" },
     { label: "Watchlist", value: "0", tone: "green" }, { label: "Criticized", value: "0", tone: "green" }, { label: "Classified", value: "0", tone: "green" }, { label: "Unmapped ratings", value: String(model.totalActive), tone: "amber" },
   ];
-  return <Cockpit eyebrow="Portfolio cockpit" title="Portfolio Command Center" subtitle="Live boarded portfolio exposure" tiles={tiles}>
+  return <section className="baseline-cockpit portfolio-exact-cockpit">
+    <header><div><p className="eyebrow">Portfolio cockpit</p><h2>Portfolio Command Center</h2><p>Live boarded portfolio exposure</p></div><div className="cockpit-status"><span>Showing team view</span><span>Read-only</span></div></header>
+    <div className="baseline-kpi-ribbon">{tiles.map((tile) => <Metric key={tile.label} {...tile} />)}</div>
+    {model.totalActive > 0 ? <Link className="portfolio-rating-alert" href="/app/deals">› {model.totalActive} boarded loan{model.totalActive === 1 ? "" : "s"} with an unmapped risk rating — review</Link> : null}
     <div className="analytics-strip portfolio-analytics"><ChartCard title="Exposure by borrower" deals={model.deals} mode="amount" /><ChartCard title="Exposure by product" deals={model.deals} mode="amount" /><ChartCard title="Exposure by risk rating" deals={model.deals} mode="risk" /><ChartCard title="Exposure by manager" deals={model.deals} mode="amount" /><ChartCard title="Loan size mix" deals={model.deals} mode="quality" /><ChartCard title="Maturity ladder" deals={model.deals} mode="empty" /></div>
-    <section className="dense-table"><header><strong>Top exposures</strong><small>Showing {model.deals.length} authorized records</small></header>{model.deals.length ? model.deals.slice(0,6).map(d=><DealRow key={d.id} deal={d}/>) : <p>No boarded exposures available.</p>}</section>
+    <section className="dense-table portfolio-exposure-table"><header><strong>Top exposures</strong><small>Showing {model.deals.length} of boarded book</small></header>{model.deals.length ? model.deals.slice(0,6).map((deal)=><Link key={deal.id} href={`/app/deals/${deal.id}`}><strong>{deal.borrowerName}</strong><span><small>Loan</small>{deal.dealNumber ?? deal.name}</span><span><small>Manager</small>Assigned banker</span><span><small>Status</small>{deal.stage.replaceAll("_", " ")}</span><span><small>Risk rating</small>Unmapped</span><span><small>Product</small>{deal.productType ?? "Unknown product"}</span><span><small>Maturity</small>{deal.expectedCloseDate ?? "Unknown"}</span><b>{formatMoney(deal.approvedAmount ?? deal.requestedAmount ?? 0)}</b></Link>) : <p>No boarded exposures available.</p>}</section>
     {['Book tie-out','Portfolio profitability','Regulatory classification','Regulatory Classification (Illustrative)'].map(x=><section className="collapsed-control" key={x}><strong>{x}</strong><p>Governed source data is not yet available in the native SaaS read model.</p></section>)}
-  </Cockpit>;
+  </section>;
 }
 
 function AdminCockpit({ model }: { model: BankerCommandCenterModel }) { return <ManagerCockpit model={model} />; }
 
-function Cockpit({ eyebrow, title, subtitle, tiles, children }: { eyebrow:string; title:string; subtitle:string; tiles:Tile[]; children:React.ReactNode }) {
-  return <section className="baseline-cockpit"><header><div><p className="eyebrow">{eyebrow}</p><h2>{title}</h2><p>{subtitle}</p></div><div className="cockpit-status"><span>Showing team view</span><span>Read-only</span></div></header><div className="baseline-kpi-ribbon">{tiles.map(t=><Metric key={t.label} {...t}/>)}</div>{children}</section>;
-}
 function Metric({label,value,tone,muted}:Tile){return <article className={muted?'muted':''} data-tone={tone}><span>{label}</span><strong>{value}</strong><Link href="/app/deals">View details →</Link></article>}
 function QueueLane({title,deals,tone="amber"}:{title:string;deals:DealSummary[];tone?:string}){return <section className="queue-lane" data-tone={tone}><header><strong>{title}</strong><span>{deals.length}</span></header>{deals.length?deals.slice(0,5).map(d=><Link href={`/app/deals/${d.id}`} key={d.id}><strong>{d.name}</strong><small>{d.borrowerName} · {d.expectedCloseDate??'No date'}</small></Link>):<em>None.</em>}{deals.length>5?<small className="queue-lane-more">+{deals.length-5} more on the execution board.</small>:null}</section>}
 function ChartCard({ title, deals, mode }: { title: string; deals: DealSummary[]; mode: string }) {
