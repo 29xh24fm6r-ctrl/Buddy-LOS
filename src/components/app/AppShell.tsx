@@ -16,6 +16,7 @@ export function AppShell({ context, surface, children }: { context: ReadyContext
 
   return (
     <div className="los-frame">
+      <a className="skip-link" href="#workspace-content">Skip to workspace content</a>
       <header className="los-system-bar" aria-label="Application controls">
         <span className="system-launcher" aria-hidden="true">•••<br />•••<br />•••</span>
         <strong className="system-product">Buddy LOS <span>|</span> Commercial Lending LOS</strong><span className="system-info" aria-hidden="true">i</span>
@@ -43,7 +44,7 @@ export function AppShell({ context, surface, children }: { context: ReadyContext
             <form action={signOut}><button type="submit" aria-label="Sign out"><LosIcon name="arrow" /></button></form>
           </div>
         </aside>
-        <main className="app-main">{children}</main>
+        <main id="workspace-content" className="app-main" tabIndex={-1}>{children}</main>
       </div>
     </div>
   );

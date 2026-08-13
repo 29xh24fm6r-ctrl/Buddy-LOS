@@ -31,6 +31,24 @@ describe("original Commercial LOS visual baseline contract", () => {
       expect(navigation).toContain(section);
   });
 
+  it("keeps the approved visual baseline keyboard and touch accessible", () => {
+    const shell = source("src/components/app/AppShell.tsx");
+    const css = source("src/app/globals.css");
+
+    for (const landmark of [
+      "Skip to workspace content",
+      'id="workspace-content"',
+      "tabIndex={-1}",
+    ]) expect(shell).toContain(landmark);
+
+    for (const rule of [
+      ".skip-link",
+      ":where(a,button,input,select,textarea):focus-visible",
+      "min-height:44px",
+      "prefers-reduced-motion:reduce",
+    ]) expect(css).toContain(rule);
+  });
+
   it("retains the screenshot-matched Banker, Team, Manager, and Portfolio compositions", () => {
     const banker = source("src/components/banker/BankerCommandCenter.tsx");
     const roleCenters = source("src/components/institution/RoleCommandCenter.tsx");
