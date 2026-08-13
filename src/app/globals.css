@@ -567,3 +567,12 @@ html { background:#091322; }.los-system-bar { height:38px; padding:0 10px; gap:1
 .crm-more-menu nav { position:absolute; z-index:19; top:calc(100% + 5px); left:0; min-width:130px; display:grid; gap:2px; padding:5px; border:1px solid #3a5578; border-radius:4px; background:#0d192b; box-shadow:0 10px 24px rgba(0,0,0,.35); }
 .crm-more-menu nav a { min-height:32px; display:flex; align-items:center; padding:6px 9px; border-radius:3px; color:#dce6f3; font-size:9px; }
 .crm-more-menu nav a:hover { background:#1b3355; }
+
+/* UX pass 4: confident, accessible form submission. */
+.required-note { grid-column:1/-1; margin:0; color:#9db0c9; font-size:.72rem; }
+.required-note span,.auth-form label>span,.intake-form label>span { color:#ef8b85; }
+.auth-form button:disabled,.form-actions button:disabled { cursor:wait; opacity:.72; }
+.auth-form input:user-invalid,.intake-form input:user-invalid,.intake-form select:user-invalid,.intake-form textarea:user-invalid { border-color:#dc625d!important; box-shadow:0 0 0 2px rgba(220,98,93,.14); }
+.auth-form input:user-valid,.intake-form input:user-valid { border-color:#4f806e!important; }
+.intake-form input::placeholder,.intake-form textarea::placeholder { color:#7184a0; opacity:1; }
+.form-actions button { min-width:165px; }
