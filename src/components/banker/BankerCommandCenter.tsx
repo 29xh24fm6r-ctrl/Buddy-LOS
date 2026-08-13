@@ -25,7 +25,7 @@ export function BankerCommandCenter({ model }: { model: BankerCommandCenterModel
       </section>
 
       <nav className="workspace-tabs" aria-label="Banker workspace views">
-        <Link className="active" href="/app">Dashboard</Link>
+        <Link className="active" aria-current="page" href="/app">Dashboard</Link>
         <Link href="/app/deals">Active deals</Link>
         <Link href="/app/intake">Loan workflow</Link>
         <Link href="/app/deals">Tasks &amp; actions</Link>

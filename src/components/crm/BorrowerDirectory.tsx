@@ -12,7 +12,7 @@ export function BorrowerDirectory({ rows, query, view }: { rows: BorrowerDirecto
   const missingContacts = rows.filter((row) => !row.primaryContact).length;
   return <section className="crm-command-center">
     <header className="crm-command-header"><div><p className="eyebrow">Relationship intelligence</p><h1>CRM Workspace</h1><p>Companies, people, relationships, activities, and opportunities in one governed command center.</p></div><div className="header-actions"><Link className="secondary-button" href="/app/crm?view=activities">Log activity</Link><Link className="primary-button" href="/app/intake?surface=crm">Start governed loan deal</Link></div></header>
-    <nav className="crm-tabs" aria-label="CRM sections">{tabs.map((tab) => <Link key={tab} className={activeView === tab ? "active" : ""} href={`/app/crm?view=${tab}`}>{label(tab)}</Link>)}</nav>
+    <nav className="crm-tabs" aria-label="CRM sections">{tabs.map((tab) => <Link key={tab} className={activeView === tab ? "active" : ""} aria-current={activeView === tab ? "page" : undefined} href={`/app/crm?view=${tab}`}>{label(tab)}</Link>)}</nav>
     {activeView === "home" ? <CrmHome rows={rows} exposure={exposure} activeDeals={activeDeals} missingContacts={missingContacts} /> : activeView === "companies" || activeView === "people" || activeView === "relationships" ? <Directory rows={rows} query={query} title={activeView} /> : <CrmBoundary view={activeView} rows={rows} />}
   </section>;
 }
