@@ -49,6 +49,20 @@ describe("original Commercial LOS visual baseline contract", () => {
     ]) expect(css).toContain(rule);
   });
 
+  it("collapses the full workspace navigator on compact screens without changing desktop chrome", () => {
+    const shell = source("src/components/app/AppShell.tsx");
+    const css = source("src/app/globals.css");
+
+    for (const behavior of ["mobile-nav-disclosure", "mobile-nav-content", "Navigation", "WorkspaceNavigation"])
+      expect(shell).toContain(behavior);
+    for (const rule of [
+      ".mobile-nav-disclosure { display:contents; }",
+      ".mobile-nav-disclosure>summary { display:none; }",
+      ".mobile-nav-disclosure:not([open])>.mobile-nav-content { display:none; }",
+      ".mobile-nav-disclosure[open] .mobile-nav-chevron",
+    ]) expect(css).toContain(rule);
+  });
+
   it("keeps dense operational screens readable without changing their composition", () => {
     const css = source("src/app/globals.css");
 
