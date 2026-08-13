@@ -184,4 +184,22 @@ describe("original Commercial LOS visual baseline contract", () => {
     for (const rule of [".directory-row>span::before", "content:attr(data-label)", "overflow-wrap:anywhere"])
       expect(css).toContain(rule);
   });
+
+  it("makes compact tab rails discoverable and identifies the current view", () => {
+    const crm = source("src/components/crm/BorrowerDirectory.tsx");
+    const banker = source("src/components/banker/BankerCommandCenter.tsx");
+    const institutional = source("src/components/institution/InstitutionalCommandCenter.tsx");
+    const css = source("src/app/globals.css");
+
+    expect(crm).toContain('aria-current={activeView === tab ? "page" : undefined}');
+    expect(banker).toContain('className="active" aria-current="page"');
+    expect(institutional).toContain('className="active" aria-current="page"');
+    for (const rule of [
+      ".workspace-tabs,.deal-workspace-tabs,.crm-tabs",
+      "scrollbar-width:auto",
+      "touch-action:pan-x",
+      ".crm-tabs::-webkit-scrollbar",
+      "scroll-snap-align:start",
+    ]) expect(css).toContain(rule);
+  });
 });

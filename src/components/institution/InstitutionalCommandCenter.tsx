@@ -10,7 +10,7 @@ export function InstitutionalCommandCenter({ model }: { model: BankerCommandCent
   const topDeals = [...model.deals].sort((a, b) => (b.approvedAmount ?? b.requestedAmount ?? 0) - (a.approvedAmount ?? a.requestedAmount ?? 0)).slice(0, 5);
 
   return <section className="institutional-command-center" aria-label="Institutional command center">
-    <nav className="workspace-tabs" aria-label="Institutional views"><Link className="active" href="/app">Executive overview</Link><Link href="/app/deals">Portfolio pipeline</Link><Link href="/app/deals">Team work queue</Link><Link href="/app/crm">Relationships</Link><Link href="/app">Data quality</Link></nav>
+    <nav className="workspace-tabs" aria-label="Institutional views"><Link className="active" aria-current="page" href="/app">Executive overview</Link><Link href="/app/deals">Portfolio pipeline</Link><Link href="/app/deals">Team work queue</Link><Link href="/app/crm">Relationships</Link><Link href="/app">Data quality</Link></nav>
     <div className="executive-status"><div><span className="status-dot" />Institution-wide authorized view</div><span>Read-only oversight · live Supabase records</span></div>
     <section className="executive-kpis" aria-label="Executive lending metrics">
       <ExecMetric label="Active pipeline" value={formatMoney(model.totalExposure)} detail={`${model.totalActive} active deals`} tone="blue" />

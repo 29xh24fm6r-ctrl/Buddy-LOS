@@ -522,8 +522,8 @@ html { background:#091322; }.los-system-bar { height:38px; padding:0 10px; gap:1
 :where(.primary-button,.secondary-button,.system-share,.workspace-menu a,.workspace-tabs a,.deal-workspace-tabs a,.quick-actions>a) { transition:background-color .16s ease,border-color .16s ease,color .16s ease,box-shadow .16s ease,transform .16s ease; }
 :where(.primary-button,.secondary-button,.system-share,.workspace-menu a,.workspace-tabs a,.deal-workspace-tabs a,.quick-actions>a):hover { filter:brightness(1.1); }
 :where(.primary-button,.secondary-button,.system-share,.workspace-menu a,.workspace-tabs a,.deal-workspace-tabs a,.quick-actions>a):active { transform:translateY(1px); }
-.workspace-tabs,.deal-workspace-tabs,.workspace-header-switcher { scrollbar-width:thin; scrollbar-color:#3b5578 transparent; }
-.workspace-tabs a,.deal-workspace-tabs a { white-space:nowrap; }
+.workspace-tabs,.deal-workspace-tabs,.crm-tabs,.workspace-header-switcher { scrollbar-width:thin; scrollbar-color:#5275a3 #101d31; }
+.workspace-tabs a,.deal-workspace-tabs a,.crm-tabs a { white-space:nowrap; }
 @media (max-width:850px) {
   .mobile-nav-disclosure { display:block; }
   .mobile-nav-disclosure>summary { min-height:48px; display:grid; grid-template-columns:auto minmax(0,1fr) auto; align-items:center; gap:10px; padding:8px 11px; border:1px solid #2d4262; border-radius:4px; background:#14243b; color:#e9eff8; cursor:pointer; list-style:none; }
@@ -537,8 +537,11 @@ html { background:#091322; }.los-system-bar { height:38px; padding:0 10px; gap:1
   .mobile-nav-disclosure:not([open])>.mobile-nav-content { display:none; }
   .mobile-nav-content { display:flex; flex-direction:column; padding-top:4px; }
   .workspace-menu a,.workspace-nav section>a,.sidebar-user button { min-height:44px; }
-  .workspace-tabs,.deal-workspace-tabs { overscroll-behavior-x:contain; scroll-snap-type:x proximity; }
-  .workspace-tabs a,.deal-workspace-tabs a { display:inline-flex; align-items:center; min-height:44px; scroll-snap-align:start; }
+  .workspace-tabs,.deal-workspace-tabs,.crm-tabs { overscroll-behavior-x:contain; scroll-snap-type:x proximity; scrollbar-width:auto; touch-action:pan-x; }
+  .workspace-tabs::-webkit-scrollbar,.deal-workspace-tabs::-webkit-scrollbar,.crm-tabs::-webkit-scrollbar { height:7px; }
+  .workspace-tabs::-webkit-scrollbar-thumb,.deal-workspace-tabs::-webkit-scrollbar-thumb,.crm-tabs::-webkit-scrollbar-thumb { border-radius:7px; background:#5275a3; }
+  .workspace-tabs::-webkit-scrollbar-track,.deal-workspace-tabs::-webkit-scrollbar-track,.crm-tabs::-webkit-scrollbar-track { background:#101d31; }
+  .workspace-tabs a,.deal-workspace-tabs a,.crm-tabs a { display:inline-flex; align-items:center; min-height:44px; scroll-snap-align:start; }
   .header-actions { width:100%; }
   .header-actions>a { flex:1; min-height:44px; }
 }
