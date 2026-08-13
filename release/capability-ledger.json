@@ -1,0 +1,14 @@
+{
+  "contractVersion": "buddy-los-capability-ledger.v1",
+  "classification": "PRE_RELEASE",
+  "capabilities": [
+    {"key":"identity_tenant","implemented":true,"deployed":false,"certified":false,"entitled":false,"active":false},
+    {"key":"crm_core","implemented":true,"deployed":false,"certified":false,"entitled":false,"active":false},
+    {"key":"loan_operations","implemented":true,"deployed":false,"certified":false,"entitled":false,"active":false},
+    {"key":"private_documents","implemented":true,"deployed":false,"certified":false,"entitled":false,"active":false},
+    {"key":"buddy_underwriter","implemented":true,"deployed":false,"certified":false,"entitled":false,"active":false},
+    {"key":"credit_decision","implemented":true,"deployed":false,"certified":false,"entitled":false,"active":false},
+    {"key":"closing_funding_boarding","implemented":true,"deployed":false,"certified":false,"entitled":false,"active":false},
+    {"key":"portfolio_servicing","implemented":true,"deployed":false,"certified":false,"entitled":false,"active":false}
+  ]
+}
