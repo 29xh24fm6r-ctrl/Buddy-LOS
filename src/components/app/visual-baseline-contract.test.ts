@@ -86,6 +86,16 @@ describe("original Commercial LOS visual baseline contract", () => {
       expect(intake).toContain(behavior);
   });
 
+  it("provides branded loading and recoverable workspace error states", () => {
+    const loading = source("src/app/app/loading.tsx");
+    const error = source("src/app/app/error.tsx");
+
+    for (const behavior of ["Opening your authorized workspace", 'aria-busy="true"', "workspace-loading-grid"])
+      expect(loading).toContain(behavior);
+    for (const behavior of ["Your records were not changed", "Try again", "Return to command center", "reset"])
+      expect(error).toContain(behavior);
+  });
+
   it("retains the screenshot-matched Banker, Team, Manager, and Portfolio compositions", () => {
     const banker = source("src/components/banker/BankerCommandCenter.tsx");
     const roleCenters = source("src/components/institution/RoleCommandCenter.tsx");
