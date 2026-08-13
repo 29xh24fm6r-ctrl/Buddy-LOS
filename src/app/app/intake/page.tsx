@@ -6,6 +6,7 @@ import { readFoundationStatus } from "@/lib/config/foundation-status";
 import { borrowerKinds, canCreateLoanIntake } from "@/lib/los/intake";
 import { createLoanIntake } from "./actions";
 import { resolveWorkspaceSurface } from "@/lib/workspace-surfaces";
+import { SubmitButton } from "@/components/app/SubmitButton";
 
 export const dynamic = "force-dynamic";
 
@@ -33,22 +34,23 @@ export default async function LoanIntakePage({ searchParams }: { searchParams: P
         <section className="intake-panel" aria-labelledby="intake-title">
           <div className="panel-heading"><div><p className="eyebrow">Governed creation</p><h2 id="intake-title">Borrower and request</h2></div><span>Draft application</span></div>
           {error && <p className="form-error" role="alert">{errorMessages[error] ?? "The intake could not be created."}</p>}
-          <form className="intake-form" action={createLoanIntake}>
+          <form className="intake-form" action={createLoanIntake} aria-describedby="intake-impact">
             <input type="hidden" name="idempotencyKey" value={`intake-${randomUUID()}`} />
+            <p className="required-note"><span aria-hidden="true">*</span> Required fields</p>
             <fieldset><legend>Borrower</legend>
-              <label>Legal name<input name="borrowerLegalName" minLength={2} maxLength={200} required /></label>
+              <label>Legal name <span aria-hidden="true">*</span><input name="borrowerLegalName" autoComplete="organization" minLength={2} maxLength={200} required aria-required="true" /></label>
               <label>Borrower type<select name="borrowerKind" defaultValue="business">{borrowerKinds.map((kind) => <option key={kind} value={kind}>{label(kind)}</option>)}</select></label>
-              <label>Email<input name="borrowerEmail" type="email" maxLength={320} /></label>
-              <label>Phone<input name="borrowerPhone" type="tel" maxLength={50} /></label>
+              <label>Email<input name="borrowerEmail" type="email" inputMode="email" autoComplete="email" maxLength={320} /></label>
+              <label>Phone<input name="borrowerPhone" type="tel" inputMode="tel" autoComplete="tel" maxLength={50} /></label>
             </fieldset>
             <fieldset><legend>Loan request</legend>
-              <label>Deal name<input name="dealName" minLength={2} maxLength={200} required /></label>
+              <label>Deal name <span aria-hidden="true">*</span><input name="dealName" minLength={2} maxLength={200} required aria-required="true" /></label>
               <label>Product type<input name="productType" maxLength={120} placeholder="Term loan, line of credit, CRE" /></label>
-              <label>Requested amount<input name="requestedAmount" type="number" min="0.01" step="0.01" required /></label>
+              <label>Requested amount <span aria-hidden="true">*</span><input name="requestedAmount" type="number" inputMode="decimal" min="0.01" step="0.01" placeholder="0.00" required aria-required="true" /></label>
               <label>Expected close date<input name="expectedCloseDate" type="date" /></label>
-              <label className="full-field">Purpose<textarea name="purpose" maxLength={2000} rows={5} /></label>
+              <label className="full-field">Purpose<textarea name="purpose" maxLength={2000} rows={5} placeholder="Describe the borrower’s use of proceeds and requested structure." /></label>
             </fieldset>
-            <div className="form-actions"><p>Creates one borrower, draft application, intake-stage deal, assignment, and audit event.</p><button type="submit">Create intake</button></div>
+            <div className="form-actions"><p id="intake-impact">Creates one borrower, draft application, intake-stage deal, assignment, and audit event. Review the legal name and requested amount before continuing.</p><SubmitButton idle="Create intake" pending="Creating governed intake…" /></div>
           </form>
         </section>
       )}

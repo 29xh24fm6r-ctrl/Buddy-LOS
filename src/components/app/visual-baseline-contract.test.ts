@@ -73,6 +73,19 @@ describe("original Commercial LOS visual baseline contract", () => {
       expect(crm).toContain(behavior);
   });
 
+  it("communicates form requirements and in-progress submissions", () => {
+    const submit = source("src/components/app/SubmitButton.tsx");
+    const login = source("src/app/login/page.tsx");
+    const intake = source("src/app/app/intake/page.tsx");
+
+    for (const behavior of ["useFormStatus", "disabled={isPending}", "aria-disabled={isPending}"])
+      expect(submit).toContain(behavior);
+    for (const behavior of ["Required fields", "Signing in…", "aria-describedby"])
+      expect(login).toContain(behavior);
+    for (const behavior of ["Creating governed intake…", "Review the legal name and requested amount", 'inputMode="decimal"'])
+      expect(intake).toContain(behavior);
+  });
+
   it("retains the screenshot-matched Banker, Team, Manager, and Portfolio compositions", () => {
     const banker = source("src/components/banker/BankerCommandCenter.tsx");
     const roleCenters = source("src/components/institution/RoleCommandCenter.tsx");
