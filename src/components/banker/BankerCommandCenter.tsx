@@ -11,6 +11,19 @@ export function BankerCommandCenter({ model }: { model: BankerCommandCenterModel
 
   return (
     <>
+      <section className="banker-kpi-grid" aria-label="Banker performance snapshot">
+        <Metric label="Pipeline" value={formatMoney(model.totalExposure)} detail="Active authorized deals" tone="blue" icon="$" />
+        <Metric label="Weighted" value={emptyMetric} detail="Probability data not available" muted icon="W" />
+        <Metric label="Active deals" value={String(model.totalActive)} detail="Authorized to your workspace" tone="blue" icon="#" />
+        <Metric label="Urgent" value={String(model.needsAttention)} detail="Past target close date" tone={model.needsAttention ? "red" : "green"} icon="!" />
+        <Metric label="Closing soon" value={String(model.closingSoon)} detail="Target close within 14 days" tone="amber" icon="14" />
+        <Metric label="YTD closed" value={emptyMetric} detail="Close outcome data not available" muted icon="Y" />
+        <Metric label="Win rate" value={emptyMetric} detail="Outcome data not available" muted icon="%" />
+        <Metric label="High probability" value={emptyMetric} detail="Probability data not available" muted icon="P" />
+        <Metric label="Stale 14+" value={emptyMetric} detail="Activity aging source not available" muted icon="14" />
+        <Metric label="In underwriting" value={String(model.deals.filter((deal) => deal.stage === "underwriting").length)} detail="Active deals in underwriting" tone="violet" icon="UW" />
+      </section>
+
       <nav className="workspace-tabs" aria-label="Banker workspace views">
         <Link className="active" href="/app">Dashboard</Link>
         <Link href="/app/deals">Active deals</Link>
@@ -19,12 +32,18 @@ export function BankerCommandCenter({ model }: { model: BankerCommandCenterModel
         <Link href="/app/deals">Due diligence</Link>
         <Link href="/app/crm">CRM hub</Link>
         <Link href="/app/crm">Activity</Link>
+        <Link href="/app/crm?view=relationships">Relationships</Link>
+        <Link href="/app/deals?view=alerts">My alerts</Link>
+        <Link href="/app/deals?view=alerts">Signals</Link>
       </nav>
+
+      <h2 className="baseline-section-title">Your command center</h2>
+      <p className="baseline-section-subtitle">What needs you, where your pipeline sits, and what&apos;s next.</p>
 
       <section className="banker-command-deck" aria-labelledby="banker-command-title">
         <header className="banker-command-deck-heading">
           <div>
-            <p className="eyebrow">Banker operating command center</p>
+            <p className="eyebrow">Your command center</p>
             <h2 id="banker-command-title">What needs you</h2>
             <p>What needs attention, where your pipeline sits, and what comes next.</p>
           </div>
@@ -34,22 +53,22 @@ export function BankerCommandCenter({ model }: { model: BankerCommandCenterModel
           <div className="banker-priority-stack">
             <PriorityRow
               count={model.needsAttention}
-              title="Deals past target close"
-              detail={model.needsAttention ? "Review the affected deal records and reset the next action." : "No past-due target close dates in your authorized pipeline."}
+              title="Urgent items need attention"
+              detail={model.needsAttention ? "Review overdue dates, documents, and deal blockers." : "No urgent items in your authorized pipeline."}
               href="/app/deals"
               tone={model.needsAttention ? "urgent" : "clear"}
             />
             <PriorityRow
               count={model.closingSoon}
-              title="Closing within 14 days"
-              detail={model.closingSoon ? "Confirm documentation, conditions, and handoff readiness." : "No upcoming target close dates in the next 14 days."}
+              title="Documents need due diligence"
+              detail="Document requirement counts are awaiting their governed SaaS read model."
               href="/app/deals"
               tone={model.closingSoon ? "attention" : "clear"}
             />
             <PriorityRow
               count={0}
-              title="Assigned tasks overdue"
-              detail="Task assignments are not commissioned in the native SaaS read model yet."
+              title="Deals stale 14+ days"
+              detail="Review pipeline records whose next activity is overdue."
               href="/app/deals"
               tone="unavailable"
             />
@@ -66,19 +85,6 @@ export function BankerCommandCenter({ model }: { model: BankerCommandCenterModel
             </div>
           </aside>
         </div>
-      </section>
-
-      <section className="banker-kpi-grid" aria-label="Banker performance snapshot">
-        <Metric label="Pipeline" value={formatMoney(model.totalExposure)} detail="Active authorized deals" tone="blue" icon="$" />
-        <Metric label="Weighted" value={emptyMetric} detail="Probability data not available" muted icon="W" />
-        <Metric label="Active deals" value={String(model.totalActive)} detail="Authorized to your workspace" tone="blue" icon="#" />
-        <Metric label="Urgent" value={String(model.needsAttention)} detail="Past target close date" tone={model.needsAttention ? "red" : "green"} icon="!" />
-        <Metric label="Closing soon" value={String(model.closingSoon)} detail="Target close within 14 days" tone="amber" icon="14" />
-        <Metric label="YTD closed" value={emptyMetric} detail="Close outcome data not available" muted icon="Y" />
-        <Metric label="Win rate" value={emptyMetric} detail="Outcome data not available" muted icon="%" />
-        <Metric label="High probability" value={emptyMetric} detail="Probability data not available" muted icon="P" />
-        <Metric label="Needs attention" value={String(model.needsAttention)} detail="Current pipeline exceptions" tone={model.needsAttention ? "amber" : "green"} icon="!" />
-        <Metric label="In underwriting" value={String(model.deals.filter((deal) => deal.stage === "underwriting").length)} detail="Active deals in underwriting" tone="violet" icon="UW" />
       </section>
 
       <div className="banker-dashboard-grid">

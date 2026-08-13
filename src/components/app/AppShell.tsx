@@ -18,7 +18,7 @@ export function AppShell({ context, surface, children }: { context: ReadyContext
     <div className="los-frame">
       <header className="los-system-bar" aria-label="Application controls">
         <span className="system-launcher" aria-hidden="true">•••<br />•••<br />•••</span>
-        <span className="system-info" aria-hidden="true">i</span>
+        <strong className="system-product">Buddy LOS <span>|</span> Commercial Lending LOS</strong><span className="system-info" aria-hidden="true">i</span>
         <span className="system-spacer" />
         <button type="button" className="system-share">Share⌄</button>
         <span className="system-more" aria-hidden="true">•••</span>
