@@ -101,7 +101,11 @@ export function createScannerServer() {
         return json(response, 409, { error: "document_evidence_mismatch" });
       const outcome = await scan(new File([bytes], "document", { type: mimeType }));
       const runId = `clamav-${jobId}`.slice(0, 200);
-      json(response, 202, { runId });
+      // The authenticated submission response exposes only the bounded verdict.
+      // This permits sandbox certification while Buddy's callback and document
+      // feature gates remain disabled; durable authority still lives in the
+      // signed callback and database transition.
+      json(response, 202, { runId, result: outcome.result });
       void callbackWithRetry(callbackUrl, { organizationId, documentId, provider, runId, result: outcome.result, sha256, engineVersion: "clamav-1", signatureVersion: "hmac-sha256-v1", detail: outcome.detail });
     } catch {
       if (!response.headersSent) return json(response, 500, { error: "scan_failed" });
