@@ -53,6 +53,7 @@ export function evaluateDocumentCommissioning({
   env = process.env,
   evidence = null,
   root = process.cwd(),
+  expectedRelease = null,
 } = {}) {
   const missingArtifacts = REQUIRED_SOURCE_ARTIFACTS.filter((file) => !existsSync(resolve(root, file)));
   const missingConfiguration = [];
@@ -66,6 +67,10 @@ export function evaluateDocumentCommissioning({
   if (!secureUrl(env.BUDDY_DOCUMENT_SCANNER_CALLBACK_URL)) missingConfiguration.push("BUDDY_DOCUMENT_SCANNER_CALLBACK_URL");
   if (!present(env.BUDDY_DOCUMENT_SCANNER_WEBHOOK_SECRET, 32)) missingConfiguration.push("BUDDY_DOCUMENT_SCANNER_WEBHOOK_SECRET");
   if (!present(env.CRON_SECRET, 32)) missingConfiguration.push("CRON_SECRET");
+  const invalidGateConfiguration = DOCUMENT_GATES.filter(
+    (key) => env[key] !== "true" && env[key] !== "false",
+  );
+  missingConfiguration.push(...invalidGateConfiguration);
 
   const installed = missingArtifacts.length === 0;
   const configured = missingConfiguration.length === 0;
@@ -76,6 +81,11 @@ export function evaluateDocumentCommissioning({
   const evidenceIdentityComplete = GIT_SHA.test(evidence?.release?.gitSha ?? "")
     && present(evidence?.release?.vercelDeploymentId)
     && present(evidence?.release?.supabaseMigrationHead);
+  const releaseBindingComplete = !expectedRelease || (
+    exactly(evidence?.release?.gitSha, expectedRelease.gitSha)
+    && exactly(evidence?.release?.vercelDeploymentId, expectedRelease.vercelDeploymentId)
+    && exactly(evidence?.release?.supabaseMigrationHead, expectedRelease.supabaseMigrationHead)
+  );
   const certifiedOrganizationId = evidence?.scope?.organizationId ?? "";
   const configuredOrganizations = (env.BUDDY_DOCUMENTS_ORGANIZATION_IDS ?? "")
     .split(",").map((value) => value.trim()).filter(Boolean);
@@ -90,7 +100,7 @@ export function evaluateDocumentCommissioning({
     && evidence?.scannerCertification?.cleanResult === "clean"
     && evidence?.scannerCertification?.eicarResult === "rejected"
     && timestamp(evidence?.scannerCertification?.certifiedAt);
-  const liveTested = configured && providerApprovalComplete && evidenceIdentityComplete
+  const liveTested = configured && providerApprovalComplete && evidenceIdentityComplete && releaseBindingComplete
     && scopeComplete && scannerCertificationComplete && failedLiveTests.length === 0;
   const enabledGates = DOCUMENT_GATES.filter((key) => enabled(env[key]));
   const gatesEnabled = enabledGates.length === DOCUMENT_GATES.length;
@@ -107,6 +117,7 @@ export function evaluateDocumentCommissioning({
   if (!configured) holdReasons.push(`Missing or invalid production configuration: ${missingConfiguration.join(", ")}`);
   if (!providerApprovalComplete) holdReasons.push("Scanner provider and contract approval evidence is incomplete.");
   if (!evidenceIdentityComplete) holdReasons.push("Release identity evidence is incomplete.");
+  if (!releaseBindingComplete) holdReasons.push("Release evidence does not match the exact Git, Vercel, and Supabase identities supplied to the factory.");
   if (!scopeComplete) holdReasons.push("Exactly one internal organization must match the certified scope.");
   if (!scannerCertificationComplete) holdReasons.push("Private scanner certification evidence is incomplete or invalid.");
   if (failedLiveTests.length) holdReasons.push(`Live tests are incomplete: ${failedLiveTests.join(", ")}`);
@@ -127,6 +138,7 @@ export function evaluateDocumentCommissioning({
     missingArtifacts,
     missingConfiguration,
     failedLiveTests,
+    releaseBindingComplete,
     holdReasons,
   };
 }
