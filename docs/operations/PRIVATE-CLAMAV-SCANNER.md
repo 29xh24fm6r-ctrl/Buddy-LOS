@@ -13,6 +13,16 @@ The Buddy scanner is a separately deployable, private Cloud Run service. It rece
 
 Buddy LOS configures `BUDDY_DOCUMENT_SCANNER_GOOGLE_SERVICE_ACCOUNT_JSON` for the invoker. Google identity travels in `X-Serverless-Authorization`; the provider API credential remains in `Authorization`.
 
+From a clean checkout in Google Cloud Shell, deploy the disabled sandbox with:
+
+```bash
+export PROJECT_ID=buddy-loan-os
+export CALLBACK_ORIGIN=https://buddylos.com
+bash scripts/private-scanner-sandbox-deploy.sh
+```
+
+The script creates only the private sandbox, dedicated identities, encrypted secrets, image, and disabled Cloud Run revision. It does not create an invoker key, modify Vercel, enable scanning, or run production documents. Copy `docs/operations/private-scanner-sandbox-evidence.example.json` outside the repository for the live evidence record; never commit populated identifiers or secrets.
+
 ## Certification gate
 
 Activate only the internal Buddy organization allowlist and disposable objects. Confirm that a clean PDF becomes downloadable, an EICAR fixture is rejected and never downloadable, duplicates remain idempotent, replay and signature tampering are rejected, oversized input returns 413, and provider outage leaves the document quarantined. Keep production document flags off until evidence is attached to the exact LOS SHA, Vercel deployment, scanner image digest, and Supabase migration head.

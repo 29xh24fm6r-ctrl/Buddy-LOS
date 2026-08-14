@@ -1,0 +1,34 @@
+{
+  "environment": "sandbox",
+  "gitSha": "",
+  "cloudRun": {
+    "project": "",
+    "region": "us-west1",
+    "service": "buddy-los-document-scanner-sandbox",
+    "revision": "",
+    "serviceUrl": "",
+    "imageDigest": "",
+    "runtimeServiceAccount": "",
+    "invokerServiceAccount": "",
+    "unauthenticatedAccess": false,
+    "scannerEnabled": false,
+    "clamavVersion": "",
+    "signatureDate": ""
+  },
+  "buddyLos": {
+    "vercelDeploymentId": "",
+    "supabaseMigrationHead": "",
+    "callbackOrigin": "https://buddylos.com",
+    "organizationId": "9e3f6b9b-7116-41e7-8be4-a0ff97d4bcd7"
+  },
+  "certification": {
+    "cleanFile": false,
+    "eicarRejected": false,
+    "duplicateIdempotent": false,
+    "tamperedCallbackRejected": false,
+    "oversizedPayloadRejected": false,
+    "outageRemainedQuarantined": false
+  },
+  "decision": "HOLD"
+}
+
