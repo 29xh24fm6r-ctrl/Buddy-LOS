@@ -17,6 +17,7 @@
     "verify:document-commissioning": "node scripts/document-commissioning-preflight.mjs",
     "verify:document-lifecycle-factory": "node scripts/document-commissioning-preflight.mjs",
     "factory:document-lifecycle": "node scripts/document-lifecycle-factory-runner.mjs",
+    "certify:document-lifecycle": "node scripts/document-lifecycle-certification-harness.mjs",
     "verify:release-contract": "node scripts/verify-release-contract.mjs",
     "check": "npm run verify:source-baseline && npm run verify:release-contract && npm run lint && npm run typecheck && npm run test && npm run build"
   },
