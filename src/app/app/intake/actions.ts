@@ -3,17 +3,18 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { loadAccessContext } from "@/lib/auth/session";
-import { readFoundationStatus } from "@/lib/config/foundation-status";
+import { writesEnabledForOrganization } from "@/lib/config/foundation-status";
 import { canCreateLoanIntake, parseLoanIntake } from "@/lib/los/intake";
 import { createClient } from "@/lib/supabase/server";
 
 type IntakeResult = { dealId?: unknown };
 
 export async function createLoanIntake(formData: FormData) {
-  if (!readFoundationStatus().writesEnabled) redirect("/app/intake?error=not-enabled");
   const context = await loadAccessContext();
   if (context.kind === "unauthenticated") redirect("/login");
-  if (context.kind !== "ready" || !canCreateLoanIntake(context.activeOrganization.role))
+  if (context.kind !== "ready" || !writesEnabledForOrganization(context.activeOrganization.organizationId))
+    redirect("/app/intake?error=not-enabled");
+  if (!canCreateLoanIntake(context.activeOrganization.role))
     redirect("/app/intake?error=not-authorized");
 
   const parsed = parseLoanIntake(formData);

@@ -25,3 +25,19 @@ export function readFoundationStatus(
     integrationsEnabled: enabled(env.NEXT_PUBLIC_BUDDY_INTEGRATIONS_ENABLED),
   };
 }
+
+export function writesEnabledForOrganization(
+  organizationId: string,
+  env: Record<string, string | undefined> = process.env,
+): boolean {
+  if (!readFoundationStatus(env).writesEnabled) return false;
+
+  const allowedOrganizations = new Set(
+    (env.BUDDY_WRITES_ORGANIZATION_IDS ?? "")
+      .split(",")
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean),
+  );
+
+  return allowedOrganizations.has(organizationId.trim().toLowerCase());
+}

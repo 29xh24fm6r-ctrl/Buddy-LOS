@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import { redirect } from "next/navigation";
 import { AppHeader, AppShell } from "@/components/app/AppShell";
 import { loadAccessContext } from "@/lib/auth/session";
-import { readFoundationStatus } from "@/lib/config/foundation-status";
+import { writesEnabledForOrganization } from "@/lib/config/foundation-status";
 import { borrowerKinds, canCreateLoanIntake } from "@/lib/los/intake";
 import { createLoanIntake } from "./actions";
 import { resolveWorkspaceSurface } from "@/lib/workspace-surfaces";
@@ -22,7 +22,7 @@ export default async function LoanIntakePage({ searchParams }: { searchParams: P
   const context = await loadAccessContext();
   if (context.kind === "unauthenticated") redirect("/login");
   if (context.kind !== "ready") redirect("/app");
-  const writesEnabled = readFoundationStatus().writesEnabled;
+  const writesEnabled = writesEnabledForOrganization(context.activeOrganization.organizationId);
   const permitted = canCreateLoanIntake(context.activeOrganization.role);
   const { error, surface: requestedSurface } = await searchParams;
   const surface = resolveWorkspaceSurface(requestedSurface, context.activeOrganization.role, context.workspace);
