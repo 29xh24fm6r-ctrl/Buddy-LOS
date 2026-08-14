@@ -1,4 +1,5 @@
 import { loadAccessContext } from "@/lib/auth/session";
+import { documentsEnabledForOrganization } from "@/lib/config/foundation-status";
 import {
   DOCUMENT_DOWNLOAD_TTL_SECONDS,
   isUuid,
@@ -51,6 +52,8 @@ export async function POST(
     return Response.json({ error: "Authentication required." }, { status: 401, ...RESPONSE_INIT });
   if (context.kind !== "ready")
     return Response.json({ error: "Institution access required." }, { status: 403, ...RESPONSE_INIT });
+  if (!documentsEnabledForOrganization(context.activeOrganization.organizationId))
+    return Response.json({ error: "Documents are not commissioned for this institution." }, { status: 403, ...RESPONSE_INIT });
 
   const userClient = await createClient();
   const { data, error } = await userClient.rpc("authorize_clean_document_access", {

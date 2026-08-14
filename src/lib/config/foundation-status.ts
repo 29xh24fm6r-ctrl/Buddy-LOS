@@ -41,3 +41,19 @@ export function writesEnabledForOrganization(
 
   return allowedOrganizations.has(organizationId.trim().toLowerCase());
 }
+
+export function documentsEnabledForOrganization(
+  organizationId: string,
+  env: Record<string, string | undefined> = process.env,
+): boolean {
+  if (!readFoundationStatus(env).documentsEnabled) return false;
+
+  const allowedOrganizations = new Set(
+    (env.BUDDY_DOCUMENTS_ORGANIZATION_IDS ?? "")
+      .split(",")
+      .map((value) => value.trim().toLowerCase())
+      .filter(Boolean),
+  );
+
+  return allowedOrganizations.has(organizationId.trim().toLowerCase());
+}

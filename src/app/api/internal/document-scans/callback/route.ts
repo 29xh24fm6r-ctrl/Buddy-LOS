@@ -1,4 +1,5 @@
 import { parseDocumentScanCallback, verifyScannerSignature } from "@/lib/los/document-scan-callback";
+import { documentsEnabledForOrganization } from "@/lib/config/foundation-status";
 import { sha256Hex } from "@/lib/los/document-upload";
 import { createAdminClient } from "@/lib/supabase/admin";
 
@@ -21,6 +22,8 @@ export async function POST(request: Request) {
   let callback;
   try { callback = parseDocumentScanCallback(JSON.parse(rawBody)); } catch { callback = null; }
   if (!callback) return Response.json({ error: "Invalid scan result." }, { status: 400, ...RESPONSE_INIT });
+  if (!documentsEnabledForOrganization(callback.organizationId))
+    return Response.json({ error: "Documents are not commissioned for this institution." }, { status: 403, ...RESPONSE_INIT });
 
   let admin;
   try { admin = createAdminClient(); } catch {
