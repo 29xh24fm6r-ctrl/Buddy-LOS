@@ -36,10 +36,21 @@ const configuredEnv = {
   BUDDY_DOCUMENT_SCANNER_CALLBACK_URL: "https://buddy.example/api/internal/document-scans/callback",
   BUDDY_DOCUMENT_SCANNER_WEBHOOK_SECRET: "webhook-secret-at-least-thirty-two-characters",
   CRON_SECRET: "cron-secret-at-least-thirty-two-characters",
+  BUDDY_DOCUMENTS_ORGANIZATION_IDS: "9e3f6b9b-7116-41e7-8be4-a0ff97d4bcd7",
 };
 
 const completeEvidence = {
-  release: { gitSha: "1234567890abcdef", vercelDeploymentId: "dpl_123", supabaseMigrationHead: "20260812000000" },
+  release: { gitSha: "1234567890abcdef1234567890abcdef12345678", vercelDeploymentId: "dpl_123", supabaseMigrationHead: "20260812000000" },
+  scope: { organizationId: "9e3f6b9b-7116-41e7-8be4-a0ff97d4bcd7", internalOnly: true },
+  scannerCertification: {
+    gitSha: "7849ee0322ef13ad4d6917c80f3fb5dc48251c8c",
+    imageDigest: `sha256:${"a".repeat(64)}`,
+    service: "buddy-los-document-scanner-sandbox",
+    privateInvokerVerified: true,
+    cleanResult: "clean",
+    eicarResult: "rejected",
+    certifiedAt: "2026-08-14T18:35:37Z",
+  },
   providerApproval: { provider: "approved-provider", contractOwner: "security-owner", approvedAt: "2026-08-12T11:00:00Z" },
   liveTests: {
     tenantIsolation: true,
@@ -51,14 +62,19 @@ const completeEvidence = {
     auditRowsInspected: true,
     secretExposureScan: true,
   },
-  activation: { authorized: true, approvedBy: "release-owner", approvedAt: "2026-08-12T12:00:00Z" },
+  activation: {
+    authorized: true,
+    organizationId: "9e3f6b9b-7116-41e7-8be4-a0ff97d4bcd7",
+    approvedBy: "release-owner",
+    approvedAt: "2026-08-12T12:00:00Z",
+  },
 };
 
 describe("document commissioning preflight", () => {
   it("fails closed without configuration or evidence", () => {
     const result = evaluateDocumentCommissioning({ env: {}, evidence: null, root: installedRoot() });
     expect(result.decision).toBe("HOLD");
-    expect(result.stages).toEqual({ installed: true, configured: false, liveTested: false, activated: false });
+    expect(result.stages).toMatchObject({ installed: true, configured: false, liveTested: false, activated: false });
     expect(result.missingConfiguration).toContain("SUPABASE_SECRET_KEY");
   });
 
@@ -75,10 +91,58 @@ describe("document commissioning preflight", () => {
       BUDDY_DOCUMENT_UPLOADS_ENABLED: "true",
       BUDDY_DOCUMENT_SCANNING_ENABLED: "true",
       BUDDY_DOCUMENT_CLEANUP_ENABLED: "true",
+      BUDDY_DOCUMENT_OPERATIONS_ENABLED: "true",
       NEXT_PUBLIC_BUDDY_DOCUMENTS_ENABLED: "true",
     };
     const result = evaluateDocumentCommissioning({ env, evidence: completeEvidence, root: installedRoot() });
     expect(result.decision).toBe("GO");
-    expect(result.stages).toEqual({ installed: true, configured: true, liveTested: true, activated: true });
+    expect(result.stages).toMatchObject({ installed: true, configured: true, scannerCertified: true, scoped: true, liveTested: true, activated: true });
+  });
+
+  it("returns readiness without treating certification as activation authority", () => {
+    const evidence = { ...completeEvidence, activation: { authorized: false, organizationId: "", approvedBy: "", approvedAt: "" } };
+    const result = evaluateDocumentCommissioning({ env: configuredEnv, evidence, root: installedRoot() });
+    expect(result.decision).toBe("READY_FOR_CONTROLLED_ACTIVATION");
+    expect(result.enabledGates).toEqual([]);
+    expect(result.stages).toMatchObject({ liveTested: true, activated: false });
+  });
+
+  it("fails closed for a second organization or a mismatched certified tenant", () => {
+    const env = {
+      ...configuredEnv,
+      BUDDY_DOCUMENTS_ORGANIZATION_IDS: `${configuredEnv.BUDDY_DOCUMENTS_ORGANIZATION_IDS},00000000-0000-4000-8000-000000000099`,
+    };
+    const result = evaluateDocumentCommissioning({ env, evidence: completeEvidence, root: installedRoot() });
+    expect(result.decision).toBe("HOLD");
+    expect(result.stages.scoped).toBe(false);
+  });
+
+  it("fails closed when only some document gates are enabled", () => {
+    const result = evaluateDocumentCommissioning({
+      env: { ...configuredEnv, BUDDY_DOCUMENT_SCANNING_ENABLED: "true" },
+      evidence: completeEvidence,
+      root: installedRoot(),
+    });
+    expect(result.decision).toBe("HOLD");
+    expect(result.holdReasons.join(" ")).toContain("partially enabled");
+  });
+
+  it("rejects activation approval for another organization", () => {
+    const env = {
+      ...configuredEnv,
+      BUDDY_DOCUMENT_DOWNLOADS_ENABLED: "true",
+      BUDDY_DOCUMENT_UPLOADS_ENABLED: "true",
+      BUDDY_DOCUMENT_SCANNING_ENABLED: "true",
+      BUDDY_DOCUMENT_CLEANUP_ENABLED: "true",
+      BUDDY_DOCUMENT_OPERATIONS_ENABLED: "true",
+      NEXT_PUBLIC_BUDDY_DOCUMENTS_ENABLED: "true",
+    };
+    const evidence = {
+      ...completeEvidence,
+      activation: { ...completeEvidence.activation, organizationId: "00000000-0000-4000-8000-000000000099" },
+    };
+    const result = evaluateDocumentCommissioning({ env, evidence, root: installedRoot() });
+    expect(result.decision).toBe("HOLD");
+    expect(result.stages.activated).toBe(false);
   });
 });

@@ -1,8 +1,21 @@
 {
   "release": {
-    "gitSha": "",
+    "gitSha": "0000000000000000000000000000000000000000",
     "vercelDeploymentId": "",
     "supabaseMigrationHead": ""
+  },
+  "scope": {
+    "organizationId": "00000000-0000-4000-8000-000000000000",
+    "internalOnly": true
+  },
+  "scannerCertification": {
+    "gitSha": "0000000000000000000000000000000000000000",
+    "imageDigest": "sha256:0000000000000000000000000000000000000000000000000000000000000000",
+    "service": "",
+    "privateInvokerVerified": false,
+    "cleanResult": "not_run",
+    "eicarResult": "not_run",
+    "certifiedAt": ""
   },
   "providerApproval": {
     "provider": "",
@@ -21,6 +34,7 @@
   },
   "activation": {
     "authorized": false,
+    "organizationId": "",
     "approvedBy": "",
     "approvedAt": ""
   }
