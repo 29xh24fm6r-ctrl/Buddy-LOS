@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { readFoundationStatus, writesEnabledForOrganization } from "./foundation-status";
+import { documentsEnabledForOrganization, readFoundationStatus, writesEnabledForOrganization } from "./foundation-status";
 
 describe("readFoundationStatus", () => {
   it("fails closed when configuration is absent", () => {
@@ -41,6 +41,22 @@ describe("readFoundationStatus", () => {
     expect(writesEnabledForOrganization("9e3f6b9b-7116-41e7-8be4-a0ff97d4bcd7", {
       ...env,
       NEXT_PUBLIC_BUDDY_WRITES_ENABLED: "false",
+    })).toBe(false);
+  });
+
+  it("limits documents to explicitly allowed organizations", () => {
+    const env = {
+      NEXT_PUBLIC_SUPABASE_URL: "https://example.supabase.co",
+      NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY: "publishable-key",
+      NEXT_PUBLIC_BUDDY_DOCUMENTS_ENABLED: "true",
+      BUDDY_DOCUMENTS_ORGANIZATION_IDS: " 9E3F6B9B-7116-41E7-8BE4-A0FF97D4BCD7 ",
+    };
+
+    expect(documentsEnabledForOrganization("9e3f6b9b-7116-41e7-8be4-a0ff97d4bcd7", env)).toBe(true);
+    expect(documentsEnabledForOrganization("00000000-0000-4000-8000-000000000099", env)).toBe(false);
+    expect(documentsEnabledForOrganization("9e3f6b9b-7116-41e7-8be4-a0ff97d4bcd7", {
+      ...env,
+      NEXT_PUBLIC_BUDDY_DOCUMENTS_ENABLED: "false",
     })).toBe(false);
   });
 });
