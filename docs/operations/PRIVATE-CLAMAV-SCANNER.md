@@ -4,7 +4,7 @@ The Buddy scanner is a separately deployable, private Cloud Run service. It rece
 
 ## Deployment boundary
 
-- Build `services/document-scanner/Dockerfile` into the private Artifact Registry.
+- Build `services/document-scanner/Dockerfile` into the private Artifact Registry. The image copies the signature database from ClamAV's preloaded `1.4` image so builds never depend on an unbounded live `freshclam` download.
 - Deploy with `--no-allow-unauthenticated`, a dedicated runtime service account, at least 2 GiB memory, `--no-cpu-throttling`, and `--min-instances=1` during certification.
 - Grant `roles/run.invoker` only to the dedicated Buddy LOS scanner-invoker service account.
 - Store `SCANNER_API_KEY` and `SCANNER_WEBHOOK_SECRET` in Secret Manager.
