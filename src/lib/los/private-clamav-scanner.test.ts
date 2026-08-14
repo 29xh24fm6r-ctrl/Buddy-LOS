@@ -24,6 +24,8 @@ describe("private ClamAV scanner service contract", () => {
     expect(server).toContain('exec("clamdscan"');
     expect(server).toContain("SCANNER_CALLBACK_ORIGIN");
     expect(server).toContain("allowedMimeTypes.has(mimeType)");
+    expect(server).toContain("{ runId, result: outcome.result }");
+    expect(server).not.toContain("{ runId, detail:");
     expect(server).not.toContain("console.log");
   });
 });

@@ -14,7 +14,7 @@ The scan worker sends one HTTPS `POST` multipart request. Redirects are rejected
 - `provider`, `organizationId`, `documentId`, `sha256`, `mimeType`, and the approved HTTPS `callbackUrl`
 - `callbackAuthentication=hmac-sha256-v1`
 
-The provider must return a JSON response no larger than 4 KiB containing a stable `runId` between 2 and 200 characters. HTTP `408`, `429`, and `5xx` responses are retryable. Other non-success responses, malformed JSON, unsupported media types, oversized responses, and invalid run identities are terminal for that job and remain quarantined for operator review. Response bodies are never copied into customer-visible or durable error messages.
+The provider must return a JSON response no larger than 4 KiB containing a stable `runId` between 2 and 200 characters. An authenticated provider may also return the bounded verdict `result` (`clean` or `rejected`) so an isolated sandbox can be certified while Buddy's callback and document feature gates remain disabled. This response is operational evidence only: it does not authorize a download or replace the signed callback and database transition. HTTP `408`, `429`, and `5xx` responses are retryable. Other non-success responses, malformed JSON, unsupported media types, oversized responses, and invalid run identities are terminal for that job and remain quarantined for operator review. Response bodies are never copied into customer-visible or durable error messages.
 
 ## Callback contract
 
