@@ -85,7 +85,7 @@ export function DealDocumentWorkspace({
           const response = await fetch(`/api/deals/${dealId}/documents/uploads/prepare`, {
             method: "POST",
             headers: { "Content-Type": "application/json", "x-buddy-request": "document-upload" },
-            body: JSON.stringify({ fileName: file.name, mimeType: file.type, sizeBytes: file.size, requirementId: requirement.id, logicalDocumentId: latest?.logicalDocumentId ?? null, idempotencyKey: `workspace-upload-${crypto.randomUUID()}` }),
+            body: JSON.stringify({ fileName: file.name, mimeType: file.type, sizeBytes: file.size, requirementId: requirement.id === "unassigned" ? null : requirement.id, logicalDocumentId: latest?.logicalDocumentId ?? null, idempotencyKey: `workspace-upload-${crypto.randomUUID()}` }),
           });
           const result = parseUploadPreparation(await response.json());
           if (!response.ok || !result) throw new Error("The upload could not be authorized.");
@@ -118,7 +118,7 @@ export function DealDocumentWorkspace({
         <span>{requirements.length} requirements Â· {versions.length} file versions</span>
       </div>
       <p className="workspace-explainer">Requirements are derived and synchronized automatically. There is no separate manual Generate step.</p>
-      {requirements.length === 0 && unassigned.length === 0 ? (
+      {requirements.length === 0 && unassigned.length === 0 && !uploadsEnabled ? (
         <div className="honest-empty"><strong>No document requirements or files recorded.</strong><p>An empty workspace is not treated as complete.</p></div>
       ) : (
         <div className="document-requirement-list">
@@ -135,12 +135,12 @@ export function DealDocumentWorkspace({
               onUpload={requestUpload}
             />
           ))}
-          {unassigned.length > 0 && (
+          {(unassigned.length > 0 || uploadsEnabled) && (
             <DocumentRequirementCard
               requirement={{ id: "unassigned", label: "Other deal documents", category: "other", status: "received", required: false, dueDate: null }}
               versions={unassigned}
               downloadsEnabled={downloadsEnabled}
-              uploadsEnabled={false}
+              uploadsEnabled={uploadsEnabled}
               download={download}
               upload={upload}
               onDownload={requestDownload}
