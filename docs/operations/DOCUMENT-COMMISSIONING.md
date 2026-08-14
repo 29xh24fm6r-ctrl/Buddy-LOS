@@ -14,6 +14,14 @@ npm run verify:document-commissioning
 npm run verify:document-commissioning -- --evidence docs/operations/document-commissioning-evidence.example.json
 ```
 
+The consolidated internal factory command is an alias with the same evaluator:
+
+```bash
+npm run verify:document-lifecycle-factory -- --evidence /secure/path/document-evidence.json
+```
+
+See `docs/operations/INTERNAL-DOCUMENT-LIFECYCLE-FACTORY.md` for the exact single-organization evidence, readiness, activation, and rollback contract. `READY_FOR_CONTROLLED_ACTIVATION` means evidence is complete while every feature remains off; it is not a production activation.
+
 Exit code `2` means `HOLD`; this is expected until production commissioning is complete. The command reports variable names and failed gates, never secret values.
 
 ## Production sequence

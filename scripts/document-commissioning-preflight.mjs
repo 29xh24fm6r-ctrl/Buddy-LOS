@@ -23,8 +23,23 @@ const REQUIRED_LIVE_TESTS = [
   "secretExposureScan",
 ];
 
+const DOCUMENT_GATES = [
+  "BUDDY_DOCUMENT_DOWNLOADS_ENABLED",
+  "BUDDY_DOCUMENT_UPLOADS_ENABLED",
+  "BUDDY_DOCUMENT_SCANNING_ENABLED",
+  "BUDDY_DOCUMENT_CLEANUP_ENABLED",
+  "BUDDY_DOCUMENT_OPERATIONS_ENABLED",
+  "NEXT_PUBLIC_BUDDY_DOCUMENTS_ENABLED",
+];
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const SHA256 = /^[0-9a-f]{64}$/i;
+const GIT_SHA = /^[0-9a-f]{40}$/i;
+
 const enabled = (value) => value === "true";
 const present = (value, minimum = 1) => (value?.trim().length ?? 0) >= minimum;
+const timestamp = (value) => present(value) && Number.isFinite(Date.parse(value));
+const exactly = (left, right) => left?.trim().toLowerCase() === right?.trim().toLowerCase();
 
 function secureUrl(value) {
   try {
@@ -58,20 +73,33 @@ export function evaluateDocumentCommissioning({
   const providerApprovalComplete = present(evidence?.providerApproval?.provider)
     && present(evidence?.providerApproval?.contractOwner)
     && present(evidence?.providerApproval?.approvedAt);
-  const evidenceIdentityComplete = present(evidence?.release?.gitSha, 7)
+  const evidenceIdentityComplete = GIT_SHA.test(evidence?.release?.gitSha ?? "")
     && present(evidence?.release?.vercelDeploymentId)
     && present(evidence?.release?.supabaseMigrationHead);
-  const liveTested = configured && providerApprovalComplete && evidenceIdentityComplete && failedLiveTests.length === 0;
-  const gatesEnabled = [
-    "BUDDY_DOCUMENT_DOWNLOADS_ENABLED",
-    "BUDDY_DOCUMENT_UPLOADS_ENABLED",
-    "BUDDY_DOCUMENT_SCANNING_ENABLED",
-    "BUDDY_DOCUMENT_CLEANUP_ENABLED",
-    "NEXT_PUBLIC_BUDDY_DOCUMENTS_ENABLED",
-  ].every((key) => enabled(env[key]));
+  const certifiedOrganizationId = evidence?.scope?.organizationId ?? "";
+  const configuredOrganizations = (env.BUDDY_DOCUMENTS_ORGANIZATION_IDS ?? "")
+    .split(",").map((value) => value.trim()).filter(Boolean);
+  const scopeComplete = UUID.test(certifiedOrganizationId)
+    && configuredOrganizations.length === 1
+    && exactly(configuredOrganizations[0], certifiedOrganizationId)
+    && evidence?.scope?.internalOnly === true;
+  const scannerCertificationComplete = SHA256.test(evidence?.scannerCertification?.imageDigest?.replace(/^sha256:/, "") ?? "")
+    && GIT_SHA.test(evidence?.scannerCertification?.gitSha ?? "")
+    && present(evidence?.scannerCertification?.service)
+    && evidence?.scannerCertification?.privateInvokerVerified === true
+    && evidence?.scannerCertification?.cleanResult === "clean"
+    && evidence?.scannerCertification?.eicarResult === "rejected"
+    && timestamp(evidence?.scannerCertification?.certifiedAt);
+  const liveTested = configured && providerApprovalComplete && evidenceIdentityComplete
+    && scopeComplete && scannerCertificationComplete && failedLiveTests.length === 0;
+  const enabledGates = DOCUMENT_GATES.filter((key) => enabled(env[key]));
+  const gatesEnabled = enabledGates.length === DOCUMENT_GATES.length;
+  const gatesDisabled = enabledGates.length === 0;
   const approvalComplete = evidence?.activation?.authorized === true
     && present(evidence?.activation?.approvedBy)
-    && present(evidence?.activation?.approvedAt);
+    && present(evidence?.activation?.approvedAt)
+    && exactly(evidence?.activation?.organizationId, certifiedOrganizationId);
+  const readyForControlledActivation = installed && liveTested && gatesDisabled && !approvalComplete;
   const activated = installed && liveTested && gatesEnabled && approvalComplete;
 
   const holdReasons = [];
@@ -79,13 +107,23 @@ export function evaluateDocumentCommissioning({
   if (!configured) holdReasons.push(`Missing or invalid production configuration: ${missingConfiguration.join(", ")}`);
   if (!providerApprovalComplete) holdReasons.push("Scanner provider and contract approval evidence is incomplete.");
   if (!evidenceIdentityComplete) holdReasons.push("Release identity evidence is incomplete.");
+  if (!scopeComplete) holdReasons.push("Exactly one internal organization must match the certified scope.");
+  if (!scannerCertificationComplete) holdReasons.push("Private scanner certification evidence is incomplete or invalid.");
   if (failedLiveTests.length) holdReasons.push(`Live tests are incomplete: ${failedLiveTests.join(", ")}`);
-  if (!gatesEnabled) holdReasons.push("One or more document activation gates remain off.");
-  if (!approvalComplete) holdReasons.push("Named activation approval is absent.");
+  if (!gatesDisabled && !gatesEnabled) holdReasons.push(`Document gates are partially enabled: ${enabledGates.join(", ")}.`);
+  if (gatesEnabled && !approvalComplete) holdReasons.push("Document gates are enabled without matching named activation approval.");
+  if (approvalComplete && !gatesEnabled) holdReasons.push("Activation approval is recorded but all document gates are not enabled.");
+
+  const decision = activated ? "GO"
+    : readyForControlledActivation ? "READY_FOR_CONTROLLED_ACTIVATION"
+      : "HOLD";
 
   return {
-    decision: activated ? "GO" : "HOLD",
-    stages: { installed, configured, liveTested, activated },
+    contractVersion: "buddy-document-lifecycle-factory.v1",
+    decision,
+    stages: { installed, configured, scannerCertified: scannerCertificationComplete, scoped: scopeComplete, liveTested, activated },
+    certifiedOrganizationId: scopeComplete ? certifiedOrganizationId : null,
+    enabledGates,
     missingArtifacts,
     missingConfiguration,
     failedLiveTests,
@@ -103,5 +141,5 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const evidence = evidenceFlag >= 0 ? loadEvidence(process.argv[evidenceFlag + 1]) : null;
   const result = evaluateDocumentCommissioning({ evidence });
   process.stdout.write(`${JSON.stringify(result, null, 2)}\n`);
-  process.exitCode = result.decision === "GO" ? 0 : 2;
+  process.exitCode = result.decision === "HOLD" ? 2 : 0;
 }
