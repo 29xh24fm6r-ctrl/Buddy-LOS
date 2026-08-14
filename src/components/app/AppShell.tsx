@@ -32,6 +32,9 @@ export function AppShell({ context, surface, children }: { context: ReadyContext
             <span className="los-brand-mark"><LosIcon name="building" /></span>
             <span><strong>Lending OS</strong><small>{activeOrganization.organizationName}</small></span>
           </Link>
+          <div className="desktop-nav-content">
+            <SidebarNavigationContent context={context} displayName={displayName} initials={initials} surface={surface} surfaces={surfaces} />
+          </div>
           <details className="mobile-nav-disclosure">
             <summary>
               <span className="mobile-nav-menu-icon" aria-hidden="true">☰</span>
@@ -39,24 +42,32 @@ export function AppShell({ context, surface, children }: { context: ReadyContext
               <span className="mobile-nav-chevron" aria-hidden="true">⌄</span>
             </summary>
             <div className="mobile-nav-content">
-              <nav className="workspace-menu" aria-label="Workspace switcher">
-                <p>Workspace</p>
-                {surfaces.map((item) => (
-                  <Link href={workspaceSurfaceHref(item)} aria-current={item === surface ? "page" : undefined} key={item}>{workspaceSurfaceLabels[item]}</Link>
-                ))}
-              </nav>
-              <WorkspaceNavigation surface={surface} />
-              <div className="sidebar-user">
-                <span className="user-avatar">{initials || "BU"}</span>
-                <span><strong>{displayName}</strong><small>{context.email ?? activeOrganization.role.replaceAll("_", " ")}</small></span>
-                <form action={signOut}><button type="submit" aria-label="Sign out"><LosIcon name="arrow" /></button></form>
-              </div>
+              <SidebarNavigationContent context={context} displayName={displayName} initials={initials} surface={surface} surfaces={surfaces} />
             </div>
           </details>
         </aside>
         <main id="workspace-content" className="app-main" tabIndex={-1}>{children}</main>
       </div>
     </div>
+  );
+}
+
+function SidebarNavigationContent({ context, displayName, initials, surface, surfaces }: { context: ReadyContext; displayName: string; initials: string; surface: WorkspaceSurface; surfaces: readonly WorkspaceSurface[] }) {
+  return (
+    <>
+      <nav className="workspace-menu" aria-label="Workspace switcher">
+        <p>Workspace</p>
+        {surfaces.map((item) => (
+          <Link href={workspaceSurfaceHref(item)} aria-current={item === surface ? "page" : undefined} key={item}>{workspaceSurfaceLabels[item]}</Link>
+        ))}
+      </nav>
+      <WorkspaceNavigation surface={surface} />
+      <div className="sidebar-user">
+        <span className="user-avatar">{initials || "BU"}</span>
+        <span><strong>{displayName}</strong><small>{context.email ?? context.activeOrganization.role.replaceAll("_", " ")}</small></span>
+        <form action={signOut}><button type="submit" aria-label="Sign out"><LosIcon name="arrow" /></button></form>
+      </div>
+    </>
   );
 }
 
