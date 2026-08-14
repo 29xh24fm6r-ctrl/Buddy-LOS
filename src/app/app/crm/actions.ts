@@ -3,15 +3,15 @@
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { loadAccessContext } from "@/lib/auth/session";
-import { readFoundationStatus } from "@/lib/config/foundation-status";
+import { writesEnabledForOrganization } from "@/lib/config/foundation-status";
 import { activityKinds, borrowerKinds, canOperateCore, contactKinds, dateTimeValue, enumValue, optionalText, requiredText, uuidValue } from "@/lib/los/core-operations";
 import { createClient } from "@/lib/supabase/server";
 
 async function commandContext() {
-  if (!readFoundationStatus().writesEnabled) redirect("/app/crm?error=not-enabled");
   const context = await loadAccessContext();
   if (context.kind === "unauthenticated") redirect("/login");
-  if (context.kind !== "ready" || !canOperateCore(context.activeOrganization.role)) redirect("/app/crm?error=not-authorized");
+  if (context.kind !== "ready" || !writesEnabledForOrganization(context.activeOrganization.organizationId)) redirect("/app/crm?error=not-enabled");
+  if (!canOperateCore(context.activeOrganization.role)) redirect("/app/crm?error=not-authorized");
   return context;
 }
 
