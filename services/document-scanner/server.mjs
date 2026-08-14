@@ -60,7 +60,10 @@ async function scan(file) {
   try {
     await writeFile(path, new Uint8Array(await file.arrayBuffer()), { mode: 0o600 });
     try {
-      const { stdout } = await exec("clamdscan", ["--fdpass", "--no-summary", path], { timeout: 15_000, maxBuffer: 16_384 });
+      // Run the engine directly. Cloud Run does not need a separate clamd
+      // daemon for this bounded, low-concurrency private service, and avoiding
+      // its local socket removes a deployment-specific failure point.
+      const { stdout } = await exec("clamscan", ["--no-summary", path], { timeout: 60_000, maxBuffer: 16_384 });
       return { result: "clean", detail: { signature: null, output: stdout.trim().slice(0, 200) } };
     } catch (error) {
       if (error && typeof error === "object" && error.code === 1)
