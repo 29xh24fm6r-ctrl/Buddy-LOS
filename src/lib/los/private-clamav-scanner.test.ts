@@ -13,7 +13,9 @@ describe("private ClamAV scanner service contract", () => {
     expect(dockerfile).toContain("clamav/clamav:1.4-debian13-slim AS clamav-signatures");
     expect(dockerfile).toContain("COPY --from=clamav-signatures");
     expect(dockerfile).not.toMatch(/RUN[\s\S]*?freshclam/);
-    expect(dockerfile).toContain("--chown=clamav:clamav --chmod=0444");
+    expect(dockerfile).toContain("COPY --chown=clamav:clamav package.json server.mjs ./");
+    expect(dockerfile).toContain("RUN chmod 0444 /app/package.json /app/server.mjs");
+    expect(dockerfile).not.toContain("COPY --chown=clamav:clamav --chmod");
     expect(dockerfile).toContain('CMD ["node", "/app/server.mjs"]');
   });
 
