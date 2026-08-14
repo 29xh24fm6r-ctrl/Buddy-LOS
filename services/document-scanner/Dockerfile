@@ -4,7 +4,7 @@ RUN apt-get update \
   && rm -rf /var/lib/apt/lists/* \
   && freshclam
 WORKDIR /app
-COPY package.json server.mjs ./
+COPY --chown=clamav:clamav --chmod=0444 package.json server.mjs ./
 RUN chown -R clamav:clamav /var/lib/clamav
 ENV PORT=8080 MAX_FILE_BYTES=26214400 SCANNER_PROVIDER=buddy-private-clamav SCANNER_ENABLED=false SCANNER_CALLBACK_ORIGIN=
 EXPOSE 8080

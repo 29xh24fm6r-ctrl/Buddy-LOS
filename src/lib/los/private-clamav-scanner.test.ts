@@ -11,6 +11,7 @@ describe("private ClamAV scanner service contract", () => {
     expect(dockerfile).toMatch(/\bSCANNER_ENABLED=false\b/);
     expect(dockerfile).toContain("USER clamav");
     expect(dockerfile).toContain("freshclam");
+    expect(dockerfile).toContain("--chown=clamav:clamav --chmod=0444");
     expect(dockerfile).toContain('CMD ["node", "/app/server.mjs"]');
   });
 
