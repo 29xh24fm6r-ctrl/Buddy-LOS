@@ -17,11 +17,18 @@ This factory is the single release gate for commissioning Buddy LOS private docu
 3. Bind evidence to the exact Buddy LOS Git SHA, Vercel deployment, Supabase migration head, scanner Git SHA, scanner image digest, private service name, and certification time.
 4. Prove the private invoker boundary plus clean and EICAR verdicts.
 5. Run the remaining lifecycle tests against disposable objects owned by the internal organization.
-6. Keep every document gate off and run:
+6. Keep every document gate explicitly set to `false` and run the single factory command. It binds the evidence to the checked-out Git SHA, exact Vercel deployment, repository migration head, and supplied live Supabase migration head:
 
    ```bash
-   npm run verify:document-lifecycle-factory -- --evidence /secure/path/document-evidence.json
+   npm run factory:document-lifecycle -- \
+     --env-file /secure/path/production.env \
+     --evidence /secure/path/document-evidence.json \
+     --vercel-deployment-id dpl_exact \
+     --supabase-migration-head 20260814141824 \
+     --output /secure/path/document-factory-report.json
    ```
+
+   The command never prints secret values and never changes Vercel, Supabase, Cloud Run, feature gates, or production data. A missing gate is a `HOLD`; absence is never treated as safely disabled.
 
 7. A `READY_FOR_CONTROLLED_ACTIVATION` result permits an owner to review an activation change. It is not activation authority.
 8. Only after named approval for the same organization may all gates be enabled together and the factory rerun for `GO`.

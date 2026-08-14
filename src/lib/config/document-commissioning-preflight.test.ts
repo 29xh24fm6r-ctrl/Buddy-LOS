@@ -37,6 +37,12 @@ const configuredEnv = {
   BUDDY_DOCUMENT_SCANNER_WEBHOOK_SECRET: "webhook-secret-at-least-thirty-two-characters",
   CRON_SECRET: "cron-secret-at-least-thirty-two-characters",
   BUDDY_DOCUMENTS_ORGANIZATION_IDS: "9e3f6b9b-7116-41e7-8be4-a0ff97d4bcd7",
+  BUDDY_DOCUMENT_DOWNLOADS_ENABLED: "false",
+  BUDDY_DOCUMENT_UPLOADS_ENABLED: "false",
+  BUDDY_DOCUMENT_SCANNING_ENABLED: "false",
+  BUDDY_DOCUMENT_CLEANUP_ENABLED: "false",
+  BUDDY_DOCUMENT_OPERATIONS_ENABLED: "false",
+  NEXT_PUBLIC_BUDDY_DOCUMENTS_ENABLED: "false",
 };
 
 const completeEvidence = {
@@ -82,6 +88,24 @@ describe("document commissioning preflight", () => {
     const result = evaluateDocumentCommissioning({ env: configuredEnv, evidence: null, root: installedRoot() });
     expect(result.stages).toMatchObject({ configured: true, liveTested: false, activated: false });
     expect(result.decision).toBe("HOLD");
+  });
+
+  it("requires every feature gate to be explicitly configured", () => {
+    const { NEXT_PUBLIC_BUDDY_DOCUMENTS_ENABLED: _missing, ...env } = configuredEnv;
+    const result = evaluateDocumentCommissioning({ env, evidence: completeEvidence, root: installedRoot() });
+    expect(result.decision).toBe("HOLD");
+    expect(result.missingConfiguration).toContain("NEXT_PUBLIC_BUDDY_DOCUMENTS_ENABLED");
+  });
+
+  it("binds certification to exact release identities", () => {
+    const result = evaluateDocumentCommissioning({
+      env: configuredEnv,
+      evidence: completeEvidence,
+      root: installedRoot(),
+      expectedRelease: { ...completeEvidence.release, vercelDeploymentId: "dpl_other" },
+    });
+    expect(result.decision).toBe("HOLD");
+    expect(result.releaseBindingComplete).toBe(false);
   });
 
   it("requires every gate and named approval for GO", () => {
