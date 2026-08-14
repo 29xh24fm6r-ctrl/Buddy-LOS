@@ -19,7 +19,8 @@
     "factory:document-lifecycle": "node scripts/document-lifecycle-factory-runner.mjs",
     "certify:document-lifecycle": "node scripts/document-lifecycle-certification-harness.mjs",
     "verify:release-contract": "node scripts/verify-release-contract.mjs",
-    "check": "npm run verify:source-baseline && npm run verify:release-contract && npm run lint && npm run typecheck && npm run test && npm run build"
+    "verify:golden-loan-factory": "node scripts/verify-golden-loan-factory.mjs",
+    "check": "npm run verify:source-baseline && npm run verify:release-contract && npm run verify:golden-loan-factory && npm run lint && npm run typecheck && npm run test && npm run build"
   },
   "dependencies": {
     "@supabase/ssr": "0.12.4",

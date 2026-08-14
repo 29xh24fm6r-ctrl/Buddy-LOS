@@ -33,6 +33,15 @@ export type DealDetail = DealSummary & {
   documentVersions: DealDocumentVersion[];
 };
 export type UnderwritingWorkspaceRecord = { moduleAccess: ModuleAccessDecision; latestJob: UnderwritingJobSummary | null };
+export type GoldenLoanWorkspaceRecord = {
+  memo: { id:string; status:string; certifiedAt:string|null } | null;
+  decision: { id:string; decision:string; decidedAt:string } | null;
+  conditions: { id:string; description:string; status:string }[];
+  closing: { id:string; title:string; status:string; required:boolean }[];
+  funding: { id:string; amount:number; authorizedAt:string } | null;
+  servicing: { id:string; accountNumber:string; balance:number; nextReviewDate:string|null } | null;
+  covenants: { id:string; title:string; status:string; dueDate:string }[];
+};
 export type BorrowerDetail = {
   id: string; legalName: string; borrowerKind: string; externalReference: string | null;
   relationshipStartDate: string | null; contacts: { id: string; kind: string; label: string | null; value: string; isPrimary: boolean; isVerified: boolean; restrictedUse: boolean }[];
@@ -167,6 +176,22 @@ export async function loadUnderwritingWorkspace(context: ReadyContext, dealId: s
     moduleAccess: decideModuleAccess("underwriting", entitlements),
     latestJob: job ? { id: job.id, status: job.status, createdAt: job.created_at, updatedAt: job.updated_at, completedAt: job.completed_at, failureCode: job.failure_code } : null,
   };
+}
+
+export async function loadGoldenLoanWorkspace(context:ReadyContext,dealId:string):Promise<GoldenLoanWorkspaceRecord>{
+  const s=await createClient(),organizationId=context.activeOrganization.organizationId;
+  const[{data:memo,error:memoError},{data:decision,error:decisionError},{data:conditions,error:conditionError},{data:closing,error:closingError},{data:funding,error:fundingError},{data:servicing,error:servicingError}]=await Promise.all([
+    s.from("credit_memos").select("id,status,certified_at").eq("organization_id",organizationId).eq("deal_id",dealId).order("created_at",{ascending:false}).limit(1).maybeSingle(),
+    s.from("credit_decisions").select("id,decision,decided_at").eq("organization_id",organizationId).eq("deal_id",dealId).order("decided_at",{ascending:false}).limit(1).maybeSingle(),
+    s.from("credit_conditions").select("id,description,status").eq("organization_id",organizationId).eq("deal_id",dealId).order("created_at"),
+    s.from("closing_requirements").select("id,title,status,is_required").eq("organization_id",organizationId).eq("deal_id",dealId).order("created_at"),
+    s.from("funding_authorizations").select("id,amount,authorized_at").eq("organization_id",organizationId).eq("deal_id",dealId).maybeSingle(),
+    s.from("servicing_accounts").select("id,account_number,principal_balance,next_review_date").eq("organization_id",organizationId).eq("deal_id",dealId).maybeSingle(),
+  ]);
+  if(memoError||decisionError||conditionError||closingError||fundingError||servicingError)throw new Error("Unable to load the governed loan lifecycle.");
+  let covenants:{id:string;title:string;status:string;due_date:string}[]=[];
+  if(servicing){const{data,error}=await s.from("portfolio_covenants").select("id,title,status,due_date").eq("organization_id",organizationId).eq("servicing_account_id",servicing.id).order("due_date");if(error)throw new Error("Unable to load portfolio covenants.");covenants=(data??[]) as typeof covenants;}
+  return{memo:memo?{id:memo.id,status:memo.status,certifiedAt:memo.certified_at}:null,decision:decision?{id:decision.id,decision:decision.decision,decidedAt:decision.decided_at}:null,conditions:(conditions??[]).map(x=>({id:x.id,description:x.description,status:x.status})),closing:(closing??[]).map(x=>({id:x.id,title:x.title,status:x.status,required:x.is_required})),funding:funding?{id:funding.id,amount:Number(funding.amount),authorizedAt:funding.authorized_at}:null,servicing:servicing?{id:servicing.id,accountNumber:servicing.account_number,balance:Number(servicing.principal_balance),nextReviewDate:servicing.next_review_date}:null,covenants:covenants.map(x=>({id:x.id,title:x.title,status:x.status,dueDate:x.due_date}))};
 }
 
 export async function loadBorrowerDetail(context: ReadyContext, borrowerId: string): Promise<BorrowerDetail | null> {
