@@ -19,6 +19,9 @@ export function parseDocumentScanRecoveryInput(value: unknown): DocumentScanReco
 export function safeDocumentScanFailure(value: string | null): string | null {
   if (!value) return null;
   const normalized = value.toLowerCase();
+  if (normalized.includes("cloud run scanner identity")) return "Cloud Run scanner identity was rejected.";
+  if (normalized.includes("cloud run scanner invocation")) return "Cloud Run scanner invocation was rejected.";
+  if (normalized.includes("scanner api authentication")) return "Scanner API authentication was rejected.";
   if (normalized.includes("401") || normalized.includes("unauthorized")) return "Scanner authentication was rejected.";
   if (normalized.includes("timeout")) return "Scanner submission timed out.";
   if (normalized.includes("stored document")) return "Stored document verification failed.";

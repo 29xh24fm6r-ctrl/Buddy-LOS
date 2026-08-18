@@ -3,11 +3,19 @@ import { parseScanSubmissionConfig, ScanSubmissionError, submitDocumentScan } fr
 
 describe("document scan submission configuration", () => {
   const valid = { BUDDY_DOCUMENT_SCANNER_ENDPOINT: "https://scanner.example/submit", BUDDY_DOCUMENT_SCANNER_CALLBACK_URL: "https://buddy.example/api/internal/document-scans/callback", BUDDY_DOCUMENT_SCANNER_API_KEY: "scanner-api-key-long-enough", BUDDY_DOCUMENT_SCANNER_PROVIDER: "example-scanner" };
-  it("accepts complete HTTPS-only server configuration", () => expect(parseScanSubmissionConfig(valid)).toEqual({ endpoint: "https://scanner.example/submit", callbackUrl: "https://buddy.example/api/internal/document-scans/callback", apiKey: "scanner-api-key-long-enough", provider: "example-scanner", googleServiceAccount: null }));
-  it("requires Google identity for private Cloud Run", () => {
+  it("accepts complete HTTPS-only server configuration", () => expect(parseScanSubmissionConfig(valid)).toEqual({ endpoint: "https://scanner.example/submit", audience: null, callbackUrl: "https://buddy.example/api/internal/document-scans/callback", apiKey: "scanner-api-key-long-enough", provider: "example-scanner", googleServiceAccount: null }));
+  it("requires Google identity and an explicit canonical audience for private Cloud Run", () => {
     const privateEnv = { ...valid, BUDDY_DOCUMENT_SCANNER_ENDPOINT: "https://buddy-scanner.us-west1.run.app/v1/scan" };
+    const serviceAccount = JSON.stringify({ client_email: "los-invoker@example.iam.gserviceaccount.com", private_key: "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----" });
     expect(parseScanSubmissionConfig(privateEnv)).toBeNull();
     expect(parseScanSubmissionConfig({ ...privateEnv, BUDDY_DOCUMENT_SCANNER_GOOGLE_SERVICE_ACCOUNT_JSON: "not-json" })).toBeNull();
+    expect(parseScanSubmissionConfig({ ...privateEnv, BUDDY_DOCUMENT_SCANNER_GOOGLE_SERVICE_ACCOUNT_JSON: serviceAccount })).toBeNull();
+    expect(parseScanSubmissionConfig({ ...privateEnv, BUDDY_DOCUMENT_SCANNER_GOOGLE_SERVICE_ACCOUNT_JSON: serviceAccount, BUDDY_DOCUMENT_SCANNER_AUDIENCE: "https://buddy-scanner.us-west1.run.app/not-an-origin" })).toBeNull();
+    expect(parseScanSubmissionConfig({
+      ...privateEnv,
+      BUDDY_DOCUMENT_SCANNER_GOOGLE_SERVICE_ACCOUNT_JSON: serviceAccount,
+      BUDDY_DOCUMENT_SCANNER_AUDIENCE: "https://buddy-scanner-123456.us-west1.run.app",
+    })).toMatchObject({ audience: "https://buddy-scanner-123456.us-west1.run.app" });
   });
   it("rejects insecure, incomplete, and short-secret configurations", () => {
     expect(parseScanSubmissionConfig({ ...valid, BUDDY_DOCUMENT_SCANNER_ENDPOINT: "http://scanner.example" })).toBeNull();
@@ -22,6 +30,7 @@ describe("provider-neutral document scan contract", () => {
     callbackUrl: "https://buddy.example/api/internal/document-scans/callback",
     apiKey: "scanner-api-key-long-enough",
     provider: "approved-scanner",
+    audience: null,
     googleServiceAccount: null,
   };
   const input = {
@@ -62,14 +71,15 @@ describe("provider-neutral document scan contract", () => {
   it("sends private Cloud Run identity separately from the scanner API key", async () => {
     const privateConfig = {
       ...config,
-      endpoint: "https://buddy-scanner.us-west1.run.app/v1/scan",
+      endpoint: "https://buddy-scanner-alias-uw.a.run.app/v1/scan",
+      audience: "https://buddy-scanner-123456.us-west1.run.app",
       googleServiceAccount: {
         client_email: "los-invoker@example.iam.gserviceaccount.com",
         private_key: "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----",
       },
     };
     const identity = vi.fn(async (_credentials: unknown, audience: string) => {
-      expect(audience).toBe("https://buddy-scanner.us-west1.run.app");
+      expect(audience).toBe("https://buddy-scanner-123456.us-west1.run.app");
       return "google-identity-token";
     });
     const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
@@ -88,12 +98,21 @@ describe("provider-neutral document scan contract", () => {
     [429, true],
     [503, true],
     [400, false],
-    [401, false],
   ])("classifies HTTP %i retryability without exposing response bodies", async (status, retryable) => {
     const fetchImpl = vi.fn(async () => new Response("provider secret detail", { status }));
     const failure = await submitDocumentScan(config, input, fetchImpl as typeof fetch).catch((caught) => caught);
     expect(failure).toBeInstanceOf(ScanSubmissionError);
     expect(failure).toMatchObject({ retryable });
+    expect((failure as Error).message).not.toContain("provider secret detail");
+  });
+
+  it.each([
+    [new Headers({ server: "Google Frontend", "www-authenticate": 'Bearer error="invalid_token"' }), "Cloud Run scanner identity authentication was rejected."],
+    [new Headers({ "content-type": "application/json" }), "Scanner API authentication was rejected."],
+  ])("distinguishes identity and API-key 401 failures without exposing bodies", async (headers, message) => {
+    const fetchImpl = vi.fn(async () => new Response("provider secret detail", { status: 401, headers }));
+    const failure = await submitDocumentScan(config, input, fetchImpl as typeof fetch).catch((caught) => caught);
+    expect(failure).toMatchObject({ message, retryable: false });
     expect((failure as Error).message).not.toContain("provider secret detail");
   });
 

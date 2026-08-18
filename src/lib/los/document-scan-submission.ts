@@ -6,18 +6,21 @@ const SUBMISSION_TIMEOUT_MS = 20_000;
 
 type ServiceAccountCredentials = { client_email: string; private_key: string; project_id?: string };
 type IdentityTokenProvider = (credentials: ServiceAccountCredentials, audience: string) => Promise<string>;
-export type ScanSubmissionConfig = { endpoint: string; apiKey: string; provider: string; callbackUrl: string; googleServiceAccount: ServiceAccountCredentials | null };
+export type ScanSubmissionConfig = { endpoint: string; audience: string | null; apiKey: string; provider: string; callbackUrl: string; googleServiceAccount: ServiceAccountCredentials | null };
 export class ScanSubmissionError extends Error { constructor(message: string, readonly retryable: boolean) { super(message); } }
 
 export function parseScanSubmissionConfig(env: Record<string, string | undefined>): ScanSubmissionConfig | null {
   const endpoint = secureUrl(env.BUDDY_DOCUMENT_SCANNER_ENDPOINT);
+  const audience = secureOrigin(env.BUDDY_DOCUMENT_SCANNER_AUDIENCE);
   const callbackUrl = secureUrl(env.BUDDY_DOCUMENT_SCANNER_CALLBACK_URL);
   const apiKey = env.BUDDY_DOCUMENT_SCANNER_API_KEY?.trim() ?? "";
   const provider = env.BUDDY_DOCUMENT_SCANNER_PROVIDER?.trim() ?? "";
   const googleServiceAccount = parseServiceAccount(env.BUDDY_DOCUMENT_SCANNER_GOOGLE_SERVICE_ACCOUNT_JSON);
   if (env.BUDDY_DOCUMENT_SCANNER_GOOGLE_SERVICE_ACCOUNT_JSON?.trim() && !googleServiceAccount) return null;
-  if (endpoint && new URL(endpoint).hostname.endsWith(".run.app") && !googleServiceAccount) return null;
-  return endpoint && callbackUrl && apiKey.length >= 16 && provider.length >= 2 && provider.length <= 120 ? { endpoint, callbackUrl, apiKey, provider, googleServiceAccount } : null;
+  if (env.BUDDY_DOCUMENT_SCANNER_AUDIENCE?.trim() && !audience) return null;
+  if ((googleServiceAccount && !audience) || (audience && !googleServiceAccount)) return null;
+  if (endpoint && new URL(endpoint).hostname.endsWith(".run.app") && (!googleServiceAccount || !audience)) return null;
+  return endpoint && callbackUrl && apiKey.length >= 16 && provider.length >= 2 && provider.length <= 120 ? { endpoint, audience, callbackUrl, apiKey, provider, googleServiceAccount } : null;
 }
 
 export async function submitDocumentScan(
@@ -37,8 +40,8 @@ export async function submitDocumentScan(
   form.set("callbackUrl", config.callbackUrl);
   form.set("callbackAuthentication", "hmac-sha256-v1");
   const headers: Record<string, string> = { Authorization: `Bearer ${config.apiKey}`, "Idempotency-Key": input.jobId, Accept: "application/json" };
-  if (config.googleServiceAccount)
-    headers["X-Serverless-Authorization"] = `Bearer ${await identityTokenProvider(config.googleServiceAccount, new URL(config.endpoint).origin)}`;
+  if (config.googleServiceAccount && config.audience)
+    headers["X-Serverless-Authorization"] = `Bearer ${await identityTokenProvider(config.googleServiceAccount, config.audience)}`;
   const response = await fetchImpl(config.endpoint, {
     method: "POST",
     headers,
@@ -47,7 +50,7 @@ export async function submitDocumentScan(
     cache: "no-store",
     redirect: "error",
   });
-  if (!response.ok) throw new ScanSubmissionError(`Scanner submission returned HTTP ${response.status}.`, response.status === 408 || response.status === 429 || response.status >= 500);
+  if (!response.ok) throw new ScanSubmissionError(responseFailureMessage(response), response.status === 408 || response.status === 429 || response.status >= 500);
   if (!response.headers.get("content-type")?.toLowerCase().startsWith("application/json"))
     throw new ScanSubmissionError("Scanner returned an unsupported response type.", false);
   const raw = await response.text();
@@ -59,6 +62,22 @@ export async function submitDocumentScan(
 }
 
 function secureUrl(value: string | undefined) { try { const url = new URL(value ?? ""); return url.protocol === "https:" ? url.toString() : null; } catch { return null; } }
+function secureOrigin(value: string | undefined) {
+  try {
+    const url = new URL(value ?? "");
+    return url.protocol === "https:" && url.pathname === "/" && !url.search && !url.hash && !url.username && !url.password
+      ? url.origin
+      : null;
+  } catch { return null; }
+}
+function responseFailureMessage(response: Response) {
+  const googleFrontEnd = response.headers.get("server")?.toLowerCase().includes("google frontend")
+    || response.headers.get("www-authenticate")?.toLowerCase().includes("invalid_token");
+  if (response.status === 401 && googleFrontEnd) return "Cloud Run scanner identity authentication was rejected.";
+  if (response.status === 403 && googleFrontEnd) return "Cloud Run scanner invocation authorization was rejected.";
+  if (response.status === 401) return "Scanner API authentication was rejected.";
+  return `Scanner submission returned HTTP ${response.status}.`;
+}
 async function googleIdentityToken(credentials: ServiceAccountCredentials, audience: string) {
   const client = await new GoogleAuth({ credentials }).getIdTokenClient(audience);
   const headers = await client.getRequestHeaders();

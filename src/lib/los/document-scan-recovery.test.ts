@@ -12,6 +12,9 @@ describe("document scan recovery", () => {
     expect(parseDocumentScanRecoveryInput({ reason: "x", idempotencyKey: "short" })).toBeNull();
   });
   it("does not expose raw provider failures", () => {
+    expect(safeDocumentScanFailure("Cloud Run scanner identity authentication was rejected.")).toBe("Cloud Run scanner identity was rejected.");
+    expect(safeDocumentScanFailure("Cloud Run scanner invocation authorization was rejected.")).toBe("Cloud Run scanner invocation was rejected.");
+    expect(safeDocumentScanFailure("Scanner API authentication was rejected.")).toBe("Scanner API authentication was rejected.");
     expect(safeDocumentScanFailure("scanner HTTP 401 secret text")).toBe("Scanner authentication was rejected.");
     expect(safeDocumentScanFailure("unrecognized internal detail")).toBe("Scanner submission failed.");
   });
