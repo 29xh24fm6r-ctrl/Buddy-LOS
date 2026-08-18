@@ -1,21 +1,30 @@
 import { describe, expect, it, vi } from "vitest";
 import { parseScanSubmissionConfig, ScanSubmissionError, submitDocumentScan } from "./document-scan-submission";
 
+function identityToken(audience: string, exp = Math.floor(Date.now() / 1000) + 300) {
+  const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
+  return `${encode({ alg: "RS256", typ: "JWT" })}.${encode({ aud: audience, exp })}.signature`;
+}
+
 describe("document scan submission configuration", () => {
   const valid = { BUDDY_DOCUMENT_SCANNER_ENDPOINT: "https://scanner.example/submit", BUDDY_DOCUMENT_SCANNER_CALLBACK_URL: "https://buddy.example/api/internal/document-scans/callback", BUDDY_DOCUMENT_SCANNER_API_KEY: "scanner-api-key-long-enough", BUDDY_DOCUMENT_SCANNER_PROVIDER: "example-scanner" };
   it("accepts complete HTTPS-only server configuration", () => expect(parseScanSubmissionConfig(valid)).toEqual({ endpoint: "https://scanner.example/submit", audience: null, callbackUrl: "https://buddy.example/api/internal/document-scans/callback", apiKey: "scanner-api-key-long-enough", provider: "example-scanner", googleServiceAccount: null }));
-  it("requires Google identity and an explicit canonical audience for private Cloud Run", () => {
-    const privateEnv = { ...valid, BUDDY_DOCUMENT_SCANNER_ENDPOINT: "https://buddy-scanner.us-west1.run.app/v1/scan" };
+  it("derives one canonical Cloud Run origin for both transport and identity", () => {
+    const canonicalOrigin = "https://buddy-scanner-123456.us-west1.run.app";
+    const privateEnv = { ...valid, BUDDY_DOCUMENT_SCANNER_ENDPOINT: "https://buddy-scanner-alias-uw.a.run.app/v1/scan" };
     const serviceAccount = JSON.stringify({ client_email: "los-invoker@example.iam.gserviceaccount.com", private_key: "-----BEGIN PRIVATE KEY-----\ntest\n-----END PRIVATE KEY-----" });
     expect(parseScanSubmissionConfig(privateEnv)).toBeNull();
     expect(parseScanSubmissionConfig({ ...privateEnv, BUDDY_DOCUMENT_SCANNER_GOOGLE_SERVICE_ACCOUNT_JSON: "not-json" })).toBeNull();
     expect(parseScanSubmissionConfig({ ...privateEnv, BUDDY_DOCUMENT_SCANNER_GOOGLE_SERVICE_ACCOUNT_JSON: serviceAccount })).toBeNull();
     expect(parseScanSubmissionConfig({ ...privateEnv, BUDDY_DOCUMENT_SCANNER_GOOGLE_SERVICE_ACCOUNT_JSON: serviceAccount, BUDDY_DOCUMENT_SCANNER_AUDIENCE: "https://buddy-scanner.us-west1.run.app/not-an-origin" })).toBeNull();
+    expect(parseScanSubmissionConfig({ ...privateEnv, BUDDY_DOCUMENT_SCANNER_GOOGLE_SERVICE_ACCOUNT_JSON: serviceAccount, BUDDY_DOCUMENT_SCANNER_AUDIENCE: canonicalOrigin })).toMatchObject({ endpoint: `${canonicalOrigin}/v1/scan`, audience: canonicalOrigin });
+    expect(parseScanSubmissionConfig({ ...privateEnv, BUDDY_DOCUMENT_SCANNER_GOOGLE_SERVICE_ACCOUNT_JSON: serviceAccount, BUDDY_DOCUMENT_SCANNER_SERVICE_URL: canonicalOrigin })).toMatchObject({ endpoint: `${canonicalOrigin}/v1/scan`, audience: canonicalOrigin });
     expect(parseScanSubmissionConfig({
       ...privateEnv,
       BUDDY_DOCUMENT_SCANNER_GOOGLE_SERVICE_ACCOUNT_JSON: serviceAccount,
-      BUDDY_DOCUMENT_SCANNER_AUDIENCE: "https://buddy-scanner-123456.us-west1.run.app",
-    })).toMatchObject({ audience: "https://buddy-scanner-123456.us-west1.run.app" });
+      BUDDY_DOCUMENT_SCANNER_SERVICE_URL: canonicalOrigin,
+      BUDDY_DOCUMENT_SCANNER_AUDIENCE: "https://different-scanner-123456.us-west1.run.app",
+    })).toBeNull();
   });
   it("rejects insecure, incomplete, and short-secret configurations", () => {
     expect(parseScanSubmissionConfig({ ...valid, BUDDY_DOCUMENT_SCANNER_ENDPOINT: "http://scanner.example" })).toBeNull();
@@ -71,7 +80,7 @@ describe("provider-neutral document scan contract", () => {
   it("sends private Cloud Run identity separately from the scanner API key", async () => {
     const privateConfig = {
       ...config,
-      endpoint: "https://buddy-scanner-alias-uw.a.run.app/v1/scan",
+      endpoint: "https://buddy-scanner-123456.us-west1.run.app/v1/scan",
       audience: "https://buddy-scanner-123456.us-west1.run.app",
       googleServiceAccount: {
         client_email: "los-invoker@example.iam.gserviceaccount.com",
@@ -80,17 +89,30 @@ describe("provider-neutral document scan contract", () => {
     };
     const identity = vi.fn(async (_credentials: unknown, audience: string) => {
       expect(audience).toBe("https://buddy-scanner-123456.us-west1.run.app");
-      return "google-identity-token";
+      return identityToken(audience);
     });
     const fetchImpl = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => {
       const headers = new Headers(init?.headers);
       expect(headers.get("authorization")).toBe(`Bearer ${config.apiKey}`);
-      expect(headers.get("x-serverless-authorization")).toBe("Bearer google-identity-token");
+      expect(headers.get("x-serverless-authorization")).toBe(`Bearer ${identityToken(privateConfig.audience)}`);
       return Response.json({ runId: "private-clamav-run-123" });
     });
 
     await expect(submitDocumentScan(privateConfig, input, fetchImpl as typeof fetch, identity)).resolves.toEqual({ runId: "private-clamav-run-123" });
     expect(identity).toHaveBeenCalledOnce();
+    expect(fetchImpl).toHaveBeenCalledWith("https://buddy-scanner-123456.us-west1.run.app/v1/scan", expect.anything());
+  });
+
+  it.each([
+    ["wrong audience", identityToken("https://wrong.example")],
+    ["expired", identityToken("https://buddy-scanner-123456.us-west1.run.app", Math.floor(Date.now() / 1000) - 1)],
+  ])("rejects %s identity tokens before transport without consuming an attempt", async (_label, token) => {
+    const audience = "https://buddy-scanner-123456.us-west1.run.app";
+    const privateConfig = { ...config, endpoint: `${audience}/v1/scan`, audience, googleServiceAccount: { client_email: "los-invoker@example.iam.gserviceaccount.com", private_key: "test" } };
+    const fetchImpl = vi.fn();
+    const failure = await submitDocumentScan(privateConfig, input, fetchImpl as typeof fetch, vi.fn(async () => token)).catch((caught) => caught);
+    expect(failure).toMatchObject({ retryable: true, consumesAttempt: false });
+    expect(fetchImpl).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -102,17 +124,17 @@ describe("provider-neutral document scan contract", () => {
     const fetchImpl = vi.fn(async () => new Response("provider secret detail", { status }));
     const failure = await submitDocumentScan(config, input, fetchImpl as typeof fetch).catch((caught) => caught);
     expect(failure).toBeInstanceOf(ScanSubmissionError);
-    expect(failure).toMatchObject({ retryable });
+    expect(failure).toMatchObject({ retryable, consumesAttempt: true });
     expect((failure as Error).message).not.toContain("provider secret detail");
   });
 
   it.each([
-    [new Headers({ server: "Google Frontend", "www-authenticate": 'Bearer error="invalid_token"' }), "Cloud Run scanner identity authentication was rejected."],
-    [new Headers({ "content-type": "application/json" }), "Scanner API authentication was rejected."],
-  ])("distinguishes identity and API-key 401 failures without exposing bodies", async (headers, message) => {
+    [new Headers({ server: "Google Frontend", "www-authenticate": 'Bearer error="invalid_token"' }), "Cloud Run scanner identity authentication was rejected.", true, false],
+    [new Headers({ "content-type": "application/json" }), "Scanner API authentication was rejected.", false, true],
+  ])("distinguishes identity and API-key 401 failures without exposing bodies", async (headers, message, retryable, consumesAttempt) => {
     const fetchImpl = vi.fn(async () => new Response("provider secret detail", { status: 401, headers }));
     const failure = await submitDocumentScan(config, input, fetchImpl as typeof fetch).catch((caught) => caught);
-    expect(failure).toMatchObject({ message, retryable: false });
+    expect(failure).toMatchObject({ message, retryable, consumesAttempt });
     expect((failure as Error).message).not.toContain("provider secret detail");
   });
 

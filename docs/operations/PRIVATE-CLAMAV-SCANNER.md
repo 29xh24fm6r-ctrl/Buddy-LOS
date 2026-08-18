@@ -13,7 +13,9 @@ The Buddy scanner is a separately deployable, private Cloud Run service. It rece
 
 Buddy LOS configures `BUDDY_DOCUMENT_SCANNER_GOOGLE_SERVICE_ACCOUNT_JSON` for the invoker. Google identity travels in `X-Serverless-Authorization`; the provider API credential remains in `Authorization`.
 
-Private Cloud Run also requires `BUDDY_DOCUMENT_SCANNER_AUDIENCE`. Set it to the service's canonical Google-generated `status.url` origin, even when `BUDDY_DOCUMENT_SCANNER_ENDPOINT` uses another valid `run.app` alias. The value must be an HTTPS origin with no path, query, or fragment. This prevents Vercel from minting an otherwise valid identity token for the wrong Cloud Run audience.
+Private Cloud Run also requires one canonical service origin. Set `BUDDY_DOCUMENT_SCANNER_SERVICE_URL` to the service's exact Google-generated `status.url`. Buddy LOS derives both the `/v1/scan` endpoint and the Google identity-token audience from that one HTTPS origin, so the request host and token audience cannot drift apart. The value must not contain a path, query, fragment, username, or password.
+
+`BUDDY_DOCUMENT_SCANNER_AUDIENCE` remains a compatibility alias. If both variables are present, they must normalize to the same origin or scanner commissioning fails closed. `BUDDY_DOCUMENT_SCANNER_ENDPOINT` remains available for non-private providers, but it cannot override the canonical host for the private Cloud Run scanner.
 
 ```bash
 gcloud run services describe buddy-los-document-scanner-sandbox \
@@ -22,7 +24,9 @@ gcloud run services describe buddy-los-document-scanner-sandbox \
   --format='value(status.url)'
 ```
 
-Store that output in Vercel as the server-only `BUDDY_DOCUMENT_SCANNER_AUDIENCE`. Keep the scanner endpoint's `/v1/scan` path unchanged. A Google Frontend 401 now records a distinct Cloud Run identity failure; an application-layer 401 records a distinct scanner API-key failure, without persisting provider response bodies or credentials.
+Store that output in Vercel as the server-only `BUDDY_DOCUMENT_SCANNER_SERVICE_URL`. Remove stale alternate `run.app` aliases from `BUDDY_DOCUMENT_SCANNER_ENDPOINT`, or set the endpoint to the same canonical origin plus `/v1/scan` for operator clarity.
+
+Buddy LOS validates the minted token's audience and expiry before sending document bytes. Token creation failures, invalid token claims, and Google Frontend identity rejections are retryable infrastructure failures that do not consume a document's provider-attempt budget. An application-layer 401 is a scanner API-key failure and remains terminal for that attempt. Neither path persists provider response bodies or credentials.
 
 From a clean checkout in Google Cloud Shell, deploy the disabled sandbox with:
 

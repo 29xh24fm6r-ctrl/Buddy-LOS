@@ -64,10 +64,11 @@ export async function processDocumentScanJob(
         ? caught
         : new ScanSubmissionError("Scanner submission failed.", true);
     const status = failure.retryable ? "retryable" : "failed";
-    await admin.rpc("record_document_scan_submission_failure", {
+    await admin.rpc("record_document_scan_submission_failure_v2", {
       p_job_id: jobId,
       p_error: failure.message,
       p_retryable: failure.retryable,
+      p_consumes_attempt: failure.consumesAttempt,
     });
     return { processed: true, jobId, status };
   }

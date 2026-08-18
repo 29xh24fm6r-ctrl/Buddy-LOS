@@ -97,22 +97,31 @@ describe("document commissioning preflight", () => {
     expect(result.missingConfiguration).toContain("NEXT_PUBLIC_BUDDY_DOCUMENTS_ENABLED");
   });
 
-  it("requires an explicit canonical identity audience for private Cloud Run", () => {
+  it("requires one canonical Cloud Run service origin and rejects split identity", () => {
+    const canonicalOrigin = "https://scanner-123456.us-west1.run.app";
     const privateEnv = {
       ...configuredEnv,
-      BUDDY_DOCUMENT_SCANNER_ENDPOINT: "https://scanner-alias-uw.a.run.app/v1/scan",
+      BUDDY_DOCUMENT_SCANNER_ENDPOINT: `${canonicalOrigin}/v1/scan`,
       BUDDY_DOCUMENT_SCANNER_GOOGLE_SERVICE_ACCOUNT_JSON: "service-account-json-present",
     };
-    const missingAudience = evaluateDocumentCommissioning({ env: privateEnv, evidence: completeEvidence, root: installedRoot() });
-    expect(missingAudience.missingConfiguration).toContain("BUDDY_DOCUMENT_SCANNER_AUDIENCE");
+    const missingOrigin = evaluateDocumentCommissioning({ env: privateEnv, evidence: completeEvidence, root: installedRoot() });
+    expect(missingOrigin.missingConfiguration).toContain("BUDDY_DOCUMENT_SCANNER_SERVICE_URL_OR_AUDIENCE");
 
-    const configured = evaluateDocumentCommissioning({
-      env: { ...privateEnv, BUDDY_DOCUMENT_SCANNER_AUDIENCE: "https://scanner-123456.us-west1.run.app" },
+    const audienceConfigured = evaluateDocumentCommissioning({
+      env: { ...privateEnv, BUDDY_DOCUMENT_SCANNER_AUDIENCE: canonicalOrigin },
       evidence: completeEvidence,
       root: installedRoot(),
     });
-    expect(configured.missingConfiguration).not.toContain("BUDDY_DOCUMENT_SCANNER_AUDIENCE");
-    expect(configured.stages.configured).toBe(true);
+    expect(audienceConfigured.stages.configured).toBe(true);
+
+    const serviceConfigured = evaluateDocumentCommissioning({ env: { ...privateEnv, BUDDY_DOCUMENT_SCANNER_SERVICE_URL: canonicalOrigin }, evidence: completeEvidence, root: installedRoot() });
+    expect(serviceConfigured.stages.configured).toBe(true);
+
+    const mismatch = evaluateDocumentCommissioning({ env: { ...privateEnv, BUDDY_DOCUMENT_SCANNER_SERVICE_URL: canonicalOrigin, BUDDY_DOCUMENT_SCANNER_AUDIENCE: "https://different-123456.us-west1.run.app" }, evidence: completeEvidence, root: installedRoot() });
+    expect(mismatch.missingConfiguration).toContain("BUDDY_DOCUMENT_SCANNER_SERVICE_IDENTITY_MATCH");
+
+    const malformed = evaluateDocumentCommissioning({ env: { ...privateEnv, BUDDY_DOCUMENT_SCANNER_SERVICE_URL: `${canonicalOrigin}/path` }, evidence: completeEvidence, root: installedRoot() });
+    expect(malformed.missingConfiguration).toContain("BUDDY_DOCUMENT_SCANNER_SERVICE_URL");
   });
 
   it("binds certification to exact release identities", () => {
