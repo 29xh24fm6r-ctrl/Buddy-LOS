@@ -59,6 +59,11 @@ function secureOrigin(value) {
   }
 }
 
+function normalizedSecureOrigin(value) {
+  if (!secureOrigin(value)) return null;
+  return new URL(value.trim()).origin;
+}
+
 export function evaluateDocumentCommissioning({
   env = process.env,
   evidence = null,
@@ -75,8 +80,18 @@ export function evaluateDocumentCommissioning({
   if (!secureUrl(env.BUDDY_DOCUMENT_SCANNER_ENDPOINT)) missingConfiguration.push("BUDDY_DOCUMENT_SCANNER_ENDPOINT");
   const scannerEndpointIsCloudRun = secureUrl(env.BUDDY_DOCUMENT_SCANNER_ENDPOINT)
     && new URL(env.BUDDY_DOCUMENT_SCANNER_ENDPOINT).hostname.endsWith(".run.app");
-  if (scannerEndpointIsCloudRun && !secureOrigin(env.BUDDY_DOCUMENT_SCANNER_AUDIENCE)) missingConfiguration.push("BUDDY_DOCUMENT_SCANNER_AUDIENCE");
-  if (scannerEndpointIsCloudRun && !present(env.BUDDY_DOCUMENT_SCANNER_GOOGLE_SERVICE_ACCOUNT_JSON)) missingConfiguration.push("BUDDY_DOCUMENT_SCANNER_GOOGLE_SERVICE_ACCOUNT_JSON");
+  const suppliedServiceUrl = present(env.BUDDY_DOCUMENT_SCANNER_SERVICE_URL);
+  const suppliedAudience = present(env.BUDDY_DOCUMENT_SCANNER_AUDIENCE);
+  const serviceOrigin = normalizedSecureOrigin(env.BUDDY_DOCUMENT_SCANNER_SERVICE_URL);
+  const audienceOrigin = normalizedSecureOrigin(env.BUDDY_DOCUMENT_SCANNER_AUDIENCE);
+  const privateScannerConfigured = scannerEndpointIsCloudRun || suppliedServiceUrl
+    || suppliedAudience || present(env.BUDDY_DOCUMENT_SCANNER_GOOGLE_SERVICE_ACCOUNT_JSON);
+  if (suppliedServiceUrl && !serviceOrigin) missingConfiguration.push("BUDDY_DOCUMENT_SCANNER_SERVICE_URL");
+  if (suppliedAudience && !audienceOrigin) missingConfiguration.push("BUDDY_DOCUMENT_SCANNER_AUDIENCE");
+  if (privateScannerConfigured && !serviceOrigin && !audienceOrigin) missingConfiguration.push("BUDDY_DOCUMENT_SCANNER_SERVICE_URL_OR_AUDIENCE");
+  if (serviceOrigin && audienceOrigin && serviceOrigin !== audienceOrigin) missingConfiguration.push("BUDDY_DOCUMENT_SCANNER_SERVICE_IDENTITY_MATCH");
+  if (privateScannerConfigured && !scannerEndpointIsCloudRun) missingConfiguration.push("BUDDY_DOCUMENT_SCANNER_ENDPOINT_CLOUD_RUN");
+  if (privateScannerConfigured && !present(env.BUDDY_DOCUMENT_SCANNER_GOOGLE_SERVICE_ACCOUNT_JSON)) missingConfiguration.push("BUDDY_DOCUMENT_SCANNER_GOOGLE_SERVICE_ACCOUNT_JSON");
   if (!present(env.BUDDY_DOCUMENT_SCANNER_API_KEY, 16)) missingConfiguration.push("BUDDY_DOCUMENT_SCANNER_API_KEY");
   if (!secureUrl(env.BUDDY_DOCUMENT_SCANNER_CALLBACK_URL)) missingConfiguration.push("BUDDY_DOCUMENT_SCANNER_CALLBACK_URL");
   if (!present(env.BUDDY_DOCUMENT_SCANNER_WEBHOOK_SECRET, 32)) missingConfiguration.push("BUDDY_DOCUMENT_SCANNER_WEBHOOK_SECRET");

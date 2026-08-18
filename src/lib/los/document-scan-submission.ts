@@ -7,19 +7,35 @@ const SUBMISSION_TIMEOUT_MS = 20_000;
 type ServiceAccountCredentials = { client_email: string; private_key: string; project_id?: string };
 type IdentityTokenProvider = (credentials: ServiceAccountCredentials, audience: string) => Promise<string>;
 export type ScanSubmissionConfig = { endpoint: string; audience: string | null; apiKey: string; provider: string; callbackUrl: string; googleServiceAccount: ServiceAccountCredentials | null };
-export class ScanSubmissionError extends Error { constructor(message: string, readonly retryable: boolean) { super(message); } }
+export class ScanSubmissionError extends Error {
+  constructor(message: string, readonly retryable: boolean, readonly consumesAttempt = true) { super(message); }
+}
 
 export function parseScanSubmissionConfig(env: Record<string, string | undefined>): ScanSubmissionConfig | null {
-  const endpoint = secureUrl(env.BUDDY_DOCUMENT_SCANNER_ENDPOINT);
-  const audience = secureOrigin(env.BUDDY_DOCUMENT_SCANNER_AUDIENCE);
+  const configuredEndpoint = secureUrl(env.BUDDY_DOCUMENT_SCANNER_ENDPOINT);
+  const configuredAudience = secureOrigin(env.BUDDY_DOCUMENT_SCANNER_AUDIENCE);
+  const serviceUrl = secureOrigin(env.BUDDY_DOCUMENT_SCANNER_SERVICE_URL);
   const callbackUrl = secureUrl(env.BUDDY_DOCUMENT_SCANNER_CALLBACK_URL);
   const apiKey = env.BUDDY_DOCUMENT_SCANNER_API_KEY?.trim() ?? "";
   const provider = env.BUDDY_DOCUMENT_SCANNER_PROVIDER?.trim() ?? "";
   const googleServiceAccount = parseServiceAccount(env.BUDDY_DOCUMENT_SCANNER_GOOGLE_SERVICE_ACCOUNT_JSON);
   if (env.BUDDY_DOCUMENT_SCANNER_GOOGLE_SERVICE_ACCOUNT_JSON?.trim() && !googleServiceAccount) return null;
-  if (env.BUDDY_DOCUMENT_SCANNER_AUDIENCE?.trim() && !audience) return null;
-  if ((googleServiceAccount && !audience) || (audience && !googleServiceAccount)) return null;
-  if (endpoint && new URL(endpoint).hostname.endsWith(".run.app") && (!googleServiceAccount || !audience)) return null;
+  if (env.BUDDY_DOCUMENT_SCANNER_AUDIENCE?.trim() && !configuredAudience) return null;
+  if (env.BUDDY_DOCUMENT_SCANNER_SERVICE_URL?.trim() && !serviceUrl) return null;
+  const endpointIsCloudRun = configuredEndpoint ? new URL(configuredEndpoint).hostname.endsWith(".run.app") : false;
+  const privateScannerConfigured = Boolean(endpointIsCloudRun || configuredAudience || serviceUrl || googleServiceAccount);
+  let endpoint = configuredEndpoint;
+  let audience = configuredAudience;
+  if (privateScannerConfigured) {
+    const canonicalOrigin = serviceUrl ?? configuredAudience;
+    if (!configuredEndpoint || !endpointIsCloudRun || !googleServiceAccount || !canonicalOrigin
+      || !new URL(canonicalOrigin).hostname.endsWith(".run.app")
+      || (serviceUrl && configuredAudience && serviceUrl !== configuredAudience)) return null;
+    // Cloud Run validates the token audience against the receiving service.
+    // Derive both values from one canonical origin so aliases cannot diverge.
+    endpoint = `${canonicalOrigin}/v1/scan`;
+    audience = canonicalOrigin;
+  }
   return endpoint && callbackUrl && apiKey.length >= 16 && provider.length >= 2 && provider.length <= 120 ? { endpoint, audience, callbackUrl, apiKey, provider, googleServiceAccount } : null;
 }
 
@@ -40,8 +56,13 @@ export async function submitDocumentScan(
   form.set("callbackUrl", config.callbackUrl);
   form.set("callbackAuthentication", "hmac-sha256-v1");
   const headers: Record<string, string> = { Authorization: `Bearer ${config.apiKey}`, "Idempotency-Key": input.jobId, Accept: "application/json" };
-  if (config.googleServiceAccount && config.audience)
-    headers["X-Serverless-Authorization"] = `Bearer ${await identityTokenProvider(config.googleServiceAccount, config.audience)}`;
+  if (config.googleServiceAccount && config.audience) {
+    let identityToken: string;
+    try { identityToken = await identityTokenProvider(config.googleServiceAccount, config.audience); }
+    catch { throw new ScanSubmissionError("Private scanner identity token could not be created.", true, false); }
+    assertIdentityToken(identityToken, config.audience);
+    headers["X-Serverless-Authorization"] = `Bearer ${identityToken}`;
+  }
   const response = await fetchImpl(config.endpoint, {
     method: "POST",
     headers,
@@ -50,7 +71,14 @@ export async function submitDocumentScan(
     cache: "no-store",
     redirect: "error",
   });
-  if (!response.ok) throw new ScanSubmissionError(responseFailureMessage(response), response.status === 408 || response.status === 429 || response.status >= 500);
+  if (!response.ok) {
+    const identityFailure = (response.status === 401 || response.status === 403) && isGoogleFrontEnd(response);
+    throw new ScanSubmissionError(
+      responseFailureMessage(response),
+      identityFailure || response.status === 408 || response.status === 429 || response.status >= 500,
+      !identityFailure,
+    );
+  }
   if (!response.headers.get("content-type")?.toLowerCase().startsWith("application/json"))
     throw new ScanSubmissionError("Scanner returned an unsupported response type.", false);
   const raw = await response.text();
@@ -71,19 +99,32 @@ function secureOrigin(value: string | undefined) {
   } catch { return null; }
 }
 function responseFailureMessage(response: Response) {
-  const googleFrontEnd = response.headers.get("server")?.toLowerCase().includes("google frontend")
-    || response.headers.get("www-authenticate")?.toLowerCase().includes("invalid_token");
-  if (response.status === 401 && googleFrontEnd) return "Cloud Run scanner identity authentication was rejected.";
-  if (response.status === 403 && googleFrontEnd) return "Cloud Run scanner invocation authorization was rejected.";
+  if (response.status === 401 && isGoogleFrontEnd(response)) return "Cloud Run scanner identity authentication was rejected.";
+  if (response.status === 403 && isGoogleFrontEnd(response)) return "Cloud Run scanner invocation authorization was rejected.";
   if (response.status === 401) return "Scanner API authentication was rejected.";
   return `Scanner submission returned HTTP ${response.status}.`;
+}
+function isGoogleFrontEnd(response: Response) {
+  return response.headers.get("server")?.toLowerCase().includes("google frontend") === true
+    || response.headers.get("www-authenticate")?.toLowerCase().includes("invalid_token") === true;
 }
 async function googleIdentityToken(credentials: ServiceAccountCredentials, audience: string) {
   const client = await new GoogleAuth({ credentials }).getIdTokenClient(audience);
   const headers = await client.getRequestHeaders();
   const authorization = headers.get("authorization");
-  if (!authorization?.startsWith("Bearer ")) throw new ScanSubmissionError("Private scanner identity token is unavailable.", true);
+  if (!authorization?.startsWith("Bearer ")) throw new ScanSubmissionError("Private scanner identity token is unavailable.", true, false);
   return authorization.slice(7);
+}
+function assertIdentityToken(token: string, audience: string) {
+  try {
+    const segments = token.split(".");
+    if (segments.length !== 3) throw new Error("invalid token structure");
+    const payload = JSON.parse(Buffer.from(segments[1], "base64url").toString("utf8")) as { aud?: unknown; exp?: unknown };
+    if (payload.aud !== audience) throw new Error("audience mismatch");
+    if (typeof payload.exp !== "number" || payload.exp <= Math.floor(Date.now() / 1000) + 30) throw new Error("token expired");
+  } catch {
+    throw new ScanSubmissionError("Private scanner identity token is invalid for the configured service.", true, false);
+  }
 }
 function parseServiceAccount(value: string | undefined): ServiceAccountCredentials | null {
   if (!value?.trim()) return null;
