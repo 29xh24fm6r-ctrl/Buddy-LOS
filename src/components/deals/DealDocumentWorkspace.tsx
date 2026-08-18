@@ -10,6 +10,7 @@ import { createClient } from "../../lib/supabase/client";
 
 type DownloadState = { documentId: string; kind: "working" | "error"; message?: string } | null;
 type UploadState = { requirementId: string; kind: "working" | "error" | "success"; message: string } | null;
+type RecoveryState = { documentId: string; kind: "working" | "error" | "success"; message: string } | null;
 const DATE_FORMATTER = new Intl.DateTimeFormat("en-US", { dateStyle: "medium" });
 
 export function DealDocumentWorkspace({
@@ -18,16 +19,19 @@ export function DealDocumentWorkspace({
   dealId,
   downloadsEnabled,
   uploadsEnabled,
+  scanRecoveryEnabled,
 }: {
   requirements: ReadinessItem[];
   versions: DealDocumentVersion[];
   dealId: string;
   downloadsEnabled: boolean;
   uploadsEnabled: boolean;
+  scanRecoveryEnabled: boolean;
 }) {
   const router = useRouter();
   const [download, setDownload] = useState<DownloadState>(null);
   const [upload, setUpload] = useState<UploadState>(null);
+  const [recovery, setRecovery] = useState<RecoveryState>(null);
   const versionsByRequirement = new Map<string, DealDocumentVersion[]>();
   const unassigned: DealDocumentVersion[] = [];
   for (const version of versions) {
@@ -111,6 +115,26 @@ export function DealDocumentWorkspace({
     }
   }
 
+  async function requestScanRecovery(version: DealDocumentVersion) {
+    setRecovery({ documentId: version.id, kind: "working", message: "Retrying the private malware scan…" });
+    try {
+      const response = await fetch(`/api/documents/${version.id}/scan/retry`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "x-buddy-request": "document-scan-recovery" },
+        body: JSON.stringify({
+          idempotencyKey: `workspace-scan-recovery-${version.id}-${crypto.randomUUID()}`,
+          reason: "Authorized operator retried a failed document scan from the deal workspace",
+        }),
+      });
+      const result = await response.json() as { error?: unknown };
+      if (!response.ok) throw new Error(result.error === "scan_not_recoverable" ? "This scan is no longer eligible for recovery." : "The scan retry could not be started.");
+      setRecovery({ documentId: version.id, kind: "success", message: "Recovery accepted. The scan is running again." });
+      router.refresh();
+    } catch (error) {
+      setRecovery({ documentId: version.id, kind: "error", message: error instanceof Error ? error.message : "The scan retry could not be started." });
+    }
+  }
+
   return (
     <section className="operating-panel document-workspace" aria-labelledby="document-workspace-title">
       <div className="panel-heading">
@@ -129,10 +153,13 @@ export function DealDocumentWorkspace({
               versions={versionsByRequirement.get(requirement.id) ?? []}
               downloadsEnabled={downloadsEnabled}
               uploadsEnabled={uploadsEnabled}
+              scanRecoveryEnabled={scanRecoveryEnabled}
               download={download}
               upload={upload}
+              recovery={recovery}
               onDownload={requestDownload}
               onUpload={requestUpload}
+              onScanRecovery={requestScanRecovery}
             />
           ))}
           {(unassigned.length > 0 || uploadsEnabled) && (
@@ -141,10 +168,13 @@ export function DealDocumentWorkspace({
               versions={unassigned}
               downloadsEnabled={downloadsEnabled}
               uploadsEnabled={uploadsEnabled}
+              scanRecoveryEnabled={scanRecoveryEnabled}
               download={download}
               upload={upload}
+              recovery={recovery}
               onDownload={requestDownload}
               onUpload={requestUpload}
+              onScanRecovery={requestScanRecovery}
             />
           )}
         </div>
@@ -160,19 +190,25 @@ function DocumentRequirementCard({
   versions,
   downloadsEnabled,
   uploadsEnabled,
+  scanRecoveryEnabled,
   download,
   upload,
+  recovery,
   onDownload,
   onUpload,
+  onScanRecovery,
 }: {
   requirement: ReadinessItem;
   versions: DealDocumentVersion[];
   downloadsEnabled: boolean;
   uploadsEnabled: boolean;
+  scanRecoveryEnabled: boolean;
   download: DownloadState;
   upload: UploadState;
+  recovery: RecoveryState;
   onDownload: (version: DealDocumentVersion) => Promise<void>;
   onUpload: (requirement: ReadinessItem, versions: DealDocumentVersion[], event: ChangeEvent<HTMLInputElement>) => Promise<void>;
+  onScanRecovery: (version: DealDocumentVersion) => Promise<void>;
 }) {
   return (
     <article className="document-requirement-card">
@@ -186,19 +222,23 @@ function DocumentRequirementCard({
           {versions.map((version) => {
             const clean = version.securityStatus === "clean" && Boolean(version.sha256 && version.scannedAt);
             const working = download?.documentId === version.id && download.kind === "working";
+            const recovering = recovery?.documentId === version.id && recovery.kind === "working";
             return (
               <li key={version.id}>
                 <div>
                   <strong>{version.fileName}</strong>
                   <small>Version {version.versionNumber} Â· {formatBytes(version.sizeBytes)} Â· Uploaded {formatDate(version.uploadedAt)}</small>
                   <small>{clean ? `Verified ${formatDate(version.scannedAt!)}` : securityLabel(version.securityStatus)}{version.legalHold ? " Â· Legal hold" : ""}</small>
+                  {version.scanJob && <small>Scan job: {scanJobLabel(version.scanJob.status)} · Attempt {version.scanJob.attemptCount} of {version.scanJob.maxAttempts}{version.scanJob.lastError ? ` · ${version.scanJob.lastError}` : ""}</small>}
                   {download?.documentId === version.id && download.kind === "error" && <em role="alert">{download.message}</em>}
+                  {recovery?.documentId === version.id && <em role={recovery.kind === "error" ? "alert" : "status"}>{recovery.message}</em>}
                 </div>
                 <div className="document-version-actions">
                   <span data-security={version.securityStatus}>{securityLabel(version.securityStatus)}</span>
                   <button type="button" disabled={!downloadsEnabled || !clean || working} onClick={() => void onDownload(version)}>
                     {working ? "Preparingâ€¦" : "Download"}
                   </button>
+                  {scanRecoveryEnabled && version.scanJob?.recoverable && <button type="button" disabled={recovering} onClick={() => void onScanRecovery(version)}>{recovering ? "Retrying…" : "Retry failed scan"}</button>}
                 </div>
               </li>
             );
@@ -223,4 +263,8 @@ function formatDate(value: string): string {
 
 function securityLabel(status: string): string {
   return ({ clean: "Scan verified", rejected: "Rejected", scanning: "Scanning", quarantined: "Quarantined", pending_upload: "Upload pending", superseded: "Superseded" } as Record<string, string>)[status] ?? "Unavailable";
+}
+
+function scanJobLabel(status: string): string {
+  return ({ queued: "Queued", submitting: "Submitting", retryable: "Retry scheduled", awaiting_result: "Awaiting result", completed: "Completed", failed: "Failed" } as Record<string, string>)[status] ?? status.replaceAll("_", " ");
 }

@@ -6,7 +6,7 @@ const version = (overrides: Partial<DealDocumentVersion> = {}): DealDocumentVers
   id: "doc-1", requirementId: null, logicalDocumentId: "logical-1", versionNumber: 1,
   fileName: "statement.pdf", mimeType: "application/pdf", sizeBytes: 100, sha256: "a".repeat(64),
   securityStatus: "clean", uploadedAt: "2026-08-12T12:00:00Z", scannedAt: "2026-08-12T12:01:00Z",
-  retainedUntil: null, legalHold: false, ...overrides,
+  retainedUntil: null, legalHold: false, scanJob: null, ...overrides,
 });
 
 describe("Underwriter workflow", () => {

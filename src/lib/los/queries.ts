@@ -1,5 +1,7 @@
 import "server-only";
 import { createClient } from "@/lib/supabase/server";
+import { createAdminClient } from "@/lib/supabase/admin";
+import { safeDocumentScanFailure } from "./document-scan-recovery";
 import { canReadInstitutionPipeline, type BorrowerSummary, type DealSummary } from "./read-model";
 import type { AccessContext } from "@/lib/auth/access-context";
 import { deriveUnderwritingReadiness, type ReadinessItem, type UnderwritingReadiness } from "./underwriting-readiness";
@@ -21,11 +23,21 @@ type DealDocumentRow = {
   original_file_name: string; mime_type: string; size_bytes: number | string; sha256: string | null;
   security_status: string; uploaded_at: string; scanned_at: string | null; retained_until: string | null; legal_hold: boolean;
 };
+type DocumentScanJobRow = {
+  document_id: string; status: string; attempt_count: number; max_attempts: number;
+  last_error: string | null; updated_at: string;
+};
+
+export type DocumentScanJobSummary = {
+  status: string; attemptCount: number; maxAttempts: number; lastError: string | null;
+  updatedAt: string; recoverable: boolean;
+};
 
 export type DealDocumentVersion = {
   id: string; requirementId: string | null; logicalDocumentId: string; versionNumber: number;
   fileName: string; mimeType: string; sizeBytes: number; sha256: string | null;
   securityStatus: string; uploadedAt: string; scannedAt: string | null; retainedUntil: string | null; legalHold: boolean;
+  scanJob: DocumentScanJobSummary | null;
 };
 
 export type DealDetail = DealSummary & {
@@ -152,13 +164,22 @@ export async function loadDealDetail(context: ReadyContext, dealId: string): Pro
       .order("uploaded_at", { ascending: false }).limit(500),
   ]);
   if (borrowerError || checklistError || documentsError || documentVersionsError) throw new Error("Unable to load the deal readiness record.");
+  const documentRows = (documentVersions ?? []) as DealDocumentRow[];
+  const scanJobs = new Map<string, DocumentScanJobRow>();
+  if (documentRows.length > 0) {
+    const { data: jobs, error: jobsError } = await createAdminClient().from("document_scan_jobs")
+      .select("document_id, status, attempt_count, max_attempts, last_error, updated_at")
+      .eq("organization_id", organizationId).in("document_id", documentRows.map((row) => row.id));
+    if (jobsError) throw new Error("Unable to load document scan operations.");
+    for (const job of (jobs ?? []) as DocumentScanJobRow[]) scanJobs.set(job.document_id, job);
+  }
   const summary = toSummary(data as DealRow, borrower?.legal_name ?? "Borrower unavailable");
   const mapItem = (item: { id: string; label?: string; document_type?: string; category: string; status: string; is_required: boolean; due_date: string | null }): ReadinessItem => ({
     id: item.id, label: item.label ?? item.document_type ?? "Unnamed requirement", category: item.category, status: item.status, required: item.is_required, dueDate: item.due_date,
   });
   return { ...summary, purpose: data.purpose, createdAt: data.created_at, version: data.version,
     readiness: deriveUnderwritingReadiness((checklist ?? []).map(mapItem), (documents ?? []).map(mapItem)),
-    documentVersions: ((documentVersions ?? []) as DealDocumentRow[]).map(toDocumentVersion) };
+    documentVersions: documentRows.map((row) => toDocumentVersion(row, scanJobs.get(row.id))) };
 }
 
 export async function loadUnderwritingWorkspace(context: ReadyContext, dealId: string): Promise<UnderwritingWorkspaceRecord> {
@@ -232,11 +253,16 @@ function toSummary(row: DealRow, borrowerName: string): DealSummary {
 }
 function numberOrNull(value: number | string | null) { return value === null ? null : Number(value); }
 
-export function toDocumentVersion(row: DealDocumentRow): DealDocumentVersion {
+export function toDocumentVersion(row: DealDocumentRow, scanJob?: DocumentScanJobRow): DealDocumentVersion {
   return {
     id: row.id, requirementId: row.requirement_id, logicalDocumentId: row.logical_document_id,
     versionNumber: row.version_number, fileName: row.original_file_name, mimeType: row.mime_type,
     sizeBytes: Number(row.size_bytes), sha256: row.sha256, securityStatus: row.security_status,
     uploadedAt: row.uploaded_at, scannedAt: row.scanned_at, retainedUntil: row.retained_until, legalHold: row.legal_hold,
+    scanJob: scanJob ? {
+      status: scanJob.status, attemptCount: scanJob.attempt_count, maxAttempts: scanJob.max_attempts,
+      lastError: safeDocumentScanFailure(scanJob.last_error), updatedAt: scanJob.updated_at,
+      recoverable: scanJob.status === "failed" && scanJob.attempt_count < scanJob.max_attempts && row.security_status === "quarantined",
+    } : null,
   };
 }
