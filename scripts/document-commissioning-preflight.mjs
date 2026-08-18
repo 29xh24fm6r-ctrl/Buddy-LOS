@@ -49,6 +49,16 @@ function secureUrl(value) {
   }
 }
 
+function secureOrigin(value) {
+  try {
+    const url = new URL(value);
+    return url.protocol === "https:" && url.pathname === "/" && !url.search && !url.hash
+      && !url.username && !url.password;
+  } catch {
+    return false;
+  }
+}
+
 export function evaluateDocumentCommissioning({
   env = process.env,
   evidence = null,
@@ -63,6 +73,10 @@ export function evaluateDocumentCommissioning({
   if (!present(env.SUPABASE_SECRET_KEY, 24)) missingConfiguration.push("SUPABASE_SECRET_KEY");
   if (!present(env.BUDDY_DOCUMENT_SCANNER_PROVIDER)) missingConfiguration.push("BUDDY_DOCUMENT_SCANNER_PROVIDER");
   if (!secureUrl(env.BUDDY_DOCUMENT_SCANNER_ENDPOINT)) missingConfiguration.push("BUDDY_DOCUMENT_SCANNER_ENDPOINT");
+  const scannerEndpointIsCloudRun = secureUrl(env.BUDDY_DOCUMENT_SCANNER_ENDPOINT)
+    && new URL(env.BUDDY_DOCUMENT_SCANNER_ENDPOINT).hostname.endsWith(".run.app");
+  if (scannerEndpointIsCloudRun && !secureOrigin(env.BUDDY_DOCUMENT_SCANNER_AUDIENCE)) missingConfiguration.push("BUDDY_DOCUMENT_SCANNER_AUDIENCE");
+  if (scannerEndpointIsCloudRun && !present(env.BUDDY_DOCUMENT_SCANNER_GOOGLE_SERVICE_ACCOUNT_JSON)) missingConfiguration.push("BUDDY_DOCUMENT_SCANNER_GOOGLE_SERVICE_ACCOUNT_JSON");
   if (!present(env.BUDDY_DOCUMENT_SCANNER_API_KEY, 16)) missingConfiguration.push("BUDDY_DOCUMENT_SCANNER_API_KEY");
   if (!secureUrl(env.BUDDY_DOCUMENT_SCANNER_CALLBACK_URL)) missingConfiguration.push("BUDDY_DOCUMENT_SCANNER_CALLBACK_URL");
   if (!present(env.BUDDY_DOCUMENT_SCANNER_WEBHOOK_SECRET, 32)) missingConfiguration.push("BUDDY_DOCUMENT_SCANNER_WEBHOOK_SECRET");

@@ -97,6 +97,24 @@ describe("document commissioning preflight", () => {
     expect(result.missingConfiguration).toContain("NEXT_PUBLIC_BUDDY_DOCUMENTS_ENABLED");
   });
 
+  it("requires an explicit canonical identity audience for private Cloud Run", () => {
+    const privateEnv = {
+      ...configuredEnv,
+      BUDDY_DOCUMENT_SCANNER_ENDPOINT: "https://scanner-alias-uw.a.run.app/v1/scan",
+      BUDDY_DOCUMENT_SCANNER_GOOGLE_SERVICE_ACCOUNT_JSON: "service-account-json-present",
+    };
+    const missingAudience = evaluateDocumentCommissioning({ env: privateEnv, evidence: completeEvidence, root: installedRoot() });
+    expect(missingAudience.missingConfiguration).toContain("BUDDY_DOCUMENT_SCANNER_AUDIENCE");
+
+    const configured = evaluateDocumentCommissioning({
+      env: { ...privateEnv, BUDDY_DOCUMENT_SCANNER_AUDIENCE: "https://scanner-123456.us-west1.run.app" },
+      evidence: completeEvidence,
+      root: installedRoot(),
+    });
+    expect(configured.missingConfiguration).not.toContain("BUDDY_DOCUMENT_SCANNER_AUDIENCE");
+    expect(configured.stages.configured).toBe(true);
+  });
+
   it("binds certification to exact release identities", () => {
     const result = evaluateDocumentCommissioning({
       env: configuredEnv,

@@ -13,6 +13,17 @@ The Buddy scanner is a separately deployable, private Cloud Run service. It rece
 
 Buddy LOS configures `BUDDY_DOCUMENT_SCANNER_GOOGLE_SERVICE_ACCOUNT_JSON` for the invoker. Google identity travels in `X-Serverless-Authorization`; the provider API credential remains in `Authorization`.
 
+Private Cloud Run also requires `BUDDY_DOCUMENT_SCANNER_AUDIENCE`. Set it to the service's canonical Google-generated `status.url` origin, even when `BUDDY_DOCUMENT_SCANNER_ENDPOINT` uses another valid `run.app` alias. The value must be an HTTPS origin with no path, query, or fragment. This prevents Vercel from minting an otherwise valid identity token for the wrong Cloud Run audience.
+
+```bash
+gcloud run services describe buddy-los-document-scanner-sandbox \
+  --project=buddy-loan-os \
+  --region=us-west1 \
+  --format='value(status.url)'
+```
+
+Store that output in Vercel as the server-only `BUDDY_DOCUMENT_SCANNER_AUDIENCE`. Keep the scanner endpoint's `/v1/scan` path unchanged. A Google Frontend 401 now records a distinct Cloud Run identity failure; an application-layer 401 records a distinct scanner API-key failure, without persisting provider response bodies or credentials.
+
 From a clean checkout in Google Cloud Shell, deploy the disabled sandbox with:
 
 ```bash
