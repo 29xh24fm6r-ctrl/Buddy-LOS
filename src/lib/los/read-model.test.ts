@@ -21,7 +21,7 @@ describe("deriveBankerCommandCenter", () => {
     expect(model.lanes[0]).toMatchObject({ stage: "legacy_review", label: "Legacy Review" });
   });
 
-  it("counts only real past target-close dates as attention", () => {
+  it("uses the advertised thirty-day closing window", () => {\n    const model = deriveBankerCommandCenter([\n      deal({ id: "day-30", expectedCloseDate: "2026-09-10" }),\n      deal({ id: "day-31", expectedCloseDate: "2026-09-11" }),\n    ], new Date("2026-08-11T12:00:00Z"));\n    expect(model.closingSoon).toBe(1);\n  });\n\n  it("counts only real past target-close dates as attention", () => {
     const model = deriveBankerCommandCenter([
       deal({ id: "past", expectedCloseDate: "2026-08-01" }),
       deal({ id: "missing", expectedCloseDate: null }),
