@@ -9,7 +9,9 @@ insert into public.organizations(id,name,slug) values
 insert into public.organization_memberships(organization_id,user_id,role) values
 ('21000000-0000-4000-8000-000000000001','11000000-0000-4000-8000-000000000001','owner'),
 ('21000000-0000-4000-8000-000000000002','11000000-0000-4000-8000-000000000002','owner');
-insert into public.organization_capability_activations(organization_id,capability_key,is_active,activated_at,activated_by,evidence_reference) values\n('21000000-0000-4000-8000-000000000001','underwriting_runtime',true,now(),'11000000-0000-4000-8000-000000000001','ci:underwriting-outbox');\ninsert into public.organization_product_modules(organization_id,module_key,status,activated_by) values
+insert into public.organization_capability_activations(organization_id,capability_key,is_active,activated_at,activated_by,evidence_reference) values
+('21000000-0000-4000-8000-000000000001','underwriting_runtime',true,now(),'11000000-0000-4000-8000-000000000001','ci:underwriting-outbox');
+insert into public.organization_product_modules(organization_id,module_key,status,activated_by) values
 ('21000000-0000-4000-8000-000000000001','underwriting','active','11000000-0000-4000-8000-000000000001');
 insert into public.borrowers(id,organization_id,legal_name,created_by) values
 ('31000000-0000-4000-8000-000000000001','21000000-0000-4000-8000-000000000001','Underwriting Borrower A','11000000-0000-4000-8000-000000000001'),
