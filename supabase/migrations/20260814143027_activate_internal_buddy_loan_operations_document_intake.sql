@@ -1,0 +1,3 @@
+-- Production-history marker only.
+-- The canonical Buddy project recorded a human-authorized internal activation at this version.
+-- Fresh environments remain fail-closed and require their own governed commissioning process.

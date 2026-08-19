@@ -1,0 +1,3 @@
+-- Production-history marker only.
+-- The canonical Buddy project recorded explicitly authorized investor-demo provisioning at this version.
+-- Fresh environments must not create production identities or tenant data.

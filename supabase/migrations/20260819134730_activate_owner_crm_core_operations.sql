@@ -1,0 +1,3 @@
+-- Production-history marker only.
+-- The canonical Buddy project recorded the guarded, human-authorized CRM activation for its owner tenant at this version.
+-- Fresh environments remain fail-closed and require their own governed commissioning process.
