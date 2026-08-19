@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const migration=readFileSync("supabase/migrations/20260819153000_crm_operational_completion_factory.sql","utf8");
+const migration=readFileSync("supabase/migrations/20260819201045_crm_operational_completion_factory.sql","utf8");
 
 describe("CRM operational completion migration",()=>{
   it("exposes governed lifecycle commands only to authenticated operators",()=>{
