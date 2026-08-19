@@ -47,10 +47,10 @@ export function canReadInstitutionPipeline(role: OrganizationRole) {
 export function deriveBankerCommandCenter(deals: readonly DealSummary[], now = new Date()): BankerCommandCenterModel {
   const active = deals.filter((deal) => !terminalStages.has(deal.stage));
   const nowMs = startOfDay(now).getTime();
-  const fourteenDays = 14 * 24 * 60 * 60 * 1000;
+  const thirtyDays = 30 * 24 * 60 * 60 * 1000;
   const closingSoon = active.filter((deal) => {
     const close = parseDate(deal.expectedCloseDate);
-    return close !== null && close >= nowMs && close - nowMs <= fourteenDays;
+    return close !== null && close >= nowMs && close - nowMs <= thirtyDays;
   }).length;
   const needsAttention = active.filter((deal) => {
     const close = parseDate(deal.expectedCloseDate);
