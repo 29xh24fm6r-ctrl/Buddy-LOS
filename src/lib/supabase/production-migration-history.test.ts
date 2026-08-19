@@ -12,6 +12,7 @@ const canonicalProductionHistory = [
   "20260819133526_crm_operating_factory.sql",
   "20260819133532_crm_completion_commissioning_factory.sql",
   "20260819134730_activate_owner_crm_core_operations.sql",
+  "20260819144855_commission_active_crm_entitlement_parity.sql",
 ] as const;
 
 describe("canonical Buddy production migration history", () => {
@@ -24,7 +25,12 @@ describe("canonical Buddy production migration history", () => {
   });
 
   it("keeps production-only identity and activation records out of fresh environments", () => {
-    for (const marker of [canonicalProductionHistory[0], canonicalProductionHistory[4], canonicalProductionHistory[7]]) {
+    for (const marker of [
+      canonicalProductionHistory[0],
+      canonicalProductionHistory[4],
+      canonicalProductionHistory[7],
+      canonicalProductionHistory[8],
+    ]) {
       const sql = readFileSync(`supabase/migrations/${marker}`, "utf8").toLowerCase();
       expect(sql).toContain("production-history marker only");
       const executableSql = sql.replace(/^--.*$/gm, "").trim();
