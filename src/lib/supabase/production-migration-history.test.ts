@@ -13,6 +13,7 @@ const canonicalProductionHistory = [
   "20260819133532_crm_completion_commissioning_factory.sql",
   "20260819134730_activate_owner_crm_core_operations.sql",
   "20260819144855_commission_active_crm_entitlement_parity.sql",
+  "20260819201045_crm_operational_completion_factory.sql",
 ] as const;
 
 describe("canonical Buddy production migration history", () => {
