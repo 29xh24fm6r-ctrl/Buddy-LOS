@@ -8,9 +8,9 @@ insert into public.organizations(id,name,slug) values
 insert into public.organization_memberships(organization_id,user_id,role) values
 ('20000000-0000-4000-8000-000000000001','10000000-0000-4000-8000-000000000001','owner'),
 ('20000000-0000-4000-8000-000000000002','10000000-0000-4000-8000-000000000002','owner');
-insert into public.organization_capability_activations(organization_id,capability_key,activated_by,evidence_reference) values
-('20000000-0000-4000-8000-000000000001','document_operations','10000000-0000-4000-8000-000000000001','ci:document-security'),
-('20000000-0000-4000-8000-000000000002','document_operations','10000000-0000-4000-8000-000000000002','ci:document-security');
+insert into public.organization_capability_activations(organization_id,capability_key,is_active,activated_at,activated_by,evidence_reference) values
+('20000000-0000-4000-8000-000000000001','document_operations',true,now(),'10000000-0000-4000-8000-000000000001','ci:document-security'),
+('20000000-0000-4000-8000-000000000002','document_operations',true,now(),'10000000-0000-4000-8000-000000000002','ci:document-security');
 insert into public.borrowers(id,organization_id,legal_name,created_by) values
 ('30000000-0000-4000-8000-000000000001','20000000-0000-4000-8000-000000000001','Borrower A','10000000-0000-4000-8000-000000000001'),
 ('30000000-0000-4000-8000-000000000002','20000000-0000-4000-8000-000000000002','Borrower B','10000000-0000-4000-8000-000000000002');
