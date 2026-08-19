@@ -1,7 +1,8 @@
 import Link from "next/link";
+import { formatInTimeZone } from "@/lib/los/core-operations";
 import type { BorrowerDetail } from "@/lib/los/queries";
 
-export function BorrowerRelationshipSummary({ borrower }: { borrower: BorrowerDetail }) {
+export function BorrowerRelationshipSummary({ borrower,timezone }: { borrower: BorrowerDetail;timezone:string }) {
   return (
     <>
       <nav className="breadcrumb" aria-label="Breadcrumb"><Link href="/app">Command center</Link><span>/</span><span>{borrower.legalName}</span></nav>
@@ -16,11 +17,13 @@ export function BorrowerRelationshipSummary({ borrower }: { borrower: BorrowerDe
         <div className="panel-heading"><div><p className="eyebrow">Unified relationship record</p><h2 id="relationship-record-title">People, relationships, work, and opportunities</h2></div></div>
         <div className="crm-metric-grid">
           <RecordGroup title="People" empty="No active people linked." rows={borrower.people.map(row=><span key={row.id}>{row.name}{row.title?` · ${row.title}`:""}</span>)}/>
-          <RecordGroup title="Relationships" empty="No relationships recorded." rows={borrower.relationships.map(row=><span key={row.id}>{label(row.kind)}{row.roleLabel?` · ${row.roleLabel}`:""}{row.active?" · Active":" · Ended"}</span>)}/>
-          <RecordGroup title="Recent activity" empty="No activity recorded." rows={borrower.activities.map(row=><span key={row.id}>{row.subject} · {new Date(row.occurredAt).toLocaleDateString()}</span>)}/>
-          <RecordGroup title="Referrals" empty="No referrals recorded." rows={borrower.referrals.map(row=><span key={row.id}>{label(row.status)} · {new Date(row.referredAt).toLocaleDateString()}</span>)}/>
-          <RecordGroup title="Appointments" empty="No appointments recorded." rows={borrower.appointments.map(row=><span key={row.id}>{row.subject} · {label(row.status)}</span>)}/>
+          <RecordGroup title="Relationships" empty="No relationships recorded." rows={borrower.relationships.map(row=><span key={row.id}>{row.counterpartName} · {label(row.kind)}{row.roleLabel?` · ${row.roleLabel}`:""}{row.active?" · Active":" · Ended"}</span>)}/>
+          <RecordGroup title="Recent activity" empty="No activity recorded." rows={borrower.activities.map(row=><span key={row.id}>{row.subject} · {formatInTimeZone(row.occurredAt,timezone)}</span>)}/>
+          <RecordGroup title="Referrals" empty="No referrals recorded." rows={borrower.referrals.map(row=><span key={row.id}>{label(row.status)} · {formatInTimeZone(row.referredAt,timezone)}</span>)}/>
+          <RecordGroup title="Appointments" empty="No appointments recorded." rows={borrower.appointments.map(row=><span key={row.id}>{row.subject} · {label(row.status)} · {formatInTimeZone(row.startsAt,timezone)}</span>)}/>
           <RecordGroup title="Opportunities" empty="No opportunities recorded." rows={borrower.opportunities.map(row=><Link key={row.id} href={`/app/deals/${row.id}`}>{row.name} · {label(row.stage)}</Link>)}/>
+          <RecordGroup title="Tasks" empty="No tasks recorded." rows={borrower.tasks.map(row=><Link key={row.id} href={`/app/deals/${row.dealId}`}>{row.title} · {row.dealName} · {label(row.status)}{row.dueAt?` · ${formatInTimeZone(row.dueAt,timezone)}`:""}</Link>)}/>
+          <RecordGroup title="Relationship managers" empty="No active lender assignment." rows={borrower.assignments.map(row=><span key={row.userId}>{row.displayName} · {label(row.role)}</span>)}/>
         </div>
       </section>
     </>

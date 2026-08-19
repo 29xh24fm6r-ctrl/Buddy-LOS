@@ -11,6 +11,11 @@ Create a GitHub environment named `crm-production`, require a human reviewer, an
 - `SUPABASE_ACCESS_TOKEN`
 - `SUPABASE_PROJECT_REF`
 - `SUPABASE_DB_PASSWORD`
+- `CRM_CERT_BASE_URL`
+- `CRM_CERT_OWNER_EMAIL`
+- `CRM_CERT_OWNER_PASSWORD`
+- `CRM_CERT_LENDER_EMAIL`
+- `CRM_CERT_LENDER_PASSWORD`
 
 Do not store these values in repository files or Vercel client-visible variables.
 
@@ -20,9 +25,9 @@ Do not store these values in repository files or Vercel client-visible variables
 2. Open **Actions → CRM production commissioning → Run workflow**.
 3. Enter `COMMISSION_CRM` exactly.
 4. Approve the protected `crm-production` environment deployment.
-5. Require every workflow step to pass. The workflow previews the migration plan, applies migrations, verifies that repository and production history remain aligned, runs the authorization/lifecycle test inside a rolled-back transaction, and runs the Supabase security advisor.
+5. Require every workflow step to pass. The workflow previews the migration plan, applies migrations, verifies that repository and production history remain aligned, runs the authorization/lifecycle test inside a rolled-back transaction, runs the Supabase security advisor, and executes authenticated owner and lender browser journeys across every CRM workspace view.
 6. Redeploy the exact merged commit to Vercel using Node 22.
-7. Verify an authenticated owner and lender flow: company → detail → person → activity → relationship → referral → appointment → assigned task.
+7. Preserve the workflow URL and its `crm.authenticated_browser_certified` evidence event with the release record. The browser journey verifies both roles, every CRM route, and the governed operating controls against the production deployment.
 8. Verify revocation: end the lender company assignment and confirm company, people, referrals, appointments, and linked relationships disappear immediately.
 
 ## Entitlement and activation parity
