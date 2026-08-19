@@ -18,6 +18,7 @@
     "verify:document-lifecycle-factory": "node scripts/document-commissioning-preflight.mjs",
     "factory:document-lifecycle": "node scripts/document-lifecycle-factory-runner.mjs",
     "certify:document-lifecycle": "node scripts/document-lifecycle-certification-harness.mjs",
+    "certify:crm-browser": "node scripts/crm-authenticated-browser-certification.mjs",
     "verify:release-contract": "node scripts/verify-release-contract.mjs",
     "verify:golden-loan-factory": "node scripts/verify-golden-loan-factory.mjs",
     "check": "npm run verify:source-baseline && npm run verify:release-contract && npm run verify:golden-loan-factory && npm run lint && npm run typecheck && npm run test && npm run build"
