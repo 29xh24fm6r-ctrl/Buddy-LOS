@@ -93,7 +93,8 @@ describe("readSessionRows", () => {
         readProfile: async () => ({ data: null, error: null }),
         verifyIdentity: vi.fn(async () => true),
       }),
-    ).rejects.toMatchObject<Partial<SessionReadFailure>>({
+    ).rejects.toMatchObject({
+      name: SessionReadFailure.name,
       scope: "memberships",
       code: "42501",
       retried: false,
