@@ -1,5 +1,5 @@
 import { describe,expect,it } from "vitest";
-import { activityKinds,borrowerKinds,canOperateCore,contactKinds,dateTimeValue,decimalValue,enumValue,formatInTimeZone,optionalText,requiredText,safeTimeZone,uuidValue,validContactValue } from "./core-operations";
+import { activityKinds,borrowerKinds,canOperateCore,contactKinds,dateTimeValue,dateTimeValueInZone,decimalValue,enumValue,formatInTimeZone,optionalText,requiredText,safeTimeZone,uuidValue,validContactValue } from "./core-operations";
 describe("core operation input boundary",()=>{
   it.each(["owner","administrator","lender"] as const)("permits %s",(role)=>expect(canOperateCore(role)).toBe(true));
   it.each(["underwriter","closer","viewer"] as const)("denies %s",(role)=>expect(canOperateCore(role)).toBe(false));
@@ -8,4 +8,5 @@ describe("core operation input boundary",()=>{
   it("validates typed contact values",()=>{expect(validContactValue("email","banker@example.com")).toBe(true);expect(validContactValue("email","not-an-email")).toBe(false);expect(validContactValue("website","https://example.com")).toBe(true);expect(validContactValue("website","javascript:alert(1)")).toBe(false);expect(validContactValue("phone","+1 (212) 555-0100")).toBe(true);});
   it("parses optional decimal command input",()=>{const f=new FormData();f.set("amount","51.5");expect(decimalValue(f,"amount")).toBe(51.5);expect(decimalValue(new FormData(),"amount",true)).toBeNull();});
   it("fails safe for invalid institution timezones and dates",()=>{expect(safeTimeZone("America/New_York")).toBe("America/New_York");expect(safeTimeZone("not/a-zone")).toBe("UTC");expect(formatInTimeZone("bad-date","not/a-zone")).toBe("Invalid date");});
+  it("interprets local CRM times in the institution timezone",()=>{const f=new FormData();f.set("startsAt","2026-08-19T09:30");expect(dateTimeValueInZone(f,"startsAt","America/New_York")).toBe("2026-08-19T13:30:00.000Z");expect(dateTimeValueInZone(new FormData(),"startsAt","America/New_York",true)).toBeNull();});
 });

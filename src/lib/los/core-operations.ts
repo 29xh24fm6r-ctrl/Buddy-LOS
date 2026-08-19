@@ -5,6 +5,7 @@ export const contactKinds = ["email", "phone", "address", "website", "other"] as
 export const activityKinds = ["call", "email", "meeting", "note", "referral", "other"] as const;
 export const relationshipKinds = ["borrower", "guarantor", "owner", "officer", "advisor", "vendor", "affiliate", "other"] as const;
 export const referralStatuses = ["received", "contacted", "qualified", "converted", "declined", "lost"] as const;
+export const appointmentStatuses = ["scheduled", "completed", "cancelled"] as const;
 
 export function canOperateCore(role: OrganizationRole) {
   return role === "owner" || role === "administrator" || role === "lender";
@@ -38,6 +39,30 @@ export function dateTimeValue(form: FormData, name: string, optional = false) {
   return Number.isNaN(parsed) ? undefined : new Date(parsed).toISOString();
 }
 
+export function dateTimeValueInZone(form: FormData, name: string, timezone: string, optional = false) {
+  const value = String(form.get(name) ?? "").trim();
+  if (optional && !value) return null;
+  if (!value) return undefined;
+  if (/([zZ]|[+-]\d\d:\d\d)$/.test(value)) return dateTimeValue(form, name, optional);
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})(?::(\d{2}))?$/.exec(value);
+  if (!match) return undefined;
+  const desired = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), Number(match[4]), Number(match[5]), Number(match[6] ?? 0));
+  const zone = safeTimeZone(timezone);
+  let candidate = desired;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    const parts = new Intl.DateTimeFormat("en-CA", {
+      timeZone: zone, year: "numeric", month: "2-digit", day: "2-digit",
+      hour: "2-digit", minute: "2-digit", second: "2-digit", hourCycle: "h23",
+    }).formatToParts(new Date(candidate));
+    const part = (type: Intl.DateTimeFormatPartTypes) => Number(parts.find((item) => item.type === type)?.value ?? 0);
+    const observed = Date.UTC(part("year"), part("month") - 1, part("day"), part("hour"), part("minute"), part("second"));
+    const delta = desired - observed;
+    candidate += delta;
+    if (delta === 0) return new Date(candidate).toISOString();
+  }
+  return undefined;
+}
+
 export function decimalValue(form: FormData, name: string, optional = false) {
   const raw = String(form.get(name) ?? "").trim();
   if (optional && !raw) return null;
@@ -65,4 +90,15 @@ export function formatInTimeZone(value: string, timezone: string) {
   const date = new Date(value);
   if (Number.isNaN(date.getTime())) return "Invalid date";
   return new Intl.DateTimeFormat("en-US", { dateStyle: "medium", timeStyle: "short", timeZone: safeTimeZone(timezone) }).format(date);
+}
+
+export function formatDateTimeLocalInZone(value: string, timezone: string) {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return "";
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: safeTimeZone(timezone), year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", hourCycle: "h23",
+  }).formatToParts(date);
+  const part = (type: Intl.DateTimeFormatPartTypes) => parts.find((item) => item.type === type)?.value ?? "";
+  return `${part("year")}-${part("month")}-${part("day")}T${part("hour")}:${part("minute")}`;
 }

@@ -12,7 +12,19 @@ export function BorrowerRelationshipSummary({ borrower }: { borrower: BorrowerDe
           <div className="contact-list">{borrower.contacts.map((contact) => <article key={contact.id}><div><strong>{contact.label ?? label(contact.kind)}</strong><span>{contact.value}</span></div><small>{contact.isPrimary ? "Primary" : "Additional"} · {contact.isVerified ? "Verified" : "Not verified"}</small></article>)}</div>
         )}
       </section>
+      <section className="operating-panel" aria-labelledby="relationship-record-title">
+        <div className="panel-heading"><div><p className="eyebrow">Unified relationship record</p><h2 id="relationship-record-title">People, relationships, work, and opportunities</h2></div></div>
+        <div className="crm-metric-grid">
+          <RecordGroup title="People" empty="No active people linked." rows={borrower.people.map(row=><span key={row.id}>{row.name}{row.title?` · ${row.title}`:""}</span>)}/>
+          <RecordGroup title="Relationships" empty="No relationships recorded." rows={borrower.relationships.map(row=><span key={row.id}>{label(row.kind)}{row.roleLabel?` · ${row.roleLabel}`:""}{row.active?" · Active":" · Ended"}</span>)}/>
+          <RecordGroup title="Recent activity" empty="No activity recorded." rows={borrower.activities.map(row=><span key={row.id}>{row.subject} · {new Date(row.occurredAt).toLocaleDateString()}</span>)}/>
+          <RecordGroup title="Referrals" empty="No referrals recorded." rows={borrower.referrals.map(row=><span key={row.id}>{label(row.status)} · {new Date(row.referredAt).toLocaleDateString()}</span>)}/>
+          <RecordGroup title="Appointments" empty="No appointments recorded." rows={borrower.appointments.map(row=><span key={row.id}>{row.subject} · {label(row.status)}</span>)}/>
+          <RecordGroup title="Opportunities" empty="No opportunities recorded." rows={borrower.opportunities.map(row=><Link key={row.id} href={`/app/deals/${row.id}`}>{row.name} · {label(row.stage)}</Link>)}/>
+        </div>
+      </section>
     </>
   );
 }
+function RecordGroup({title,empty,rows}:{title:string;empty:string;rows:React.ReactNode[]}){return <article><strong>{title}</strong>{rows.length?rows:<span>{empty}</span>}</article>}
 function label(value: string) { return value.split("_").map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" "); }
