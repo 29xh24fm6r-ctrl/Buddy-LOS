@@ -65,7 +65,7 @@ insert into public.organization_capability_activations(
 
 set local role authenticated;
 set local request.jwt.claims='{"sub":"11000000-0000-4000-8000-000000000002","role":"authenticated"}';
-do $$ declare result jsonb; company jsonb; company_id uuid; relationship jsonb; linked_relationship jsonb; completed jsonb; person jsonb; referral jsonb; appointment jsonb; task jsonb; task_updated jsonb; begin
+do $$ declare result jsonb; company jsonb; company_id uuid; relationship jsonb; linked_relationship jsonb; completed jsonb; person jsonb; person_updated jsonb; referral jsonb; referral_updated jsonb; appointment jsonb; appointment_updated jsonb; task jsonb; task_updated jsonb; contact_id uuid; search_count integer; begin
   result := public.create_deal_task(
     '21000000-0000-4000-8000-000000000001','41000000-0000-4000-8000-000000000001',
     'assigned-task-command','Authorized assigned task',null,null,null
@@ -90,20 +90,40 @@ do $$ declare result jsonb; company jsonb; company_id uuid; relationship jsonb; 
   exception when invalid_parameter_value then null; end;
   person := public.create_crm_person('21000000-0000-4000-8000-000000000001',company_id,'crm-person-001','Jordan',null,'Factory',null,'President','Owner',51,'jordan@example.test','+14045551212',true,null);
   if person->>'personId' is null or not exists(select 1 from public.crm_people where id=(person->>'personId')::uuid) then raise exception 'first-class person command failed'; end if;
+  person_updated := public.update_crm_person('21000000-0000-4000-8000-000000000001',(person->>'personId')::uuid,'crm-person-update-001',1,'Jordan','A','Factory','Jordy','Chief Executive','Key relationship',false);
+  if person_updated->>'version'<>'2' then raise exception 'person update lifecycle failed'; end if;
+  perform public.create_crm_person_contact('21000000-0000-4000-8000-000000000001',(person->>'personId')::uuid,'crm-person-contact-001','website','Profile','https://example.test/jordan',false);
+  if not exists(select 1 from public.crm_person_contacts where person_id=(person->>'personId')::uuid and contact_kind='website') then raise exception 'person contact lifecycle failed'; end if;
   perform public.log_crm_activity('21000000-0000-4000-8000-000000000001',company_id,null,'crm-activity-001','call','Factory follow-up',now(),null);
   relationship := public.create_crm_relationship('21000000-0000-4000-8000-000000000001',company_id,'31000000-0000-4000-8000-000000000001','crm-relationship-001','affiliate','Related business',null);
   if relationship->>'relationshipId' is null then raise exception 'relationship command failed'; end if;
+  perform public.close_crm_relationship('21000000-0000-4000-8000-000000000001',(relationship->>'relationshipId')::uuid,'crm-relationship-close-001',true);
+  perform public.reopen_crm_relationship('21000000-0000-4000-8000-000000000001',(relationship->>'relationshipId')::uuid,'crm-relationship-reopen-001',false);
+  if not exists(select 1 from public.borrower_relationships where id=(relationship->>'relationshipId')::uuid and is_active) then raise exception 'relationship reopen lifecycle failed'; end if;
   linked_relationship := public.create_crm_relationship('21000000-0000-4000-8000-000000000001','31000000-0000-4000-8000-000000000001',company_id,'crm-relationship-linked-001','affiliate','Private target',null);
   perform set_config('buddy_test.crm_linked_relationship_id',linked_relationship->>'relationshipId',true);
   referral := public.create_crm_referral('21000000-0000-4000-8000-000000000001',company_id,'31000000-0000-4000-8000-000000000001',null,null,'crm-referral-001',now(),250000,'Factory referral');
   if referral->>'referralId' is null then raise exception 'referral command failed'; end if;
+  referral_updated := public.update_crm_referral('21000000-0000-4000-8000-000000000001',(referral->>'referralId')::uuid,'crm-referral-update-001',1,'qualified','Qualified by lender','Follow-up complete');
+  if referral_updated->>'version'<>'2' or referral_updated->>'status'<>'qualified' then raise exception 'referral update lifecycle failed'; end if;
   appointment := public.create_crm_appointment('21000000-0000-4000-8000-000000000001',company_id,null,'crm-appointment-001','Discovery meeting',now()+interval '1 day',now()+interval '1 day 1 hour','11000000-0000-4000-8000-000000000002','Video',null);
   if appointment->>'appointmentId' is null then raise exception 'appointment command failed'; end if;
+  appointment_updated := public.update_crm_appointment('21000000-0000-4000-8000-000000000001',(appointment->>'appointmentId')::uuid,'crm-appointment-update-001',1,'Rescheduled discovery',now()+interval '2 days',now()+interval '2 days 1 hour','scheduled','11000000-0000-4000-8000-000000000002','Conference room','Bring statements');
+  if appointment_updated->>'version'<>'2' then raise exception 'appointment update lifecycle failed'; end if;
   task := public.create_deal_task('21000000-0000-4000-8000-000000000001','41000000-0000-4000-8000-000000000001','crm-task-lifecycle-001','Prepare discovery',null,now()+interval '2 days',null);
   task_updated := public.update_deal_task('21000000-0000-4000-8000-000000000001',(task->>'taskId')::uuid,'crm-task-update-001',1,'Prepare discovery package','Call notes',now()+interval '3 days','11000000-0000-4000-8000-000000000002',false);
   if task_updated->>'version'<>'2' then raise exception 'task assignment lifecycle failed'; end if;
   completed := public.complete_deal_task('21000000-0000-4000-8000-000000000001','51000000-0000-4000-8000-000000000001','crm-task-complete-001',1);
   if completed->>'status'<>'completed' then raise exception 'task completion failed'; end if;
+  select count(*) into search_count from public.crm_workspace_search_ids('21000000-0000-4000-8000-000000000001','referrals','Assigned Borrower');
+  if search_count<1 then raise exception 'authoritative cross-record search failed'; end if;
+  select id into contact_id from public.borrower_contacts where borrower_id=company_id and value='factory@example.test';
+  perform public.archive_crm_contact('21000000-0000-4000-8000-000000000001',contact_id,'crm-contact-archive-001',1);
+  perform public.restore_crm_record('21000000-0000-4000-8000-000000000001','contact',contact_id,'crm-contact-restore-001',2);
+  perform public.update_crm_person('21000000-0000-4000-8000-000000000001',(person->>'personId')::uuid,'crm-person-archive-001',2,'Jordan','A','Factory','Jordy','Chief Executive','Key relationship',true);
+  perform public.restore_crm_record('21000000-0000-4000-8000-000000000001','person',(person->>'personId')::uuid,'crm-person-restore-001',3);
+  perform public.update_crm_company('21000000-0000-4000-8000-000000000001',company_id,'crm-company-archive-001',1,'Factory Company','FACTORY-001',true);
+  perform public.restore_crm_record('21000000-0000-4000-8000-000000000001','company',company_id,'crm-company-restore-001',2);
 end $$;
 reset role;
 
