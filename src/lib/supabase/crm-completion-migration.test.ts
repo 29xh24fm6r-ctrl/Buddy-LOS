@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const sql=readFileSync("supabase/migrations/20260819160000_crm_completion_commissioning_factory.sql","utf8");
+const sql=readFileSync("supabase/migrations/20260819133532_crm_completion_commissioning_factory.sql","utf8");
 
 describe("CRM completion commissioning migration",()=>{
   it("prevents company idempotency replay from restoring revoked authority",()=>{
