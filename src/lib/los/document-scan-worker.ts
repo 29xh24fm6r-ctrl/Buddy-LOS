@@ -1,11 +1,17 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
-import { sha256Hex } from "@/lib/los/document-upload";
+import { sha256Hex } from "./document-upload";
 import {
   type ScanSubmissionConfig,
+  preflightDocumentScanner,
   ScanSubmissionError,
   submitDocumentScan,
-} from "@/lib/los/document-scan-submission";
+} from "./document-scan-submission";
+
+export type ProcessDocumentScanJobOptions = {
+  skipPreflight?: boolean;
+  preflight?: (config: ScanSubmissionConfig) => Promise<unknown>;
+};
 
 export type ScanDispatchResult =
   | { processed: false; reason: "empty" }
@@ -15,7 +21,12 @@ export async function processDocumentScanJob(
   admin: SupabaseClient,
   config: ScanSubmissionConfig,
   documentId?: string,
+  options: ProcessDocumentScanJobOptions = {},
 ): Promise<ScanDispatchResult> {
+  if (!options.skipPreflight) {
+    await (options.preflight ?? preflightDocumentScanner)(config);
+  }
+
   const claim = documentId
     ? await admin.rpc("claim_document_scan_job_for_document", { p_document_id: documentId })
     : await admin.rpc("claim_document_scan_job");
