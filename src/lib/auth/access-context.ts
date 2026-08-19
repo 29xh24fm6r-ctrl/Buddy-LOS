@@ -11,6 +11,7 @@ export type MembershipRecord = {
   organizationName: string;
   organizationSlug: string;
   institutionType: string | null;
+  timezone: string;
   role: OrganizationRole;
 };
 

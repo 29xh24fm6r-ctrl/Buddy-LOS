@@ -6,6 +6,7 @@ const bank: MembershipRecord = {
   organizationName: "Community Bank",
   organizationSlug: "community-bank",
   institutionType: "bank",
+  timezone: "America/New_York",
   role: "lender",
 };
 

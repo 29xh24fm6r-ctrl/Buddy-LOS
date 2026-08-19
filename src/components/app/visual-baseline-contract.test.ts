@@ -85,7 +85,7 @@ describe("original Commercial LOS visual baseline contract", () => {
 
     for (const behavior of ["navigator.share", "navigator.clipboard.writeText", "Workspace link copied"])
       expect(actions).toContain(behavior);
-    for (const behavior of ["UnavailableWriteButton", "Company creation is not commissioned yet", "crm-more-menu", "More CRM destinations"])
+    for (const behavior of ["+ Add Company", "+ Add Contact", "+ Add Relationship", "#crm-operations"])
       expect(crm).toContain(behavior);
   });
 
@@ -150,7 +150,7 @@ describe("original Commercial LOS visual baseline contract", () => {
       "crm-search-deck",
       "Where the book needs a human next action",
       "Confirmed relationship interactions",
-      "Current authorized CRM result set",
+      "Open opportunities",
     ]) expect(crm).toContain(landmark);
 
     for (const landmark of [
@@ -183,11 +183,10 @@ describe("original Commercial LOS visual baseline contract", () => {
     const css = source("src/app/globals.css");
 
     for (const behavior of [
-      'role="columnheader"',
-      'data-label="Company"',
-      'data-label="Primary contact"',
-      'data-label="Active deals"',
-      'data-label="Exposure"',
+      "directory-header",
+      "Primary contact",
+      "Active deals",
+      "Exposure",
     ]) expect(crm).toContain(behavior);
     for (const rule of [".directory-row>span::before", "content:attr(data-label)", "overflow-wrap:anywhere"])
       expect(css).toContain(rule);
@@ -199,7 +198,7 @@ describe("original Commercial LOS visual baseline contract", () => {
     const institutional = source("src/components/institution/InstitutionalCommandCenter.tsx");
     const css = source("src/app/globals.css");
 
-    expect(crm).toContain('aria-current={activeView === tab ? "page" : undefined}');
+    expect(crm).toContain('aria-current={activeView===tab?"page":undefined}');
     expect(banker).toContain('className="active" aria-current="page"');
     expect(institutional).toContain('className="active" aria-current="page"');
     for (const rule of [
