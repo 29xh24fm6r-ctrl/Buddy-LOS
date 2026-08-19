@@ -25,6 +25,11 @@ jobs:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
       SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+      CRM_CERT_BASE_URL: ${{ secrets.CRM_CERT_BASE_URL }}
+      CRM_CERT_OWNER_EMAIL: ${{ secrets.CRM_CERT_OWNER_EMAIL }}
+      CRM_CERT_OWNER_PASSWORD: ${{ secrets.CRM_CERT_OWNER_PASSWORD }}
+      CRM_CERT_LENDER_EMAIL: ${{ secrets.CRM_CERT_LENDER_EMAIL }}
+      CRM_CERT_LENDER_PASSWORD: ${{ secrets.CRM_CERT_LENDER_PASSWORD }}
     steps:
       - uses: actions/checkout@v4
       - name: Require production commissioning credentials
@@ -32,6 +37,11 @@ jobs:
           test -n "$SUPABASE_ACCESS_TOKEN"
           test -n "$SUPABASE_PROJECT_REF"
           test -n "$SUPABASE_DB_PASSWORD"
+          test -n "$CRM_CERT_BASE_URL"
+          test -n "$CRM_CERT_OWNER_EMAIL"
+          test -n "$CRM_CERT_OWNER_PASSWORD"
+          test -n "$CRM_CERT_LENDER_EMAIL"
+          test -n "$CRM_CERT_LENDER_PASSWORD"
       - uses: supabase/setup-cli@v1
         with:
           version: 2.113.0
@@ -47,3 +57,5 @@ jobs:
         run: supabase db query --linked --file supabase/tests/authorization_activation_lifecycle.sql --output table
       - name: Run database security advisor
         run: supabase db advisors --linked --type security --level warn --fail-on error
+      - name: Certify authenticated owner and lender CRM browser journeys
+        run: npm run certify:crm-browser
