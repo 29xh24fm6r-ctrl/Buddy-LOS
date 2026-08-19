@@ -49,7 +49,7 @@ describe("deriveBankerCommandCenter", () => {
 
 describe("CRM and pipeline directory models", () => {
   it("derives active relationship exposure without counting terminal deals", () => {
-    const rows = deriveBorrowerDirectory([{ id: "borrower-1", legalName: "Acme", borrowerKind: "business", externalReference: null, relationshipStartDate: null, primaryContact: null }], [
+    const rows = deriveBorrowerDirectory([{ id: "borrower-1", version: 1, legalName: "Acme", borrowerKind: "business", externalReference: null, relationshipStartDate: null, primaryContact: null }], [
       deal(), deal({ id: "closed", stage: "closed", requestedAmount: 9000000 }),
     ]);
     expect(rows[0]).toMatchObject({ activeDeals: 1, activeExposure: 1000000 });
@@ -57,8 +57,8 @@ describe("CRM and pipeline directory models", () => {
 
   it("searches only stored borrower facts", () => {
     const rows = deriveBorrowerDirectory([
-      { id: "1", legalName: "Acme Manufacturing", borrowerKind: "business", externalReference: "AC-4", relationshipStartDate: null, primaryContact: "ops@acme.example" },
-      { id: "2", legalName: "Blue River", borrowerKind: "nonprofit", externalReference: null, relationshipStartDate: null, primaryContact: null },
+      { id: "1", version: 1, legalName: "Acme Manufacturing", borrowerKind: "business", externalReference: "AC-4", relationshipStartDate: null, primaryContact: "ops@acme.example" },
+      { id: "2", version: 1, legalName: "Blue River", borrowerKind: "nonprofit", externalReference: null, relationshipStartDate: null, primaryContact: null },
     ], []);
     expect(filterBorrowerDirectory(rows, "ops@acme").map((row) => row.id)).toEqual(["1"]);
     expect(filterBorrowerDirectory(rows, "unknown")).toEqual([]);

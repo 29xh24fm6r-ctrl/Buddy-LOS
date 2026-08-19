@@ -65,7 +65,7 @@ insert into public.organization_capability_activations(
 
 set local role authenticated;
 set local request.jwt.claims='{"sub":"11000000-0000-4000-8000-000000000002","role":"authenticated"}';
-do $$ declare result jsonb; company jsonb; company_id uuid; relationship jsonb; completed jsonb; begin
+do $$ declare result jsonb; company jsonb; company_id uuid; relationship jsonb; linked_relationship jsonb; completed jsonb; person jsonb; referral jsonb; appointment jsonb; task jsonb; task_updated jsonb; begin
   result := public.create_deal_task(
     '21000000-0000-4000-8000-000000000001','41000000-0000-4000-8000-000000000001',
     'assigned-task-command','Authorized assigned task',null,null,null
@@ -80,14 +80,63 @@ do $$ declare result jsonb; company jsonb; company_id uuid; relationship jsonb; 
   exception when insufficient_privilege then null; end;
   company := public.create_crm_company('21000000-0000-4000-8000-000000000001','crm-company-owned-001','Factory Company','business','FACTORY-001');
   company_id := (company->>'borrowerId')::uuid;
+  perform set_config('buddy_test.crm_company_id',company_id::text,true);
   if not exists(select 1 from public.borrowers where id=company_id) then raise exception 'company creator lost read authority'; end if;
   perform public.create_crm_contact('21000000-0000-4000-8000-000000000001',company_id,'crm-contact-primary-001','email','Work','factory@example.test',true);
   if not exists(select 1 from public.borrower_contacts where borrower_id=company_id and is_primary) then raise exception 'primary contact command failed'; end if;
+  begin
+    perform public.create_crm_contact('21000000-0000-4000-8000-000000000001',company_id,'crm-contact-invalid-001','email','Work','not-an-email',false);
+    raise exception 'database contact validation accepted malformed email';
+  exception when invalid_parameter_value then null; end;
+  person := public.create_crm_person('21000000-0000-4000-8000-000000000001',company_id,'crm-person-001','Jordan',null,'Factory',null,'President','Owner',51,'jordan@example.test','+14045551212',true,null);
+  if person->>'personId' is null or not exists(select 1 from public.crm_people where id=(person->>'personId')::uuid) then raise exception 'first-class person command failed'; end if;
   perform public.log_crm_activity('21000000-0000-4000-8000-000000000001',company_id,null,'crm-activity-001','call','Factory follow-up',now(),null);
   relationship := public.create_crm_relationship('21000000-0000-4000-8000-000000000001',company_id,'31000000-0000-4000-8000-000000000001','crm-relationship-001','affiliate','Related business',null);
   if relationship->>'relationshipId' is null then raise exception 'relationship command failed'; end if;
+  linked_relationship := public.create_crm_relationship('21000000-0000-4000-8000-000000000001','31000000-0000-4000-8000-000000000001',company_id,'crm-relationship-linked-001','affiliate','Private target',null);
+  perform set_config('buddy_test.crm_linked_relationship_id',linked_relationship->>'relationshipId',true);
+  referral := public.create_crm_referral('21000000-0000-4000-8000-000000000001',company_id,'31000000-0000-4000-8000-000000000001',null,null,'crm-referral-001',now(),250000,'Factory referral');
+  if referral->>'referralId' is null then raise exception 'referral command failed'; end if;
+  appointment := public.create_crm_appointment('21000000-0000-4000-8000-000000000001',company_id,null,'crm-appointment-001','Discovery meeting',now()+interval '1 day',now()+interval '1 day 1 hour','11000000-0000-4000-8000-000000000002','Video',null);
+  if appointment->>'appointmentId' is null then raise exception 'appointment command failed'; end if;
+  task := public.create_deal_task('21000000-0000-4000-8000-000000000001','41000000-0000-4000-8000-000000000001','crm-task-lifecycle-001','Prepare discovery',null,now()+interval '2 days',null);
+  task_updated := public.update_deal_task('21000000-0000-4000-8000-000000000001',(task->>'taskId')::uuid,'crm-task-update-001',1,'Prepare discovery package','Call notes',now()+interval '3 days','11000000-0000-4000-8000-000000000002',false);
+  if task_updated->>'version'<>'2' then raise exception 'task assignment lifecycle failed'; end if;
   completed := public.complete_deal_task('21000000-0000-4000-8000-000000000001','51000000-0000-4000-8000-000000000001','crm-task-complete-001',1);
   if completed->>'status'<>'completed' then raise exception 'task completion failed'; end if;
+end $$;
+reset role;
+
+set local role authenticated;
+set local request.jwt.claims='{"sub":"11000000-0000-4000-8000-000000000001","role":"authenticated"}';
+do $$ declare company_id uuid := current_setting('buddy_test.crm_company_id')::uuid; begin
+  perform public.end_crm_company_assignment('21000000-0000-4000-8000-000000000001',company_id,'11000000-0000-4000-8000-000000000002','crm-assignment-end-001');
+end $$;
+reset role;
+
+set local role authenticated;
+set local request.jwt.claims='{"sub":"11000000-0000-4000-8000-000000000002","role":"authenticated"}';
+do $$ declare company_id uuid := current_setting('buddy_test.crm_company_id')::uuid; replayed jsonb; begin
+  replayed := public.create_crm_company('21000000-0000-4000-8000-000000000001','crm-company-owned-001','Factory Company','business','FACTORY-001');
+  if not coalesce((replayed->>'replayed')::boolean,false) then raise exception 'company replay did not report replay'; end if;
+  if exists(select 1 from public.borrowers where id=company_id) then raise exception 'company replay restored revoked authority'; end if;
+  if exists(select 1 from public.borrower_relationships where id=current_setting('buddy_test.crm_linked_relationship_id')::uuid) then raise exception 'relationship RLS leaked inaccessible target metadata'; end if;
+end $$;
+reset role;
+
+set local role authenticated;
+set local request.jwt.claims='{"sub":"11000000-0000-4000-8000-000000000001","role":"authenticated"}';
+do $$ declare company_id uuid := current_setting('buddy_test.crm_company_id')::uuid; begin
+  perform public.assign_crm_company('21000000-0000-4000-8000-000000000001',company_id,'11000000-0000-4000-8000-000000000002','crm-assignment-restore-001');
+end $$;
+reset role;
+
+set local role authenticated;
+set local request.jwt.claims='{"sub":"11000000-0000-4000-8000-000000000002","role":"authenticated"}';
+do $$ declare company_id uuid := current_setting('buddy_test.crm_company_id')::uuid; metrics jsonb; begin
+  if not exists(select 1 from public.borrowers where id=company_id) then raise exception 'explicit assignment did not restore authority'; end if;
+  metrics := public.crm_dashboard_metrics('21000000-0000-4000-8000-000000000001');
+  if (metrics->>'companies')::integer < 2 or (metrics->>'people')::integer <> 1 then raise exception 'RLS-aware CRM metrics are inaccurate'; end if;
 end $$;
 reset role;
 

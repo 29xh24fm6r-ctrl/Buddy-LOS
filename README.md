@@ -50,6 +50,7 @@ npm run check
 - [Governed document retention and cleanup](docs/product/GOVERNED-DOCUMENT-RETENTION-CLEANUP.md)
 - [Document security and recovery harness](docs/product/DOCUMENT-SECURITY-RECOVERY-HARNESS.md)
 - [Document commissioning](docs/operations/DOCUMENT-COMMISSIONING.md)
+- [CRM production commissioning](docs/crm-production-commissioning.md)
 - [Document operations observability](docs/operations/DOCUMENT-OPERATIONS-OBSERVABILITY.md)
 - [Security baseline](docs/security/SECURITY-BASELINE.md)
 - [Identity and tenant gate](docs/security/IDENTITY-AND-TENANT-GATE.md)

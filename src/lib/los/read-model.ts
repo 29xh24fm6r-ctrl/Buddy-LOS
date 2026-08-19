@@ -20,6 +20,7 @@ export type PipelineLane = { stage: string; label: string; deals: DealSummary[];
 
 export type BorrowerSummary = {
   id: string;
+  version: number;
   legalName: string;
   borrowerKind: string;
   externalReference: string | null;
