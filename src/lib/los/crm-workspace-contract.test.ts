@@ -16,8 +16,9 @@ describe("CRM workspace end-to-end contracts",()=>{
     expect(actions).toContain('deal.borrower_id!==borrowerId');
     expect(actions).toContain('error=company-deal-mismatch');
   });
-  it("loads real people, referrals, appointments, and authoritative metrics together",()=>{
-    for(const loader of ["loadCrmPeople(context,page)","loadCrmReferrals(context,page)","loadCrmAppointments(context,page)","loadCrmMetrics(context)"])expect(page).toContain(loader);
+  it("loads only the active paginated CRM view plus authoritative metrics",()=>{
+    for(const loader of ["loadCrmPeople(context,page,q)","loadCrmReferrals(context,page,q)","loadCrmAppointments(context,page,q)","loadCrmMetrics(context)","loadCrmViewTotal(context,activeView,q)"])expect(page).toContain(loader);
+    expect(page).toContain("loadBorrowerDeals(context,companyPage.map");
   });
   it("assigns newly created tasks to the acting operator",()=>{
     expect(actions).toContain("p_assigned_to:context.userId");
