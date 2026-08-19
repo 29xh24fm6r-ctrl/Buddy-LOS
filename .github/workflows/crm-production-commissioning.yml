@@ -1,0 +1,49 @@
+name: CRM production commissioning
+
+on:
+  workflow_dispatch:
+    inputs:
+      confirmation:
+        description: Type COMMISSION_CRM to apply migrations and run the transactional certification
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: crm-production-commissioning
+  cancel-in-progress: false
+
+jobs:
+  commission:
+    if: inputs.confirmation == 'COMMISSION_CRM'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    environment: crm-production
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
+      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Require production commissioning credentials
+        run: |
+          test -n "$SUPABASE_ACCESS_TOKEN"
+          test -n "$SUPABASE_PROJECT_REF"
+          test -n "$SUPABASE_DB_PASSWORD"
+      - uses: supabase/setup-cli@v1
+        with:
+          version: 2.113.0
+      - name: Link the canonical Buddy database
+        run: supabase link --project-ref "$SUPABASE_PROJECT_REF" --password "$SUPABASE_DB_PASSWORD"
+      - name: Preview production migration plan
+        run: supabase db push --linked --password "$SUPABASE_DB_PASSWORD" --dry-run
+      - name: Apply production migrations
+        run: supabase db push --linked --password "$SUPABASE_DB_PASSWORD"
+      - name: Verify production migration history
+        run: supabase migration list --linked --password "$SUPABASE_DB_PASSWORD"
+      - name: Run transactional CRM authorization and lifecycle certification
+        run: supabase db query --linked --file supabase/tests/authorization_activation_lifecycle.sql --output table
+      - name: Run database security advisor
+        run: supabase db advisors --linked --type security --level warn --fail-on error

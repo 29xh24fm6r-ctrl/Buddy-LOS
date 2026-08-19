@@ -1,59 +1,37 @@
 import { randomUUID } from "node:crypto";
-import { completeCrmTask, createCrmCompany, createCrmContact, createCrmRelationship, createCrmTask, logCrmActivity } from "@/app/app/crm/actions";
+import { createCrmAppointment, createCrmCompany, createCrmContact, createCrmPerson, createCrmReferral, createCrmRelationship, createCrmTask, logCrmActivity, updateCrmCompany } from "@/app/app/crm/actions";
+import { SubmitButton } from "@/components/app/SubmitButton";
+import type { BorrowerDirectoryRow, DealSummary } from "@/lib/los/read-model";
 import { LocalDateTimeField } from "./LocalDateTimeField";
-import type { BorrowerDirectoryRow } from "@/lib/los/read-model";
-import type { DealSummary } from "@/lib/los/read-model";
-import type { CrmActivityRecord, DealTaskRecord } from "@/lib/los/queries";
 
-type Props = { rows: BorrowerDirectoryRow[]; deals:DealSummary[]; activities: CrmActivityRecord[]; tasks:DealTaskRecord[]; timezone:string; writesEnabled: boolean; error?: string; saved?: string };
+type Props={rows:BorrowerDirectoryRow[];deals:DealSummary[];writesEnabled:boolean;error?:string;saved?:string;view:string};
 
-export function CrmOperationsPanel({ rows, deals, activities, tasks, timezone, writesEnabled, error, saved }: Props) {
+export function CrmOperationsPanel({rows,deals,writesEnabled,error,saved,view}:Props){
   return <section id="crm-operations" className="core-operations-panel" aria-label="CRM operating controls">
-    <header className="core-operations-header"><div><p className="eyebrow">Governed CRM operations</p><h2>Relationship book controls</h2></div><span className="status-chip">{writesEnabled ? "Ready" : "Read only"}</span></header>
-    {error ? <p className="operation-message operation-error">The request was not completed ({error}).</p> : null}
-    {saved ? <p className="operation-message operation-success">The CRM record was saved.</p> : null}
-    <div className="core-operations-grid">
-      <OperationForm title="Add company" action={createCrmCompany} enabled={writesEnabled}>
-        <input type="hidden" name="idempotencyKey" value={`company:${randomUUID()}`} />
-        <label>Legal name<input name="legalName" minLength={2} maxLength={200} required /></label>
-        <label>Borrower type<select name="borrowerKind" defaultValue="business"><option value="business">Business</option><option value="individual">Individual</option><option value="trust">Trust</option><option value="government">Government</option><option value="nonprofit">Nonprofit</option><option value="other">Other</option></select></label>
-        <label>External reference<input name="externalReference" maxLength={120} /></label>
-      </OperationForm>
-      <OperationForm title="Add contact" action={createCrmContact} enabled={writesEnabled && rows.length > 0}>
-        <input type="hidden" name="idempotencyKey" value={`contact:${randomUUID()}`} />
-        <BorrowerSelect rows={rows} />
-        <label>Contact type<select name="contactKind" defaultValue="email"><option value="email">Email</option><option value="phone">Phone</option><option value="address">Address</option><option value="website">Website</option><option value="other">Other</option></select></label>
-        <label>Value<input name="value" required maxLength={500} /></label>
-        <label>Label<input name="label" maxLength={80} /></label>
-        <label className="checkbox-field"><input name="isPrimary" type="checkbox" defaultChecked />Use as primary for this contact type</label>
-      </OperationForm>
-      <OperationForm title="Log activity" action={logCrmActivity} enabled={writesEnabled && rows.length > 0}>
-        <input type="hidden" name="idempotencyKey" value={`activity:${randomUUID()}`} />
-        <BorrowerSelect rows={rows} />
-        <DealSelect deals={deals} optional />
-        <label>Activity type<select name="activityKind" defaultValue="call"><option value="call">Call</option><option value="email">Email</option><option value="meeting">Meeting</option><option value="note">Note</option><option value="referral">Referral</option><option value="other">Other</option></select></label>
-        <label>Subject<input name="subject" required minLength={2} maxLength={200} /></label>
-        <LocalDateTimeField name="occurredAt" label="Occurred at" required />
-        <label>Notes<textarea name="notes" maxLength={4000} /></label>
-      </OperationForm>
-      <OperationForm title="Add relationship" action={createCrmRelationship} enabled={writesEnabled && rows.length > 1}>
-        <input type="hidden" name="idempotencyKey" value={`relationship:${randomUUID()}`} />
-        <BorrowerSelect rows={rows} name="sourceBorrowerId" label="Source company" />
-        <BorrowerSelect rows={rows} name="targetBorrowerId" label="Related company" />
-        <label>Relationship type<select name="relationshipKind" defaultValue="affiliate"><option value="guarantor">Guarantor</option><option value="owner">Owner</option><option value="officer">Officer</option><option value="advisor">Advisor</option><option value="vendor">Vendor</option><option value="affiliate">Affiliate</option><option value="other">Other</option></select></label>
-        <label>Role label<input name="roleLabel" maxLength={120}/></label><label>Notes<textarea name="notes" maxLength={4000}/></label>
-      </OperationForm>
-      <OperationForm title="Create task" action={createCrmTask} enabled={writesEnabled && deals.length > 0}>
-        <input type="hidden" name="idempotencyKey" value={`task:${randomUUID()}`} /><DealSelect deals={deals}/>
-        <label>Title<input name="title" required minLength={2} maxLength={200}/></label><label>Description<textarea name="description" maxLength={4000}/></label><LocalDateTimeField name="dueAt" label="Due at"/>
-      </OperationForm>
-    </div>
-    <div className="activity-ledger"><div><p className="eyebrow">Recent activity</p><h3>Confirmed relationship interactions</h3></div>{activities.length ? <ul>{activities.slice(0,8).map(activity=><li key={activity.id}><time>{formatDate(activity.occurredAt,timezone)}</time><strong>{activity.kind}</strong><span>{activity.borrowerName}: {activity.subject}</span></li>)}</ul> : <p className="empty-copy">No CRM activity has been recorded yet.</p>}</div>
-    <div className="task-ledger"><div><p className="eyebrow">Work queue</p><h3>Open CRM tasks</h3></div>{tasks.filter(task=>task.status==="open").length?<ul>{tasks.filter(task=>task.status==="open").slice(0,12).map(task=><li key={task.id}><span><strong>{task.title}</strong><small>{task.dealName}{task.dueAt?` · ${formatDate(task.dueAt,timezone)}`:""}</small></span><form action={completeCrmTask}><input type="hidden" name="taskId" value={task.id}/><input type="hidden" name="expectedVersion" value={task.version}/><input type="hidden" name="idempotencyKey" value={`task-complete:${task.id}:${task.version}`}/><button disabled={!writesEnabled}>Complete</button></form></li>)}</ul>:<p className="empty-copy">No open CRM tasks.</p>}</div>
+    <header className="core-operations-header"><div><p className="eyebrow">Governed CRM operations</p><h2>{operationHeading(view)}</h2></div><span className="status-chip">{writesEnabled?"Ready":"Read only"}</span></header>
+    {error?<p className="operation-message operation-error">The request was not completed ({error}).</p>:null}
+    {saved?<p className="operation-message operation-success">The CRM record was saved.</p>:null}
+    <div className="core-operations-grid">{formsForView(view,rows,deals,writesEnabled)}</div>
   </section>;
 }
 
-function BorrowerSelect({ rows,name="borrowerId",label="Company" }: { rows: BorrowerDirectoryRow[];name?:string;label?:string }) { return <label>{label}<select name={name} required defaultValue=""><option value="" disabled>Select a company</option>{rows.map(row=><option value={row.id} key={row.id}>{row.legalName}</option>)}</select></label>; }
+function formsForView(view:string,rows:BorrowerDirectoryRow[],deals:DealSummary[],enabled:boolean){
+  if(view==="people")return <><OperationForm title="Add person" action={createCrmPerson} enabled={enabled&&rows.length>0}>
+    <input type="hidden" name="idempotencyKey" value={`person:${randomUUID()}`}/><BorrowerSelect rows={rows}/>
+    <label>First name<input name="firstName" required minLength={1} maxLength={100}/></label><label>Middle name<input name="middleName" maxLength={100}/></label><label>Last name<input name="lastName" required minLength={1} maxLength={100}/></label><label>Preferred name<input name="preferredName" maxLength={100}/></label><label>Job title<input name="jobTitle" maxLength={160}/></label><label>Company role<input name="roleLabel" required minLength={2} maxLength={120} placeholder="Owner, president, controller…"/></label><label>Ownership percentage<input name="ownershipPercentage" type="number" min="0" max="100" step="0.01"/></label><label>Email<input name="email" type="email" maxLength={500}/></label><label>Phone<input name="phone" type="tel" maxLength={30}/></label><label className="checkbox-field"><input name="isPrimary" type="checkbox"/>Primary company contact</label><label>Notes<textarea name="notes" maxLength={4000}/></label>
+  </OperationForm><OperationForm title="Add company contact point" action={createCrmContact} enabled={enabled&&rows.length>0}><input type="hidden" name="idempotencyKey" value={`contact:${randomUUID()}`}/><BorrowerSelect rows={rows}/><label>Contact type<select name="contactKind" defaultValue="email"><option value="email">Email</option><option value="phone">Phone</option><option value="address">Address</option><option value="website">Website</option><option value="other">Other</option></select></label><label>Value<input name="value" required maxLength={500}/></label><label>Label<input name="label" maxLength={80}/></label><label className="checkbox-field"><input name="isPrimary" type="checkbox"/>Primary for this type</label></OperationForm></>;
+  if(view==="relationships")return <OperationForm title="Add relationship" action={createCrmRelationship} enabled={enabled&&rows.length>1}><input type="hidden" name="idempotencyKey" value={`relationship:${randomUUID()}`}/><BorrowerSelect rows={rows} name="sourceBorrowerId" label="Source company"/><BorrowerSelect rows={rows} name="targetBorrowerId" label="Related company"/><label>Relationship type<select name="relationshipKind" defaultValue="affiliate"><option value="guarantor">Guarantor</option><option value="owner">Owner</option><option value="officer">Officer</option><option value="advisor">Advisor</option><option value="vendor">Vendor</option><option value="affiliate">Affiliate</option><option value="other">Other</option></select></label><label>Role label<input name="roleLabel" maxLength={120}/></label><label>Notes<textarea name="notes" maxLength={4000}/></label></OperationForm>;
+  if(view==="activities")return <OperationForm title="Log activity" action={logCrmActivity} enabled={enabled&&rows.length>0}><input type="hidden" name="idempotencyKey" value={`activity:${randomUUID()}`}/><BorrowerSelect rows={rows}/><DealSelect deals={deals} optional/><p className="empty-copy">If an opportunity is selected, it must belong to the selected company.</p><label>Activity type<select name="activityKind" defaultValue="call"><option value="call">Call</option><option value="email">Email</option><option value="meeting">Meeting</option><option value="note">Note</option><option value="referral">Referral note</option><option value="other">Other</option></select></label><label>Subject<input name="subject" required minLength={2} maxLength={200}/></label><LocalDateTimeField name="occurredAt" label="Occurred at" required/><label>Notes<textarea name="notes" maxLength={4000}/></label></OperationForm>;
+  if(view==="tasks")return <OperationForm title="Create assigned task" action={createCrmTask} enabled={enabled&&deals.length>0}><input type="hidden" name="idempotencyKey" value={`task:${randomUUID()}`}/><DealSelect deals={deals}/><label>Title<input name="title" required minLength={2} maxLength={200}/></label><label>Description<textarea name="description" maxLength={4000}/></label><LocalDateTimeField name="dueAt" label="Due at"/><p className="empty-copy">The task is assigned to you. It can be completed or cancelled from the task ledger.</p></OperationForm>;
+  if(view==="referrals")return <OperationForm title="Record referral" action={createCrmReferral} enabled={enabled&&rows.length>1}><input type="hidden" name="idempotencyKey" value={`referral:${randomUUID()}`}/><BorrowerSelect rows={rows} label="Referred company"/><BorrowerSelect rows={rows} name="sourceBorrowerId" label="Referral source company"/><DealSelect deals={deals} optional/><LocalDateTimeField name="referredAt" label="Referred at" required/><label>Estimated value<input name="estimatedValue" type="number" min="0" step="0.01"/></label><label>Notes<textarea name="notes" maxLength={4000}/></label></OperationForm>;
+  if(view==="calendar")return <OperationForm title="Schedule appointment" action={createCrmAppointment} enabled={enabled&&rows.length>0}><input type="hidden" name="idempotencyKey" value={`appointment:${randomUUID()}`}/><BorrowerSelect rows={rows}/><DealSelect deals={deals} optional/><p className="empty-copy">If an opportunity is selected, it must belong to the selected company.</p><label>Subject<input name="subject" required minLength={2} maxLength={200}/></label><LocalDateTimeField name="startsAt" label="Starts at" required/><LocalDateTimeField name="endsAt" label="Ends at" required/><label>Location or meeting link<input name="location" maxLength={500}/></label><label>Notes<textarea name="notes" maxLength={4000}/></label></OperationForm>;
+  if(view==="companies")return <><CompanyCreate enabled={enabled}/><OperationForm title="Update company" action={updateCrmCompany} enabled={enabled&&rows.length>0}><input type="hidden" name="idempotencyKey" value={`company-update:${randomUUID()}`}/><CompanyVersionSelect rows={rows}/><label>Legal name<input name="legalName" required minLength={2} maxLength={200}/></label><label>External reference<input name="externalReference" maxLength={120}/></label><p className="empty-copy">The current version is protected by optimistic concurrency. To archive, select the company and check the control below.</p><label className="checkbox-field"><input name="archive" type="checkbox" value="true"/>Archive this company</label></OperationForm></>;
+  return <CompanyCreate enabled={enabled}/>;
+}
+
+function CompanyCreate({enabled}:{enabled:boolean}){return <OperationForm title="Add company" action={createCrmCompany} enabled={enabled}><input type="hidden" name="idempotencyKey" value={`company:${randomUUID()}`}/><label>Legal name<input name="legalName" minLength={2} maxLength={200} required/></label><label>Borrower type<select name="borrowerKind" defaultValue="business"><option value="business">Business</option><option value="individual">Individual</option><option value="trust">Trust</option><option value="government">Government</option><option value="nonprofit">Nonprofit</option><option value="other">Other</option></select></label><label>External reference<input name="externalReference" maxLength={120}/></label></OperationForm>}
+function BorrowerSelect({rows,name="borrowerId",label="Company"}:{rows:BorrowerDirectoryRow[];name?:string;label?:string}){return <label>{label}<select name={name} required defaultValue=""><option value="" disabled>Select a company</option>{rows.map(row=><option value={row.id} key={row.id}>{row.legalName}</option>)}</select></label>}
+function CompanyVersionSelect({rows}:{rows:BorrowerDirectoryRow[]}){return <label>Company<select name="companySelection" required defaultValue=""><option value="" disabled>Select a company</option>{rows.map(row=><option value={`${row.id}:${row.version}`} key={row.id}>{row.legalName} · v{row.version}</option>)}</select></label>}
 function DealSelect({deals,optional=false}:{deals:DealSummary[];optional?:boolean}){return <label>{optional?"Related opportunity (optional)":"Opportunity"}<select name="dealId" required={!optional} defaultValue=""><option value="" disabled={!optional}>{optional?"No related opportunity":"Select an opportunity"}</option>{deals.map(deal=><option value={deal.id} key={deal.id}>{deal.borrowerName} · {deal.name}</option>)}</select></label>}
-function OperationForm({ title, action, enabled, children }: { title:string; action:(form:FormData)=>Promise<void>; enabled:boolean; children:React.ReactNode }) { return <form action={action} className="operation-form"><h3>{title}</h3>{children}<button className="button-primary" disabled={!enabled}>{enabled ? title : "Writes disabled"}</button></form>; }
-function formatDate(value:string,timezone:string){return new Intl.DateTimeFormat("en-US",{dateStyle:"medium",timeStyle:"short",timeZone:timezone}).format(new Date(value))}
+function OperationForm({title,action,enabled,children}:{title:string;action:(form:FormData)=>Promise<void>;enabled:boolean;children:React.ReactNode}){return <form action={action} className="operation-form"><h3>{title}</h3>{children}{enabled?<SubmitButton idle={title} pending={`${title}…`}/>:<button className="button-primary" disabled>Writes disabled</button>}</form>}
+function operationHeading(view:string){const labels:Record<string,string>={companies:"Company lifecycle",people:"People and contact lifecycle",relationships:"Relationship lifecycle",activities:"Activity ledger",referrals:"Referral pipeline",calendar:"Appointment calendar",tasks:"Assigned work queue"};return labels[view]??"Relationship book controls"}

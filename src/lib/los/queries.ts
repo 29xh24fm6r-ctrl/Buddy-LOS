@@ -16,7 +16,7 @@ type DealRow = {
 };
 type BorrowerRow = { id: string; legal_name: string };
 type BorrowerDirectoryRecord = BorrowerRow & {
-  borrower_kind: string; external_reference: string | null; relationship_start_date: string | null;
+  version: number; borrower_kind: string; external_reference: string | null; relationship_start_date: string | null;
 };
 type DealDocumentRow = {
   id: string; requirement_id: string | null; logical_document_id: string; version_number: number;
@@ -55,15 +55,22 @@ export type GoldenLoanWorkspaceRecord = {
   covenants: { id:string; title:string; status:string; dueDate:string }[];
 };
 export type BorrowerDetail = {
-  id: string; legalName: string; borrowerKind: string; externalReference: string | null;
+  id: string; version: number; legalName: string; borrowerKind: string; externalReference: string | null;
   relationshipStartDate: string | null; contacts: { id: string; kind: string; label: string | null; value: string; isPrimary: boolean; isVerified: boolean; restrictedUse: boolean }[];
 };
 export type CrmActivityRecord = { id:string; borrowerId:string; borrowerName:string; dealId:string|null; kind:string; subject:string; occurredAt:string; notes:string|null };
-export type CrmContactRecord = { id:string; borrowerId:string; borrowerName:string; kind:string; label:string|null; value:string; isPrimary:boolean; isVerified:boolean; restrictedUse:boolean };
+export type CrmContactRecord = { id:string; borrowerId:string; borrowerName:string; kind:string; label:string|null; value:string; isPrimary:boolean; isVerified:boolean; restrictedUse:boolean; version:number };
 export type CrmRelationshipRecord = { id:string; sourceBorrowerId:string; sourceName:string; targetBorrowerId:string|null; targetName:string|null; dealId:string|null; dealName:string|null; kind:string; roleLabel:string|null; notes:string|null; isActive:boolean };
 export type DealTaskRecord = { id:string; dealId:string; dealName:string; title:string; description:string|null; status:string; dueAt:string|null; assignedTo:string|null; version:number };
+export type CrmPersonRecord = { id:string; borrowerId:string; borrowerName:string; firstName:string; lastName:string; preferredName:string|null; jobTitle:string|null; roleLabel:string; ownershipPercentage:number|null; isPrimary:boolean; email:string|null; phone:string|null; version:number };
+export type CrmReferralRecord = { id:string; borrowerId:string; borrowerName:string; sourceName:string; dealId:string|null; dealName:string|null; status:string; referredAt:string; estimatedValue:number|null; notes:string|null; version:number };
+export type CrmAppointmentRecord = { id:string; borrowerId:string; borrowerName:string; dealId:string|null; dealName:string|null; subject:string; startsAt:string; endsAt:string; status:string; assignedTo:string|null; location:string|null; notes:string|null; version:number };
+export type CrmMetrics = { companies:number; people:number; contactPoints:number; relationships:number; activities:number; referrals:number; appointments:number; tasks:number; openTasks:number; opportunities:number; openOpportunities:number; activeExposure:number };
 
-export async function loadCommandCenterDeals(context: ReadyContext): Promise<DealSummary[]> {
+const CRM_PAGE_SIZE=50;
+function crmRange(page:number){const safe=Math.max(1,Math.floor(page)||1),from=(safe-1)*CRM_PAGE_SIZE;return{from,to:from+CRM_PAGE_SIZE-1};}
+
+export async function loadCommandCenterDeals(context: ReadyContext, page?:number): Promise<DealSummary[]> {
   const supabase = await createClient();
   const organizationId = context.activeOrganization.organizationId;
   let allowedDealIds: string[] | null = null;
@@ -77,8 +84,9 @@ export async function loadCommandCenterDeals(context: ReadyContext): Promise<Dea
 
   let query = supabase.from("deals")
     .select("id, borrower_id, deal_number, name, product_type, requested_amount, approved_amount, stage, expected_close_date, updated_at")
-    .eq("organization_id", organizationId).is("archived_at", null).order("updated_at", { ascending: false }).limit(200);
+    .eq("organization_id", organizationId).is("archived_at", null).order("updated_at", { ascending: false });
   if (allowedDealIds) query = query.in("id", allowedDealIds);
+  if(page){const{from,to}=crmRange(page);query=query.range(from,to);}else query=query.limit(200);
   const { data: dealData, error: dealError } = await query;
   if (dealError) throw new Error("Unable to load the deal pipeline.");
 
@@ -94,24 +102,25 @@ export async function loadCommandCenterDeals(context: ReadyContext): Promise<Dea
   return dealRows.map((row) => toSummary(row, borrowers.get(row.borrower_id) ?? "Borrower unavailable"));
 }
 
-export async function loadBorrowerDirectory(context: ReadyContext): Promise<BorrowerSummary[]> {
+export async function loadBorrowerDirectory(context: ReadyContext,page?:number): Promise<BorrowerSummary[]> {
   const supabase = await createClient();
   const organizationId = context.activeOrganization.organizationId;
-  const [{ data: borrowerData, error: borrowerError }, { data: contactData, error: contactError }] = await Promise.all([
-    supabase.from("borrowers")
-      .select("id, legal_name, borrower_kind, external_reference, relationship_start_date")
-      .eq("organization_id", organizationId).is("archived_at", null).order("legal_name").limit(500),
-    supabase.from("borrower_contacts")
-      .select("borrower_id, value, restricted_use")
-      .eq("organization_id", organizationId).eq("is_primary", true).order("created_at").limit(500),
-  ]);
-  if (borrowerError || contactError) throw new Error("Unable to load the borrower directory.");
+  let borrowerQuery=supabase.from("borrowers")
+      .select("id, version, legal_name, borrower_kind, external_reference, relationship_start_date")
+      .eq("organization_id", organizationId).is("archived_at", null).order("legal_name");
+  if(page){const{from,to}=crmRange(page);borrowerQuery=borrowerQuery.range(from,to);}else borrowerQuery=borrowerQuery.limit(500);
+  const{data:borrowerData,error:borrowerError}=await borrowerQuery;
+  if(borrowerError)throw new Error("Unable to load the borrower directory.");
+  const borrowerIds=(borrowerData??[]).map(borrower=>borrower.id as string);
+  const{data:contactData,error:contactError}=borrowerIds.length?await supabase.from("borrower_contacts").select("borrower_id, value, restricted_use").eq("organization_id",organizationId).eq("is_primary",true).is("archived_at",null).in("borrower_id",borrowerIds).order("created_at"):{data:[],error:null};
+  if(contactError)throw new Error("Unable to load the borrower directory.");
   const contacts = new Map<string, string>();
   for (const contact of contactData ?? []) {
     if (!contacts.has(contact.borrower_id)) contacts.set(contact.borrower_id, contact.restricted_use ? "Restricted" : contact.value);
   }
   return ((borrowerData ?? []) as BorrowerDirectoryRecord[]).map((borrower) => ({
     id: borrower.id,
+    version: borrower.version,
     legalName: borrower.legal_name,
     borrowerKind: borrower.borrower_kind,
     externalReference: borrower.external_reference,
@@ -120,27 +129,27 @@ export async function loadBorrowerDirectory(context: ReadyContext): Promise<Borr
   }));
 }
 
-export async function loadCrmActivities(context:ReadyContext):Promise<CrmActivityRecord[]> {
+export async function loadCrmActivities(context:ReadyContext,page=1):Promise<CrmActivityRecord[]> {
   const supabase=await createClient(), organizationId=context.activeOrganization.organizationId;
-  const {data,error}=await supabase.from("crm_activities").select("id, borrower_id, deal_id, activity_kind, subject, occurred_at, notes").eq("organization_id",organizationId).order("occurred_at",{ascending:false}).limit(100);
+  const{from,to}=crmRange(page);const {data,error}=await supabase.from("crm_activities").select("id, borrower_id, deal_id, activity_kind, subject, occurred_at, notes").eq("organization_id",organizationId).order("occurred_at",{ascending:false}).range(from,to);
   if(error) throw new Error("Unable to load CRM activities.");
   const borrowerIds=[...new Set((data??[]).map((row)=>row.borrower_id as string))], names=new Map<string,string>();
   if(borrowerIds.length){const{data:borrowers,error:borrowerError}=await supabase.from("borrowers").select("id, legal_name").eq("organization_id",organizationId).in("id",borrowerIds);if(borrowerError)throw new Error("Unable to load activity relationships.");for(const borrower of borrowers??[])names.set(borrower.id,borrower.legal_name);}
   return (data??[]).map((row)=>({id:row.id,borrowerId:row.borrower_id,borrowerName:names.get(row.borrower_id)??"Borrower unavailable",dealId:row.deal_id,kind:row.activity_kind,subject:row.subject,occurredAt:row.occurred_at,notes:row.notes}));
 }
 
-export async function loadCrmContacts(context:ReadyContext):Promise<CrmContactRecord[]> {
+export async function loadCrmContacts(context:ReadyContext,page=1):Promise<CrmContactRecord[]> {
   const supabase=await createClient(), organizationId=context.activeOrganization.organizationId;
-  const {data,error}=await supabase.from("borrower_contacts").select("id, borrower_id, contact_kind, label, value, is_primary, is_verified, restricted_use").eq("organization_id",organizationId).order("created_at",{ascending:false}).limit(500);
+  const{from,to}=crmRange(page);const {data,error}=await supabase.from("borrower_contacts").select("id, borrower_id, contact_kind, label, value, is_primary, is_verified, restricted_use, version").eq("organization_id",organizationId).is("archived_at",null).order("created_at",{ascending:false}).range(from,to);
   if(error) throw new Error("Unable to load CRM contacts.");
   const borrowerIds=[...new Set((data??[]).map(row=>row.borrower_id as string))], names=new Map<string,string>();
   if(borrowerIds.length){const{data:borrowers,error:borrowerError}=await supabase.from("borrowers").select("id, legal_name").eq("organization_id",organizationId).in("id",borrowerIds);if(borrowerError)throw new Error("Unable to load contact relationships.");for(const borrower of borrowers??[])names.set(borrower.id,borrower.legal_name);}
-  return(data??[]).map(row=>({id:row.id,borrowerId:row.borrower_id,borrowerName:names.get(row.borrower_id)??"Borrower unavailable",kind:row.contact_kind,label:row.label,value:row.restricted_use?"Restricted":row.value,isPrimary:row.is_primary,isVerified:row.is_verified,restrictedUse:row.restricted_use}));
+  return(data??[]).map(row=>({id:row.id,borrowerId:row.borrower_id,borrowerName:names.get(row.borrower_id)??"Borrower unavailable",kind:row.contact_kind,label:row.label,value:row.restricted_use?"Restricted":row.value,isPrimary:row.is_primary,isVerified:row.is_verified,restrictedUse:row.restricted_use,version:row.version}));
 }
 
-export async function loadCrmRelationships(context:ReadyContext):Promise<CrmRelationshipRecord[]> {
+export async function loadCrmRelationships(context:ReadyContext,page=1):Promise<CrmRelationshipRecord[]> {
   const supabase=await createClient(), organizationId=context.activeOrganization.organizationId;
-  const {data,error}=await supabase.from("borrower_relationships").select("id, source_borrower_id, target_borrower_id, deal_id, relationship_kind, role_label, notes, is_active").eq("organization_id",organizationId).order("updated_at",{ascending:false}).limit(500);
+  const{from,to}=crmRange(page);const {data,error}=await supabase.from("borrower_relationships").select("id, source_borrower_id, target_borrower_id, deal_id, relationship_kind, role_label, notes, is_active").eq("organization_id",organizationId).order("updated_at",{ascending:false}).range(from,to);
   if(error) throw new Error("Unable to load CRM relationships.");
   const borrowerIds=[...new Set((data??[]).flatMap(row=>[row.source_borrower_id,row.target_borrower_id].filter(Boolean) as string[]))], dealIds=[...new Set((data??[]).map(row=>row.deal_id as string|null).filter(Boolean) as string[])];
   const names=new Map<string,string>(), deals=new Map<string,string>();
@@ -149,14 +158,65 @@ export async function loadCrmRelationships(context:ReadyContext):Promise<CrmRela
   return(data??[]).map(row=>({id:row.id,sourceBorrowerId:row.source_borrower_id,sourceName:names.get(row.source_borrower_id)??"Borrower unavailable",targetBorrowerId:row.target_borrower_id,targetName:row.target_borrower_id?names.get(row.target_borrower_id)??"Borrower unavailable":null,dealId:row.deal_id,dealName:row.deal_id?deals.get(row.deal_id)??"Opportunity unavailable":null,kind:row.relationship_kind,roleLabel:row.role_label,notes:row.notes,isActive:row.is_active}));
 }
 
-export async function loadDealTasks(context:ReadyContext,dealId?:string):Promise<DealTaskRecord[]> {
+export async function loadDealTasks(context:ReadyContext,dealId?:string,page=1):Promise<DealTaskRecord[]> {
   const supabase=await createClient(), organizationId=context.activeOrganization.organizationId;
-  let query=supabase.from("deal_tasks").select("id, deal_id, title, description, status, due_at, assigned_to, version").eq("organization_id",organizationId).order("due_at",{ascending:true,nullsFirst:false}).limit(200);
+  const{from,to}=crmRange(page);let query=supabase.from("deal_tasks").select("id, deal_id, title, description, status, due_at, assigned_to, version").eq("organization_id",organizationId).order("due_at",{ascending:true,nullsFirst:false}).range(from,to);
   if(dealId)query=query.eq("deal_id",dealId);
   const{data,error}=await query;if(error)throw new Error("Unable to load operating tasks.");
   const dealIds=[...new Set((data??[]).map(row=>row.deal_id as string))], names=new Map<string,string>();
   if(dealIds.length){const{data:deals,error:dealError}=await supabase.from("deals").select("id, name").eq("organization_id",organizationId).in("id",dealIds);if(dealError)throw new Error("Unable to load task opportunities.");for(const deal of deals??[])names.set(deal.id,deal.name);}
   return(data??[]).map((row)=>({id:row.id,dealId:row.deal_id,dealName:names.get(row.deal_id)??"Opportunity unavailable",title:row.title,description:row.description,status:row.status,dueAt:row.due_at,assignedTo:row.assigned_to,version:row.version}));
+}
+
+export async function loadCrmPeople(context:ReadyContext,page=1):Promise<CrmPersonRecord[]> {
+  const supabase=await createClient(),organizationId=context.activeOrganization.organizationId;
+  const{from,to}=crmRange(page),{data:people,error:peopleError}=await supabase.from("crm_people").select("id, first_name, last_name, preferred_name, job_title, version").eq("organization_id",organizationId).is("archived_at",null).order("last_name").range(from,to);
+  if(peopleError)throw new Error("Unable to load CRM people.");if(!people?.length)return[];
+  const personIds=people.map(person=>person.id);
+  const[{data:roles,error:rolesError},{data:contacts,error:contactsError}]=await Promise.all([
+    supabase.from("crm_person_company_roles").select("person_id, borrower_id, role_label, ownership_percentage, is_primary").eq("organization_id",organizationId).in("person_id",personIds).is("ends_on",null).order("is_primary",{ascending:false}),
+    supabase.from("crm_person_contacts").select("person_id, contact_kind, value, restricted_use, is_primary").eq("organization_id",organizationId).in("person_id",personIds).is("archived_at",null).order("is_primary",{ascending:false}),
+  ]);
+  if(rolesError||contactsError)throw new Error("Unable to load CRM people.");
+  const roleByPerson=new Map<string,(typeof roles)[number]>();for(const role of roles??[])if(!roleByPerson.has(role.person_id))roleByPerson.set(role.person_id,role);
+  const borrowerIds=[...new Set((roles??[]).map(role=>role.borrower_id as string))],borrowerNames=new Map<string,string>();
+  if(borrowerIds.length){const{data,error}=await supabase.from("borrowers").select("id, legal_name").eq("organization_id",organizationId).in("id",borrowerIds);if(error)throw new Error("Unable to load person companies.");for(const row of data??[])borrowerNames.set(row.id,row.legal_name);}
+  const contactByPerson=new Map<string,{email:string|null;phone:string|null}>();for(const contact of contacts??[]){const current=contactByPerson.get(contact.person_id)??{email:null,phone:null};const value=contact.restricted_use?"Restricted":contact.value;if(contact.contact_kind==="email"&&!current.email)current.email=value;if(contact.contact_kind==="phone"&&!current.phone)current.phone=value;contactByPerson.set(contact.person_id,current);}
+  return(people??[]).flatMap(person=>{const role=roleByPerson.get(person.id);if(!role)return[];const contact=contactByPerson.get(person.id);return[{id:person.id,borrowerId:role.borrower_id,borrowerName:borrowerNames.get(role.borrower_id)??"Company unavailable",firstName:person.first_name,lastName:person.last_name,preferredName:person.preferred_name,jobTitle:person.job_title,roleLabel:role.role_label,ownershipPercentage:role.ownership_percentage===null?null:Number(role.ownership_percentage),isPrimary:role.is_primary,email:contact?.email??null,phone:contact?.phone??null,version:person.version}];});
+}
+
+export async function loadCrmReferrals(context:ReadyContext,page=1):Promise<CrmReferralRecord[]> {
+  const supabase=await createClient(),organizationId=context.activeOrganization.organizationId;
+  const{from,to}=crmRange(page),{data,error}=await supabase.from("crm_referrals").select("id, borrower_id, source_borrower_id, source_person_id, deal_id, status, referred_at, estimated_value, notes, version").eq("organization_id",organizationId).order("referred_at",{ascending:false}).range(from,to);
+  if(error)throw new Error("Unable to load CRM referrals.");
+  const borrowerIds=[...new Set((data??[]).flatMap(row=>[row.borrower_id,row.source_borrower_id].filter(Boolean) as string[]))],personIds=[...new Set((data??[]).map(row=>row.source_person_id as string|null).filter(Boolean) as string[])],dealIds=[...new Set((data??[]).map(row=>row.deal_id as string|null).filter(Boolean) as string[])];
+  const borrowerNames=new Map<string,string>(),personNames=new Map<string,string>(),dealNames=new Map<string,string>();
+  await Promise.all([
+    borrowerIds.length?supabase.from("borrowers").select("id, legal_name").eq("organization_id",organizationId).in("id",borrowerIds).then(({data:rows,error:e})=>{if(e)throw new Error("Unable to load referral companies.");for(const row of rows??[])borrowerNames.set(row.id,row.legal_name);}):Promise.resolve(),
+    personIds.length?supabase.from("crm_people").select("id, first_name, last_name").eq("organization_id",organizationId).in("id",personIds).then(({data:rows,error:e})=>{if(e)throw new Error("Unable to load referral people.");for(const row of rows??[])personNames.set(row.id,`${row.first_name} ${row.last_name}`);}):Promise.resolve(),
+    dealIds.length?supabase.from("deals").select("id, name").eq("organization_id",organizationId).in("id",dealIds).then(({data:rows,error:e})=>{if(e)throw new Error("Unable to load referral opportunities.");for(const row of rows??[])dealNames.set(row.id,row.name);}):Promise.resolve(),
+  ]);
+  return(data??[]).map(row=>({id:row.id,borrowerId:row.borrower_id,borrowerName:borrowerNames.get(row.borrower_id)??"Company unavailable",sourceName:row.source_person_id?personNames.get(row.source_person_id)??"Person unavailable":borrowerNames.get(row.source_borrower_id)??"Company unavailable",dealId:row.deal_id,dealName:row.deal_id?dealNames.get(row.deal_id)??"Opportunity unavailable":null,status:row.status,referredAt:row.referred_at,estimatedValue:row.estimated_value===null?null:Number(row.estimated_value),notes:row.notes,version:row.version}));
+}
+
+export async function loadCrmAppointments(context:ReadyContext,page=1):Promise<CrmAppointmentRecord[]> {
+  const supabase=await createClient(),organizationId=context.activeOrganization.organizationId;
+  const{from,to}=crmRange(page),{data,error}=await supabase.from("crm_appointments").select("id, borrower_id, deal_id, subject, starts_at, ends_at, status, assigned_to, location, notes, version").eq("organization_id",organizationId).order("starts_at",{ascending:true}).range(from,to);
+  if(error)throw new Error("Unable to load CRM appointments.");
+  const borrowerIds=[...new Set((data??[]).map(row=>row.borrower_id as string))],dealIds=[...new Set((data??[]).map(row=>row.deal_id as string|null).filter(Boolean) as string[])],borrowerNames=new Map<string,string>(),dealNames=new Map<string,string>();
+  await Promise.all([
+    borrowerIds.length?supabase.from("borrowers").select("id, legal_name").eq("organization_id",organizationId).in("id",borrowerIds).then(({data:rows,error:e})=>{if(e)throw new Error("Unable to load appointment companies.");for(const row of rows??[])borrowerNames.set(row.id,row.legal_name);}):Promise.resolve(),
+    dealIds.length?supabase.from("deals").select("id, name").eq("organization_id",organizationId).in("id",dealIds).then(({data:rows,error:e})=>{if(e)throw new Error("Unable to load appointment opportunities.");for(const row of rows??[])dealNames.set(row.id,row.name);}):Promise.resolve(),
+  ]);
+  return(data??[]).map(row=>({id:row.id,borrowerId:row.borrower_id,borrowerName:borrowerNames.get(row.borrower_id)??"Company unavailable",dealId:row.deal_id,dealName:row.deal_id?dealNames.get(row.deal_id)??"Opportunity unavailable":null,subject:row.subject,startsAt:row.starts_at,endsAt:row.ends_at,status:row.status,assignedTo:row.assigned_to,location:row.location,notes:row.notes,version:row.version}));
+}
+
+export async function loadCrmMetrics(context:ReadyContext):Promise<CrmMetrics>{
+  const supabase=await createClient();
+  const{data,error}=await supabase.rpc("crm_dashboard_metrics",{p_organization_id:context.activeOrganization.organizationId});
+  if(error||!data||typeof data!=="object")throw new Error("Unable to load authoritative CRM metrics.");
+  const row=data as Record<string,unknown>,number=(key:string)=>Number(row[key]??0);
+  return{companies:number("companies"),people:number("people"),contactPoints:number("contactPoints"),relationships:number("relationships"),activities:number("activities"),referrals:number("referrals"),appointments:number("appointments"),tasks:number("tasks"),openTasks:number("openTasks"),opportunities:number("opportunities"),openOpportunities:number("openOpportunities"),activeExposure:number("activeExposure")};
 }
 
 export async function loadDealDetail(context: ReadyContext, dealId: string): Promise<DealDetail | null> {
@@ -242,27 +302,16 @@ export async function loadGoldenLoanWorkspace(context:ReadyContext,dealId:string
 export async function loadBorrowerDetail(context: ReadyContext, borrowerId: string): Promise<BorrowerDetail | null> {
   const supabase = await createClient();
   const organizationId = context.activeOrganization.organizationId;
-  if (!canReadInstitutionPipeline(context.activeOrganization.role)) {
-    const { data: relatedDeals, error: dealsError } = await supabase.from("deals").select("id")
-      .eq("organization_id", organizationId).eq("borrower_id", borrowerId).is("archived_at", null);
-    if (dealsError) throw new Error("Unable to verify borrower deal access.");
-    const dealIds = (relatedDeals ?? []).map((deal) => deal.id as string);
-    if (dealIds.length === 0) return null;
-    const { data: assignment, error: assignmentError } = await supabase.from("deal_assignments").select("deal_id")
-      .eq("organization_id", organizationId).eq("user_id", context.userId).is("ended_at", null).in("deal_id", dealIds).limit(1).maybeSingle();
-    if (assignmentError) throw new Error("Unable to verify borrower assignment.");
-    if (!assignment) return null;
-  }
   const [{ data: borrower, error: borrowerError }, { data: contacts, error: contactsError }] = await Promise.all([
-    supabase.from("borrowers").select("id, legal_name, borrower_kind, external_reference, relationship_start_date")
+    supabase.from("borrowers").select("id, version, legal_name, borrower_kind, external_reference, relationship_start_date")
       .eq("organization_id", organizationId).eq("id", borrowerId).is("archived_at", null).maybeSingle(),
     supabase.from("borrower_contacts").select("id, contact_kind, label, value, is_primary, is_verified, restricted_use")
-      .eq("organization_id", organizationId).eq("borrower_id", borrowerId).order("is_primary", { ascending: false }),
+      .eq("organization_id", organizationId).eq("borrower_id", borrowerId).is("archived_at",null).order("is_primary", { ascending: false }),
   ]);
   if (borrowerError || contactsError) throw new Error("Unable to load the borrower relationship.");
   if (!borrower) return null;
   return {
-    id: borrower.id, legalName: borrower.legal_name, borrowerKind: borrower.borrower_kind,
+    id: borrower.id, version: borrower.version, legalName: borrower.legal_name, borrowerKind: borrower.borrower_kind,
     externalReference: borrower.external_reference, relationshipStartDate: borrower.relationship_start_date,
     contacts: (contacts ?? []).map((contact) => ({ id: contact.id, kind: contact.contact_kind, label: contact.label,
       value: contact.restricted_use ? "Restricted" : contact.value, isPrimary: contact.is_primary,
