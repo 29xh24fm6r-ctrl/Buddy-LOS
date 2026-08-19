@@ -59,7 +59,9 @@ export type BorrowerDetail = {
   relationshipStartDate: string | null; contacts: { id: string; kind: string; label: string | null; value: string; isPrimary: boolean; isVerified: boolean; restrictedUse: boolean }[];
 };
 export type CrmActivityRecord = { id:string; borrowerId:string; borrowerName:string; dealId:string|null; kind:string; subject:string; occurredAt:string; notes:string|null };
-export type DealTaskRecord = { id:string; dealId:string; title:string; description:string|null; status:string; dueAt:string|null; assignedTo:string|null; version:number };
+export type CrmContactRecord = { id:string; borrowerId:string; borrowerName:string; kind:string; label:string|null; value:string; isPrimary:boolean; isVerified:boolean; restrictedUse:boolean };
+export type CrmRelationshipRecord = { id:string; sourceBorrowerId:string; sourceName:string; targetBorrowerId:string|null; targetName:string|null; dealId:string|null; dealName:string|null; kind:string; roleLabel:string|null; notes:string|null; isActive:boolean };
+export type DealTaskRecord = { id:string; dealId:string; dealName:string; title:string; description:string|null; status:string; dueAt:string|null; assignedTo:string|null; version:number };
 
 export async function loadCommandCenterDeals(context: ReadyContext): Promise<DealSummary[]> {
   const supabase = await createClient();
@@ -127,12 +129,34 @@ export async function loadCrmActivities(context:ReadyContext):Promise<CrmActivit
   return (data??[]).map((row)=>({id:row.id,borrowerId:row.borrower_id,borrowerName:names.get(row.borrower_id)??"Borrower unavailable",dealId:row.deal_id,kind:row.activity_kind,subject:row.subject,occurredAt:row.occurred_at,notes:row.notes}));
 }
 
+export async function loadCrmContacts(context:ReadyContext):Promise<CrmContactRecord[]> {
+  const supabase=await createClient(), organizationId=context.activeOrganization.organizationId;
+  const {data,error}=await supabase.from("borrower_contacts").select("id, borrower_id, contact_kind, label, value, is_primary, is_verified, restricted_use").eq("organization_id",organizationId).order("created_at",{ascending:false}).limit(500);
+  if(error) throw new Error("Unable to load CRM contacts.");
+  const borrowerIds=[...new Set((data??[]).map(row=>row.borrower_id as string))], names=new Map<string,string>();
+  if(borrowerIds.length){const{data:borrowers,error:borrowerError}=await supabase.from("borrowers").select("id, legal_name").eq("organization_id",organizationId).in("id",borrowerIds);if(borrowerError)throw new Error("Unable to load contact relationships.");for(const borrower of borrowers??[])names.set(borrower.id,borrower.legal_name);}
+  return(data??[]).map(row=>({id:row.id,borrowerId:row.borrower_id,borrowerName:names.get(row.borrower_id)??"Borrower unavailable",kind:row.contact_kind,label:row.label,value:row.restricted_use?"Restricted":row.value,isPrimary:row.is_primary,isVerified:row.is_verified,restrictedUse:row.restricted_use}));
+}
+
+export async function loadCrmRelationships(context:ReadyContext):Promise<CrmRelationshipRecord[]> {
+  const supabase=await createClient(), organizationId=context.activeOrganization.organizationId;
+  const {data,error}=await supabase.from("borrower_relationships").select("id, source_borrower_id, target_borrower_id, deal_id, relationship_kind, role_label, notes, is_active").eq("organization_id",organizationId).order("updated_at",{ascending:false}).limit(500);
+  if(error) throw new Error("Unable to load CRM relationships.");
+  const borrowerIds=[...new Set((data??[]).flatMap(row=>[row.source_borrower_id,row.target_borrower_id].filter(Boolean) as string[]))], dealIds=[...new Set((data??[]).map(row=>row.deal_id as string|null).filter(Boolean) as string[])];
+  const names=new Map<string,string>(), deals=new Map<string,string>();
+  if(borrowerIds.length){const{data:borrowers,error:e}=await supabase.from("borrowers").select("id, legal_name").eq("organization_id",organizationId).in("id",borrowerIds);if(e)throw new Error("Unable to load relationship parties.");for(const row of borrowers??[])names.set(row.id,row.legal_name);}
+  if(dealIds.length){const{data:dealRows,error:e}=await supabase.from("deals").select("id, name").eq("organization_id",organizationId).in("id",dealIds);if(e)throw new Error("Unable to load relationship opportunities.");for(const row of dealRows??[])deals.set(row.id,row.name);}
+  return(data??[]).map(row=>({id:row.id,sourceBorrowerId:row.source_borrower_id,sourceName:names.get(row.source_borrower_id)??"Borrower unavailable",targetBorrowerId:row.target_borrower_id,targetName:row.target_borrower_id?names.get(row.target_borrower_id)??"Borrower unavailable":null,dealId:row.deal_id,dealName:row.deal_id?deals.get(row.deal_id)??"Opportunity unavailable":null,kind:row.relationship_kind,roleLabel:row.role_label,notes:row.notes,isActive:row.is_active}));
+}
+
 export async function loadDealTasks(context:ReadyContext,dealId?:string):Promise<DealTaskRecord[]> {
   const supabase=await createClient(), organizationId=context.activeOrganization.organizationId;
   let query=supabase.from("deal_tasks").select("id, deal_id, title, description, status, due_at, assigned_to, version").eq("organization_id",organizationId).order("due_at",{ascending:true,nullsFirst:false}).limit(200);
   if(dealId)query=query.eq("deal_id",dealId);
   const{data,error}=await query;if(error)throw new Error("Unable to load operating tasks.");
-  return(data??[]).map((row)=>({id:row.id,dealId:row.deal_id,title:row.title,description:row.description,status:row.status,dueAt:row.due_at,assignedTo:row.assigned_to,version:row.version}));
+  const dealIds=[...new Set((data??[]).map(row=>row.deal_id as string))], names=new Map<string,string>();
+  if(dealIds.length){const{data:deals,error:dealError}=await supabase.from("deals").select("id, name").eq("organization_id",organizationId).in("id",dealIds);if(dealError)throw new Error("Unable to load task opportunities.");for(const deal of deals??[])names.set(deal.id,deal.name);}
+  return(data??[]).map((row)=>({id:row.id,dealId:row.deal_id,dealName:names.get(row.deal_id)??"Opportunity unavailable",title:row.title,description:row.description,status:row.status,dueAt:row.due_at,assignedTo:row.assigned_to,version:row.version}));
 }
 
 export async function loadDealDetail(context: ReadyContext, dealId: string): Promise<DealDetail | null> {

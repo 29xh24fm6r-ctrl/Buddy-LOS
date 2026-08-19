@@ -5,7 +5,7 @@ import { createClient } from "@/lib/supabase/server";
 import { resolveAccessContext, type AccessContext, type MembershipRecord, type OrganizationRole } from "./access-context";
 
 type MembershipRow = { organization_id: string; role: OrganizationRole };
-type OrganizationRow = { id: string; name: string; slug: string; institution_type: string | null };
+type OrganizationRow = { id: string; name: string; slug: string; institution_type: string | null; timezone: string };
 
 export async function loadAccessContext(): Promise<AccessContext> {
   if (!readFoundationStatus().authEnabled) return { kind: "unauthenticated" };
@@ -32,7 +32,7 @@ export async function loadAccessContext(): Promise<AccessContext> {
   if (organizationIds.length > 0) {
     const { data, error } = await supabase
       .from("organizations")
-      .select("id, name, slug, institution_type")
+      .select("id, name, slug, institution_type, timezone")
       .in("id", organizationIds);
     if (error) throw new Error("Unable to resolve institution records.");
     organizationRows = (data ?? []) as OrganizationRow[];
@@ -47,6 +47,7 @@ export async function loadAccessContext(): Promise<AccessContext> {
           organizationName: organization.name,
           organizationSlug: organization.slug,
           institutionType: organization.institution_type,
+          timezone: organization.timezone,
           role: membership.role,
         }]
       : [];

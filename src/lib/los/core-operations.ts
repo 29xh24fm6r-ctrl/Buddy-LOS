@@ -3,6 +3,7 @@ import type { OrganizationRole } from "@/lib/auth/access-context";
 export const borrowerKinds = ["business", "individual", "trust", "government", "nonprofit", "other"] as const;
 export const contactKinds = ["email", "phone", "address", "website", "other"] as const;
 export const activityKinds = ["call", "email", "meeting", "note", "referral", "other"] as const;
+export const relationshipKinds = ["borrower", "guarantor", "owner", "officer", "advisor", "vendor", "affiliate", "other"] as const;
 
 export function canOperateCore(role: OrganizationRole) {
   return role === "owner" || role === "administrator" || role === "lender";
@@ -34,4 +35,11 @@ export function dateTimeValue(form: FormData, name: string, optional = false) {
   if (optional && !value) return null;
   const parsed = Date.parse(value);
   return Number.isNaN(parsed) ? undefined : new Date(parsed).toISOString();
+}
+
+export function validContactValue(kind: typeof contactKinds[number], value: string) {
+  if (kind === "email") return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value);
+  if (kind === "website") { try { const url = new URL(value); return url.protocol === "https:" || url.protocol === "http:"; } catch { return false; } }
+  if (kind === "phone") return /^[+()\-\s.0-9]{7,30}$/.test(value);
+  return value.trim().length > 0;
 }

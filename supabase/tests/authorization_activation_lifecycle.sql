@@ -65,7 +65,7 @@ insert into public.organization_capability_activations(
 
 set local role authenticated;
 set local request.jwt.claims='{"sub":"11000000-0000-4000-8000-000000000002","role":"authenticated"}';
-do $$ declare result jsonb; begin
+do $$ declare result jsonb; company jsonb; company_id uuid; relationship jsonb; completed jsonb; begin
   result := public.create_deal_task(
     '21000000-0000-4000-8000-000000000001','41000000-0000-4000-8000-000000000001',
     'assigned-task-command','Authorized assigned task',null,null,null
@@ -78,6 +78,24 @@ do $$ declare result jsonb; begin
     );
     raise exception 'unassigned core command unexpectedly succeeded';
   exception when insufficient_privilege then null; end;
+  company := public.create_crm_company('21000000-0000-4000-8000-000000000001','crm-company-owned-001','Factory Company','business','FACTORY-001');
+  company_id := (company->>'borrowerId')::uuid;
+  if not exists(select 1 from public.borrowers where id=company_id) then raise exception 'company creator lost read authority'; end if;
+  perform public.create_crm_contact('21000000-0000-4000-8000-000000000001',company_id,'crm-contact-primary-001','email','Work','factory@example.test',true);
+  if not exists(select 1 from public.borrower_contacts where borrower_id=company_id and is_primary) then raise exception 'primary contact command failed'; end if;
+  perform public.log_crm_activity('21000000-0000-4000-8000-000000000001',company_id,null,'crm-activity-001','call','Factory follow-up',now(),null);
+  relationship := public.create_crm_relationship('21000000-0000-4000-8000-000000000001',company_id,'31000000-0000-4000-8000-000000000001','crm-relationship-001','affiliate','Related business',null);
+  if relationship->>'relationshipId' is null then raise exception 'relationship command failed'; end if;
+  completed := public.complete_deal_task('21000000-0000-4000-8000-000000000001','51000000-0000-4000-8000-000000000001','crm-task-complete-001',1);
+  if completed->>'status'<>'completed' then raise exception 'task completion failed'; end if;
+end $$;
+reset role;
+
+set local role authenticated;
+set local request.jwt.claims='{"sub":"11000000-0000-4000-8000-000000000003","role":"authenticated"}';
+do $$ begin
+  if (select count(*) from public.borrowers)<>0 then raise exception 'unassigned lender can read CRM companies'; end if;
+  if (select count(*) from public.borrower_assignments)<>0 then raise exception 'unassigned lender can read CRM assignments'; end if;
 end $$;
 reset role;
 
