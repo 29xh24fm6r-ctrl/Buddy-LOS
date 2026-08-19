@@ -1,5 +1,10 @@
 import { describe, expect, it, vi } from "vitest";
-import { parseScanSubmissionConfig, ScanSubmissionError, submitDocumentScan } from "./document-scan-submission";
+import {
+  parseScanSubmissionConfig,
+  preflightDocumentScanner,
+  ScanSubmissionError,
+  submitDocumentScan,
+} from "./document-scan-submission";
 
 function identityToken(audience: string, exp = Math.floor(Date.now() / 1000) + 300) {
   const encode = (value: unknown) => Buffer.from(JSON.stringify(value)).toString("base64url");
@@ -30,6 +35,84 @@ describe("document scan submission configuration", () => {
     expect(parseScanSubmissionConfig({ ...valid, BUDDY_DOCUMENT_SCANNER_ENDPOINT: "http://scanner.example" })).toBeNull();
     expect(parseScanSubmissionConfig({ ...valid, BUDDY_DOCUMENT_SCANNER_API_KEY: "short" })).toBeNull();
     expect(parseScanSubmissionConfig({ ...valid, BUDDY_DOCUMENT_SCANNER_PROVIDER: "" })).toBeNull();
+  });
+});
+
+describe("document scanner runtime preflight", () => {
+  const config = {
+    endpoint: "https://scanner.example/submit",
+    callbackUrl: "https://buddy.example/api/internal/document-scans/callback",
+    apiKey: "scanner-api-key-long-enough",
+    provider: "approved-scanner",
+    audience: null,
+    googleServiceAccount: null,
+  };
+
+  it("skips network preflight for API-key-only scanners", async () => {
+    const fetchImpl = vi.fn();
+    await expect(preflightDocumentScanner(config, fetchImpl as typeof fetch)).resolves.toEqual({
+      ready: true,
+      mode: "api_key",
+    });
+    expect(fetchImpl).not.toHaveBeenCalled();
+  });
+
+  it("checks the exact canonical Cloud Run health endpoint with an audience-bound token", async () => {
+    const audience = "https://buddy-scanner-123456.us-west1.run.app";
+    const privateConfig = {
+      ...config,
+      endpoint: `${audience}/v1/scan`,
+      audience,
+      googleServiceAccount: {
+        client_email: "los-invoker@example.iam.gserviceaccount.com",
+        private_key: "test",
+      },
+    };
+    const token = identityToken(audience);
+    const identity = vi.fn(async (_credentials: unknown, requestedAudience: string) => {
+      expect(requestedAudience).toBe(audience);
+      return token;
+    });
+    const fetchImpl = vi.fn(async (url: string | URL | Request, init?: RequestInit) => {
+      expect(url).toBe(`${audience}/health`);
+      expect(init).toMatchObject({
+        method: "GET",
+        cache: "no-store",
+        redirect: "error",
+      });
+      expect(new Headers(init?.headers).get("authorization")).toBe(`Bearer ${token}`);
+      return Response.json({ ready: true });
+    });
+
+    await expect(
+      preflightDocumentScanner(privateConfig, fetchImpl as typeof fetch, identity),
+    ).resolves.toEqual({ ready: true, mode: "cloud_run" });
+    expect(identity).toHaveBeenCalledOnce();
+    expect(fetchImpl).toHaveBeenCalledOnce();
+  });
+
+  it("does not consume a queued attempt when Cloud Run invocation is forbidden", async () => {
+    const audience = "https://buddy-scanner-123456.us-west1.run.app";
+    const privateConfig = {
+      ...config,
+      endpoint: `${audience}/v1/scan`,
+      audience,
+      googleServiceAccount: {
+        client_email: "los-invoker@example.iam.gserviceaccount.com",
+        private_key: "test",
+      },
+    };
+    const failure = await preflightDocumentScanner(
+      privateConfig,
+      vi.fn(async () => new Response(null, { status: 403 })) as typeof fetch,
+      vi.fn(async () => identityToken(audience)),
+    ).catch((caught) => caught);
+
+    expect(failure).toMatchObject({
+      code: "cloud_run_invocation_forbidden",
+      consumesAttempt: false,
+      retryable: true,
+    });
   });
 });
 

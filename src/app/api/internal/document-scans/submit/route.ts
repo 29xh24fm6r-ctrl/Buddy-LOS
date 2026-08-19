@@ -1,4 +1,4 @@
-import { parseScanSubmissionConfig } from "@/lib/los/document-scan-submission";
+import { parseScanSubmissionConfig, ScanSubmissionError } from "@/lib/los/document-scan-submission";
 import { processDocumentScanJob } from "@/lib/los/document-scan-worker";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { logDocumentOperation } from "@/lib/operations/document-operations-log";
@@ -18,7 +18,14 @@ export async function GET(request: Request) {
     const result = await processDocumentScanJob(admin, config);
     observe(result.processed ? result.status : result.reason, result.processed && result.status !== "awaiting_result" ? "warn" : "info");
     return Response.json(result, INIT);
-  } catch {
+  } catch (error) {
+    if (error instanceof ScanSubmissionError && !error.consumesAttempt) {
+      observe("scanner_unavailable", "warn");
+      return Response.json(
+        { error: "scanner_unavailable", code: error.code },
+        { status: 503, ...INIT },
+      );
+    }
     observe("unavailable", "error");
     return Response.json({ error: "Scan queue is unavailable." }, { status: 502, ...INIT });
   }

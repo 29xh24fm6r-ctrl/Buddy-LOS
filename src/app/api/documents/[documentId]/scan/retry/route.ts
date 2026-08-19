@@ -2,7 +2,11 @@ import { NextResponse } from "next/server";
 import { loadAccessContext } from "@/lib/auth/session";
 import { documentsEnabledForOrganization } from "@/lib/config/foundation-status";
 import { canRecoverDocumentScan, parseDocumentScanRecoveryInput } from "@/lib/los/document-scan-recovery";
-import { parseScanSubmissionConfig } from "@/lib/los/document-scan-submission";
+import {
+  parseScanSubmissionConfig,
+  preflightDocumentScanner,
+  ScanSubmissionError,
+} from "@/lib/los/document-scan-submission";
 import { processDocumentScanJob } from "@/lib/los/document-scan-worker";
 import { isUuid } from "@/lib/los/document-upload";
 import { createAdminClient } from "@/lib/supabase/admin";
@@ -22,6 +26,18 @@ export async function POST(request: Request, { params }: { params: Promise<{ doc
   try { body = await request.json(); } catch { return NextResponse.json({ error: "invalid_request" }, { status: 400 }); }
   const input = parseDocumentScanRecoveryInput(body);
   if (!input) return NextResponse.json({ error: "invalid_request" }, { status: 400 });
+  try {
+    await preflightDocumentScanner(config);
+  } catch (error) {
+    const code =
+      error instanceof ScanSubmissionError
+        ? error.code
+        : "scanner_preflight_unavailable";
+    return NextResponse.json(
+      { error: "scanner_unavailable", code },
+      { status: 503 },
+    );
+  }
   const admin = createAdminClient();
   const recovery = await admin.rpc("requeue_failed_document_scan_job", {
     p_organization_id: organizationId,
@@ -31,6 +47,6 @@ export async function POST(request: Request, { params }: { params: Promise<{ doc
     p_idempotency_key: input.idempotencyKey,
   });
   if (recovery.error) return NextResponse.json({ error: "scan_not_recoverable" }, { status: 409 });
-  const dispatch = await processDocumentScanJob(admin, config, documentId);
+  const dispatch = await processDocumentScanJob(admin, config, documentId, { skipPreflight: true });
   return NextResponse.json({ recovery: recovery.data, dispatch }, { status: 202 });
 }

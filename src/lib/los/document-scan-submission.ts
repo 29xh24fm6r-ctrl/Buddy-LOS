@@ -3,12 +3,44 @@ import { GoogleAuth } from "google-auth-library";
 const RUN_ID_LIMIT = 200;
 const RESPONSE_LIMIT = 4096;
 const SUBMISSION_TIMEOUT_MS = 20_000;
+const PREFLIGHT_TIMEOUT_MS = 10_000;
 
 type ServiceAccountCredentials = { client_email: string; private_key: string; project_id?: string };
-type IdentityTokenProvider = (credentials: ServiceAccountCredentials, audience: string) => Promise<string>;
+export type IdentityTokenProvider = (credentials: ServiceAccountCredentials, audience: string) => Promise<string>;
 export type ScanSubmissionConfig = { endpoint: string; audience: string | null; apiKey: string; provider: string; callbackUrl: string; googleServiceAccount: ServiceAccountCredentials | null };
+export type ScanSubmissionErrorCode = "scanner_submission_failed" | "cloud_run_identity_unavailable" | "cloud_run_identity_rejected" | "cloud_run_invocation_forbidden" | "scanner_preflight_unavailable";
 export class ScanSubmissionError extends Error {
-  constructor(message: string, readonly retryable: boolean, readonly consumesAttempt = true) { super(message); }
+  constructor(message: string, readonly retryable: boolean, readonly consumesAttempt = true, readonly code: ScanSubmissionErrorCode = "scanner_submission_failed") { super(message); }
+}
+
+export async function preflightDocumentScanner(
+  config: ScanSubmissionConfig,
+  fetchImpl: typeof fetch = fetch,
+  identityTokenProvider: IdentityTokenProvider = googleIdentityToken,
+) {
+  if (!config.googleServiceAccount || !config.audience) return { ready: true as const, mode: "api_key" as const };
+  const identityToken = await resolveIdentityToken(config, identityTokenProvider);
+  let response: Response;
+  try {
+    response = await fetchImpl(`${config.audience}/health`, {
+      method: "GET",
+      headers: { Authorization: `Bearer ${identityToken}`, Accept: "application/json" },
+      signal: AbortSignal.timeout(PREFLIGHT_TIMEOUT_MS),
+      cache: "no-store",
+      redirect: "error",
+    });
+  } catch {
+    throw new ScanSubmissionError("Private scanner preflight is unavailable.", true, false, "scanner_preflight_unavailable");
+  }
+  if (response.status === 401) throw new ScanSubmissionError("Cloud Run scanner identity authentication was rejected.", true, false, "cloud_run_identity_rejected");
+  if (response.status === 403) throw new ScanSubmissionError("Cloud Run scanner invocation authorization was rejected.", true, false, "cloud_run_invocation_forbidden");
+  if (!response.ok || !response.headers.get("content-type")?.toLowerCase().startsWith("application/json"))
+    throw new ScanSubmissionError("Private scanner preflight is unavailable.", true, false, "scanner_preflight_unavailable");
+  let payload: unknown;
+  try { payload = JSON.parse(await response.text()); } catch { payload = null; }
+  if (!payload || typeof payload !== "object" || (payload as { ready?: unknown }).ready !== true)
+    throw new ScanSubmissionError("Private scanner preflight is unavailable.", true, false, "scanner_preflight_unavailable");
+  return { ready: true as const, mode: "cloud_run" as const };
 }
 
 export function parseScanSubmissionConfig(env: Record<string, string | undefined>): ScanSubmissionConfig | null {
@@ -57,10 +89,7 @@ export async function submitDocumentScan(
   form.set("callbackAuthentication", "hmac-sha256-v1");
   const headers: Record<string, string> = { Authorization: `Bearer ${config.apiKey}`, "Idempotency-Key": input.jobId, Accept: "application/json" };
   if (config.googleServiceAccount && config.audience) {
-    let identityToken: string;
-    try { identityToken = await identityTokenProvider(config.googleServiceAccount, config.audience); }
-    catch { throw new ScanSubmissionError("Private scanner identity token could not be created.", true, false); }
-    assertIdentityToken(identityToken, config.audience);
+    const identityToken = await resolveIdentityToken(config, identityTokenProvider);
     headers["X-Serverless-Authorization"] = `Bearer ${identityToken}`;
   }
   const response = await fetchImpl(config.endpoint, {
@@ -87,6 +116,16 @@ export async function submitDocumentScan(
   const runId = value && typeof value === "object" && typeof (value as Record<string, unknown>).runId === "string" ? (value as Record<string, string>).runId.trim() : "";
   if (runId.length < 2 || runId.length > RUN_ID_LIMIT) throw new ScanSubmissionError("Scanner did not return a valid run identity.", false);
   return { runId };
+}
+
+async function resolveIdentityToken(config: ScanSubmissionConfig, identityTokenProvider: IdentityTokenProvider) {
+  if (!config.googleServiceAccount || !config.audience)
+    throw new ScanSubmissionError("Private scanner identity configuration is unavailable.", true, false, "cloud_run_identity_unavailable");
+  let identityToken: string;
+  try { identityToken = await identityTokenProvider(config.googleServiceAccount, config.audience); }
+  catch { throw new ScanSubmissionError("Private scanner identity token could not be created.", true, false, "cloud_run_identity_unavailable"); }
+  assertIdentityToken(identityToken, config.audience);
+  return identityToken;
 }
 
 function secureUrl(value: string | undefined) { try { const url = new URL(value ?? ""); return url.protocol === "https:" ? url.toString() : null; } catch { return null; } }
@@ -123,7 +162,7 @@ function assertIdentityToken(token: string, audience: string) {
     if (payload.aud !== audience) throw new Error("audience mismatch");
     if (typeof payload.exp !== "number" || payload.exp <= Math.floor(Date.now() / 1000) + 30) throw new Error("token expired");
   } catch {
-    throw new ScanSubmissionError("Private scanner identity token is invalid for the configured service.", true, false);
+    throw new ScanSubmissionError("Private scanner identity token is invalid for the configured service.", true, false, "cloud_run_identity_unavailable");
   }
 }
 function parseServiceAccount(value: string | undefined): ServiceAccountCredentials | null {
