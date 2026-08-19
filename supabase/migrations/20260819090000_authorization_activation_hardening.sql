@@ -523,5 +523,79 @@ revoke all on function public.create_closing_requirement(uuid,uuid,text,timestam
 grant execute on function public.create_closing_requirement(uuid,uuid,text,timestamptz,boolean,text),
   public.resolve_closing_requirement(uuid,uuid,public.lifecycle_item_status,text,text) to authenticated;
 
+-- Existing golden-loan commands are SECURITY DEFINER. Wrap every deal-scoped
+-- command so its object reference is authorized before the legacy body runs.
+alter function public.certify_credit_memo(uuid,uuid,uuid,text,text) rename to certify_credit_memo_entitled;
+alter function public.record_credit_committee_vote(uuid,uuid,uuid,text,text) rename to record_credit_committee_vote_entitled;
+alter function public.record_human_credit_decision(uuid,uuid,uuid,public.credit_decision_type,text,text) rename to record_human_credit_decision_entitled;
+alter function public.create_credit_condition(uuid,uuid,uuid,text,timestamptz,text) rename to create_credit_condition_entitled;
+alter function public.create_portfolio_covenant(uuid,uuid,text,date,text) rename to create_portfolio_covenant_entitled;
+alter function public.golden_authorize_deal_funding(uuid,uuid,uuid,numeric,text,text) rename to golden_authorize_deal_funding_entitled;
+alter function public.golden_board_funded_deal(uuid,uuid,text,date,text) rename to golden_board_funded_deal_entitled;
+
+revoke all on function public.certify_credit_memo_entitled(uuid,uuid,uuid,text,text),
+  public.record_credit_committee_vote_entitled(uuid,uuid,uuid,text,text),
+  public.record_human_credit_decision_entitled(uuid,uuid,uuid,public.credit_decision_type,text,text),
+  public.create_credit_condition_entitled(uuid,uuid,uuid,text,timestamptz,text),
+  public.create_portfolio_covenant_entitled(uuid,uuid,text,date,text),
+  public.golden_authorize_deal_funding_entitled(uuid,uuid,uuid,numeric,text,text),
+  public.golden_board_funded_deal_entitled(uuid,uuid,text,date,text) from public,anon,authenticated;
+
+create function public.certify_credit_memo(p_organization_id uuid,p_deal_id uuid,p_memo_id uuid,p_statement text,p_idempotency_key text)
+returns jsonb language plpgsql security definer set search_path='' as $$ begin
+  perform private.require_deal_operator(p_organization_id,p_deal_id,array['owner','administrator','underwriter']::public.organization_role[]);
+  return public.certify_credit_memo_entitled(p_organization_id,p_deal_id,p_memo_id,p_statement,p_idempotency_key);
+end $$;
+create function public.record_credit_committee_vote(p_organization_id uuid,p_deal_id uuid,p_memo_id uuid,p_vote text,p_rationale text)
+returns jsonb language plpgsql security definer set search_path='' as $$ begin
+  perform private.require_deal_operator(p_organization_id,p_deal_id,array['owner','administrator','underwriter']::public.organization_role[]);
+  return public.record_credit_committee_vote_entitled(p_organization_id,p_deal_id,p_memo_id,p_vote,p_rationale);
+end $$;
+create function public.record_human_credit_decision(p_organization_id uuid,p_deal_id uuid,p_memo_id uuid,p_decision public.credit_decision_type,p_rationale text,p_idempotency_key text)
+returns jsonb language plpgsql security definer set search_path='' as $$ begin
+  perform private.require_deal_operator(p_organization_id,p_deal_id,array['owner','administrator','underwriter']::public.organization_role[]);
+  return public.record_human_credit_decision_entitled(p_organization_id,p_deal_id,p_memo_id,p_decision,p_rationale,p_idempotency_key);
+end $$;
+create function public.create_credit_condition(p_organization_id uuid,p_deal_id uuid,p_memo_id uuid,p_description text,p_due_at timestamptz,p_idempotency_key text)
+returns jsonb language plpgsql security definer set search_path='' as $$ begin
+  perform private.require_deal_operator(p_organization_id,p_deal_id,array['owner','administrator','underwriter']::public.organization_role[]);
+  return public.create_credit_condition_entitled(p_organization_id,p_deal_id,p_memo_id,p_description,p_due_at,p_idempotency_key);
+end $$;
+create function public.create_portfolio_covenant(p_organization_id uuid,p_servicing_account_id uuid,p_title text,p_due_date date,p_idempotency_key text)
+returns jsonb language plpgsql security definer set search_path='' as $$
+declare v_deal_id uuid;
+begin
+  select s.deal_id into v_deal_id from public.servicing_accounts s
+  where s.id=p_servicing_account_id and s.organization_id=p_organization_id;
+  if v_deal_id is null then raise exception using errcode='42501',message='Assigned servicing account required.'; end if;
+  perform private.require_deal_operator(p_organization_id,v_deal_id,array['owner','administrator','lender','underwriter']::public.organization_role[]);
+  return public.create_portfolio_covenant_entitled(p_organization_id,p_servicing_account_id,p_title,p_due_date,p_idempotency_key);
+end $$;
+create function public.golden_authorize_deal_funding(p_organization_id uuid,p_deal_id uuid,p_decision_id uuid,p_amount numeric,p_evidence_reference text,p_idempotency_key text)
+returns jsonb language plpgsql security definer set search_path='' as $$ begin
+  perform private.require_deal_operator(p_organization_id,p_deal_id,array['owner','administrator','closer']::public.organization_role[]);
+  return public.golden_authorize_deal_funding_entitled(p_organization_id,p_deal_id,p_decision_id,p_amount,p_evidence_reference,p_idempotency_key);
+end $$;
+create function public.golden_board_funded_deal(p_organization_id uuid,p_deal_id uuid,p_account_number text,p_next_review_date date,p_idempotency_key text)
+returns jsonb language plpgsql security definer set search_path='' as $$ begin
+  perform private.require_deal_operator(p_organization_id,p_deal_id,array['owner','administrator','closer']::public.organization_role[]);
+  return public.golden_board_funded_deal_entitled(p_organization_id,p_deal_id,p_account_number,p_next_review_date,p_idempotency_key);
+end $$;
+
+revoke all on function public.certify_credit_memo(uuid,uuid,uuid,text,text),
+  public.record_credit_committee_vote(uuid,uuid,uuid,text,text),
+  public.record_human_credit_decision(uuid,uuid,uuid,public.credit_decision_type,text,text),
+  public.create_credit_condition(uuid,uuid,uuid,text,timestamptz,text),
+  public.create_portfolio_covenant(uuid,uuid,text,date,text),
+  public.golden_authorize_deal_funding(uuid,uuid,uuid,numeric,text,text),
+  public.golden_board_funded_deal(uuid,uuid,text,date,text) from public,anon,authenticated;
+grant execute on function public.certify_credit_memo(uuid,uuid,uuid,text,text),
+  public.record_credit_committee_vote(uuid,uuid,uuid,text,text),
+  public.record_human_credit_decision(uuid,uuid,uuid,public.credit_decision_type,text,text),
+  public.create_credit_condition(uuid,uuid,uuid,text,timestamptz,text),
+  public.create_portfolio_covenant(uuid,uuid,text,date,text),
+  public.golden_authorize_deal_funding(uuid,uuid,uuid,numeric,text,text),
+  public.golden_board_funded_deal(uuid,uuid,text,date,text) to authenticated;
+
 comment on table public.organization_capability_activations is
   'Database-authoritative runtime activation. Entitlement or deployment alone never implies active customer use.';
