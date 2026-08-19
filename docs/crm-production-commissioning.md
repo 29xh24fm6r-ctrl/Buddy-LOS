@@ -25,9 +25,31 @@ Do not store these values in repository files or Vercel client-visible variables
 7. Verify an authenticated owner and lender flow: company → detail → person → activity → relationship → referral → appointment → assigned task.
 8. Verify revocation: end the lender company assignment and confirm company, people, referrals, appointments, and linked relationships disappear immediately.
 
+## Entitlement and activation parity
+
+CRM writes require both a current `document_intake` product entitlement and an active, evidence-backed `core_operations` capability. Treat any activated tenant without that entitlement as uncommissioned, even when the application UI reports the capability as active.
+
+Before release, require this query to return `0`:
+
+```sql
+select count(*) as uncommissioned_crm_tenants
+from public.organization_capability_activations as activation
+where activation.capability_key = 'core_operations'
+  and activation.is_active
+  and not exists (
+    select 1
+    from public.organization_product_modules as module
+    where module.organization_id = activation.organization_id
+      and module.module_key = 'document_intake'
+      and module.status in ('trial', 'active')
+      and module.starts_at <= now()
+      and (module.ends_at is null or module.ends_at > now())
+  );
+```
+
 ## Release gate
 
-Do not change `release/capability-ledger.json` from `PRE_RELEASE` or mark `crm_core` deployed/certified/active until the workflow URL, database migration head, Vercel deployment SHA, and authenticated browser evidence are recorded together.
+Do not change `release/capability-ledger.json` from `PRE_RELEASE` or mark `crm_core` deployed/certified/active until entitlement/activation parity, the workflow URL, database migration head, Vercel deployment SHA, and authenticated browser evidence are recorded together.
 
 ## Rollback
 

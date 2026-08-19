@@ -1,0 +1,3 @@
+-- Production-history marker only.
+-- The canonical Buddy project reconciled its activated CRM tenants with the required document_intake entitlement at this version.
+-- Fresh environments remain fail-closed and require their own governed entitlement and activation process.
