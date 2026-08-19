@@ -3,27 +3,29 @@ import type { CSSProperties } from "react";
 import type { OrganizationRole } from "@/lib/auth/access-context";
 import { formatMoney } from "@/components/banker/BankerCommandCenter";
 import { stageLabel } from "@/lib/los/read-model";
-import type { DealDetail, GoldenLoanWorkspaceRecord, UnderwritingWorkspaceRecord } from "@/lib/los/queries";
+import type { DealDetail, DealTaskRecord, GoldenLoanWorkspaceRecord, UnderwritingWorkspaceRecord } from "@/lib/los/queries";
+import { dealTaskFacts } from "@/lib/los/operational-facts";
 import { DealDocumentWorkspace } from "./DealDocumentWorkspace";
 import { UnderwriterWorkspace } from "./UnderwriterWorkspace";
 import { GoldenLoanCommandPanel } from "./GoldenLoanCommandPanel";
 
-export function DealCockpit({ deal, downloadsEnabled, uploadsEnabled, scanRecoveryEnabled, underwriting, runtimeEnabled, underwritingOutcome, role, lifecycle, factoryEnabled }: { deal: DealDetail; downloadsEnabled: boolean; uploadsEnabled: boolean; scanRecoveryEnabled: boolean; underwriting: UnderwritingWorkspaceRecord; runtimeEnabled: boolean; underwritingOutcome?: string; role: OrganizationRole; lifecycle:GoldenLoanWorkspaceRecord; factoryEnabled:boolean }) {
+export function DealCockpit({ deal, tasks, downloadsEnabled, uploadsEnabled, scanRecoveryEnabled, underwriting, runtimeEnabled, underwritingOutcome, role, lifecycle, factoryEnabled }: { deal: DealDetail; tasks: DealTaskRecord[]; downloadsEnabled: boolean; uploadsEnabled: boolean; scanRecoveryEnabled: boolean; underwriting: UnderwritingWorkspaceRecord; runtimeEnabled: boolean; underwritingOutcome?: string; role: OrganizationRole; lifecycle:GoldenLoanWorkspaceRecord; factoryEnabled:boolean }) {
   const missing = Math.max(0, deal.readiness.required - deal.readiness.satisfied);
+  const taskSummary = dealTaskFacts(tasks);
   const awaiting = deal.readiness.documents.filter((item) => item.status !== "received" && item.status !== "reviewed").length;
   return <>
     <nav className="breadcrumb" aria-label="Breadcrumb"><Link href="/app">Banker Command Center</Link><span>›</span><span>{deal.name}</span></nav>
     <section className="deal-command-header deal-exact-header">
       <div className="deal-exact-title"><p><span>Commercial lending cockpit</span><em>Deal cockpit</em></p><h2>{deal.name}</h2></div>
-      <div className="deal-exact-identity"><Fact label="Client" value={deal.borrowerName} href={`/app/borrowers/${deal.borrowerId}`} /><Fact label="Banker" value="Assigned banker" /><Fact label="Stage" value={stageLabel(deal.stage)} /></div>
-      <span className="deal-exact-status">Status · Open</span>
+      <div className="deal-exact-identity"><Fact label="Client" value={deal.borrowerName} href={`/app/borrowers/${deal.borrowerId}`} /><Fact label="Banker" value={null} /><Fact label="Stage" value={stageLabel(deal.stage)} /></div>
+      <span className="deal-exact-status">Record · Active</span>
     </section>
     <section className="deal-exact-overview" id="overview">
       <aside className="deal-readiness-ring" style={{ "--readiness": `${deal.readiness.percent}%` } as CSSProperties}><strong>{deal.readiness.percent}%</strong><span>Profile · {deal.readiness.satisfied} of {deal.readiness.required}</span></aside>
       <DealSignal label="Loan amount" value={formatMoney(deal.approvedAmount ?? deal.requestedAmount ?? 0)} note={deal.approvedAmount === null ? "Requested amount" : "Authorized amount"} tone="blue" />
       <DealSignal label="Missing fields" value={String(missing)} note={`of ${deal.readiness.required} tracked`} tone="amber" />
       <DealSignal label="Blockers" value={String(deal.readiness.exceptions)} note="Fields and document exceptions" tone="red" />
-      <DealSignal label="Tasks open" value="0" note="0 completed" tone="green" />
+      <DealSignal label="Tasks open" value={String(taskSummary.open)} note={`${taskSummary.completed} completed · ${taskSummary.overdue} overdue`} tone={taskSummary.overdue ? "red" : "green"} />
       <DealSignal label="Awaiting receipt" value={String(awaiting)} note={`${deal.documentVersions.length} file versions`} tone="green" />
       <DealSignal label="Target close" value={deal.expectedCloseDate ?? "No date"} note={deal.expectedCloseDate ? "Governed target date" : "Not scheduled"} tone="red" />
       <footer>Last touched <strong>{deal.updatedAt.slice(0,10)}</strong> · Product <strong>{deal.productType ?? "Missing"}</strong> · Purpose <strong>{deal.purpose ?? "Missing"}</strong></footer>
